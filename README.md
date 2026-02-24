@@ -124,6 +124,7 @@ GROQ_API_KEY=<Groq API Key>      # For voice transcription (free at console.groq
 | `/voice` | Toggle voice replies on/off |
 | `/status` | Current session status |
 | `/cancel` | Abort running request |
+| `/reload` | Hot-reload SOUL.md personality |
 
 ---
 
@@ -153,9 +154,9 @@ Mr. Levin aims to become a **fully-featured, human-feeling AI assistant** that a
 
 - [ ] **Vector-based memory search** — Semantic recall instead of just reading files
 - [ ] **Automatic memory consolidation** — Periodically distill daily logs into long-term memory
-- [ ] **Personality profiles** — Customizable personality via SOUL.md (like OpenClaw)
+- [x] **Personality profiles** — Customizable personality via SOUL.md + `/reload` hot-reload
 - [ ] **User profiles** — Multi-user support with separate memory per user
-- [ ] **Conversation summaries** — Auto-generate session summaries on `/new`
+- [x] **Conversation summaries** — Session stats shown on `/new` reset
 
 ### 🛠️ Phase 3: Rich Interactions
 
