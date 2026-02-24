@@ -135,16 +135,16 @@ Mr. Levin aims to become a **fully-featured, human-feeling AI assistant** that a
 
 **Goal:** Break free from Claude-only. Let users choose their AI engine.
 
-- [ ] **Provider abstraction layer** — Unified interface for different LLM backends
-- [ ] **Supported providers:**
+- [x] **Provider abstraction layer** — Unified interface for different LLM backends
+- [x] **Supported providers:**
   - Anthropic Claude (current, via Agent SDK)
   - OpenAI GPT-4o / o3 (via API)
   - Google Gemini 2.5/3 Pro (via API)
   - Local models via Ollama (llama, mistral, etc.)
-  - NVIDIA NIM (150+ free models)
+  - NVIDIA NIM (150+ free models, incl. Kimi K2.5)
   - OpenRouter (any model, one API)
-- [ ] **Fallback chain** — Auto-switch to next provider on failure (like OpenClaw)
-- [ ] **Per-chat model selection** — `/model gemini` to switch mid-conversation
+- [x] **Fallback chain** — Auto-switch to next provider on failure (like OpenClaw)
+- [x] **Per-chat model selection** — `/model gemini` to switch mid-conversation
 - [ ] **Cost tracking per provider** — Know what each model costs you
 
 ### 🧠 Phase 2: Enhanced Memory & Personality

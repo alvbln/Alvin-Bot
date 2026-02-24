@@ -3,6 +3,11 @@ import fs from "fs";
 import path from "path";
 import os from "os";
 import https from "https";
+
+/** React to a message with an emoji. Silently fails if not supported. */
+async function react(ctx: Context, emoji: string): Promise<void> {
+  try { await ctx.react(emoji as Parameters<typeof ctx.react>[0]); } catch { /* ignore */ }
+}
 import { config } from "../config.js";
 import { getSession, addToHistory } from "../services/session.js";
 import { TelegramStreamer } from "../services/telegram.js";
@@ -51,6 +56,7 @@ export async function handlePhoto(ctx: Context): Promise<void> {
   }, 4000);
 
   try {
+    await react(ctx, "👀");
     await ctx.api.sendChatAction(ctx.chat!.id, "typing");
 
     // Get highest resolution photo
@@ -146,6 +152,7 @@ Antworte auf Deutsch, es sei denn der User schreibt auf Englisch.`,
     }
 
     await streamer.finalize(finalText);
+    await react(ctx, "👍");
 
     if (!isSDK && finalText) {
       addToHistory(userId, { role: "assistant", content: finalText });

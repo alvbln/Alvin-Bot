@@ -7,6 +7,15 @@ import { getRegistry } from "../engine.js";
 import { textToSpeech } from "../services/voice.js";
 import type { QueryOptions } from "../providers/types.js";
 
+/** React to a message with an emoji. Silently fails if reactions aren't supported. */
+async function react(ctx: Context, emoji: string): Promise<void> {
+  try {
+    await ctx.react(emoji as Parameters<typeof ctx.react>[0]);
+  } catch {
+    // Reactions not supported in this chat — silently ignore
+  }
+}
+
 /** Build system prompt based on provider type */
 function buildSystemPrompt(isSDK: boolean): string {
   const base = `Du bist ein autonomer AI-Agent, gesteuert über Telegram.
@@ -45,6 +54,8 @@ export async function handleMessage(ctx: Context): Promise<void> {
   }, 4000);
 
   try {
+    // React with 🤔 to show we're thinking
+    await react(ctx, "🤔");
     await ctx.api.sendChatAction(ctx.chat!.id, "typing");
     session.messageCount++;
 
@@ -104,6 +115,9 @@ export async function handleMessage(ctx: Context): Promise<void> {
 
     await streamer.finalize(finalText);
 
+    // Clear thinking reaction (replace with nothing — message was answered)
+    await react(ctx, "👍");
+
     // Add assistant response to history (for non-SDK providers)
     if (!isSDK && finalText) {
       addToHistory(userId, { role: "assistant", content: finalText });
@@ -122,6 +136,7 @@ export async function handleMessage(ctx: Context): Promise<void> {
     }
   } catch (err) {
     const errorMsg = err instanceof Error ? err.message : String(err);
+    await react(ctx, "👎");
     if (errorMsg.includes("abort")) {
       await ctx.reply("Anfrage abgebrochen.");
     } else {

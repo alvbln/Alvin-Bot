@@ -1,4 +1,5 @@
 import type { Bot, Context } from "grammy";
+import { InlineKeyboard } from "grammy";
 import fs from "fs";
 import path from "path";
 import os from "os";
@@ -120,17 +121,18 @@ export function registerCommands(bot: Bot): void {
     const registry = getRegistry();
 
     if (!arg) {
-      // Show available models
+      // Show inline keyboard with available models
       const providers = await registry.listAll();
-      const lines = providers.map(p => {
-        const marker = p.active ? "→" : "  ";
-        return `${marker} \`${p.key}\` — ${p.name}`;
-      });
+      const keyboard = new InlineKeyboard();
+
+      for (const p of providers) {
+        const label = p.active ? `✅ ${p.name}` : p.name;
+        keyboard.text(label, `model:${p.key}`).row();
+      }
+
       await ctx.reply(
-        `Aktuelles Modell: \`${registry.getActiveKey()}\`\n\n` +
-        `Verfügbare Modelle:\n${lines.join("\n")}\n\n` +
-        `Wechseln: /model <key>`,
-        { parse_mode: "Markdown" }
+        `🤖 *Modell wählen:*\n\nAktiv: *${registry.getActive().getInfo().name}*`,
+        { parse_mode: "Markdown", reply_markup: keyboard }
       );
       return;
     }
@@ -138,9 +140,36 @@ export function registerCommands(bot: Bot): void {
     if (registry.switchTo(arg)) {
       const provider = registry.get(arg)!;
       const info = provider.getInfo();
-      await ctx.reply(`Modell gewechselt: ${info.name} (${info.model})`);
+      await ctx.reply(`✅ Modell gewechselt: ${info.name} (${info.model})`);
     } else {
       await ctx.reply(`Modell "${arg}" nicht gefunden. /model für alle Optionen.`);
+    }
+  });
+
+  // Inline keyboard callback for model switching
+  bot.callbackQuery(/^model:(.+)$/, async (ctx) => {
+    const key = ctx.match![1];
+    const registry = getRegistry();
+
+    if (registry.switchTo(key)) {
+      const provider = registry.get(key)!;
+      const info = provider.getInfo();
+
+      // Update the keyboard to show new selection
+      const providers = await registry.listAll();
+      const keyboard = new InlineKeyboard();
+      for (const p of providers) {
+        const label = p.active ? `✅ ${p.name}` : p.name;
+        keyboard.text(label, `model:${p.key}`).row();
+      }
+
+      await ctx.editMessageText(
+        `🤖 *Modell wählen:*\n\nAktiv: *${info.name}*`,
+        { parse_mode: "Markdown", reply_markup: keyboard }
+      );
+      await ctx.answerCallbackQuery(`Gewechselt: ${info.name}`);
+    } else {
+      await ctx.answerCallbackQuery(`Modell "${key}" nicht gefunden`);
     }
   });
 
