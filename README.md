@@ -123,6 +123,9 @@ GROQ_API_KEY=<Groq API Key>      # For voice transcription (free at console.groq
 | `/effort <low\|medium\|high\|max>` | Set thinking depth |
 | `/voice` | Toggle voice replies on/off |
 | `/status` | Current session status |
+| `/remind <time> <text>` | Set a reminder (e.g., `/remind 30m Call mom`) |
+| `/remind` | List pending reminders |
+| `/remind cancel <id>` | Cancel a reminder |
 | `/cancel` | Abort running request |
 | `/reload` | Hot-reload SOUL.md personality |
 
@@ -169,7 +172,7 @@ Mr. Levin aims to become a **fully-featured, human-feeling AI assistant** that a
 - [ ] **Email integration** — Read/send emails via IMAP/SMTP (Apple Mail, Gmail, etc.)
 - [x] **Inline keyboards** — Interactive buttons for /model and /effort selection
 - [x] **Reactions** — React to messages with emoji (🤔 thinking, 🎧 listening, 👀 looking, 👍 done, 👎 error)
-- [ ] **Scheduled messages** — Cron-like reminders and proactive check-ins
+- [x] **Scheduled messages** — `/remind 30m Text` with list, cancel, auto-fire
 - [ ] **Group chat support** — Participate in group chats intelligently (speak when relevant, stay quiet when not)
 
 ### 🔌 Phase 4: Plugin & Tool Ecosystem

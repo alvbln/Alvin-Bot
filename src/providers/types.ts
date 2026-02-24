@@ -19,7 +19,7 @@ export interface ChatMessage {
 // ── Streaming ───────────────────────────────────────────
 
 export interface StreamChunk {
-  type: "text" | "tool_use" | "tool_result" | "done" | "error";
+  type: "text" | "tool_use" | "tool_result" | "done" | "error" | "fallback";
   /** Accumulated full text so far (for text chunks) */
   text?: string;
   /** Delta text (new text in this chunk only) */
@@ -34,6 +34,10 @@ export interface StreamChunk {
   sessionId?: string;
   /** Cost of this turn in USD */
   costUsd?: number;
+  /** Provider name (for fallback notifications) */
+  providerName?: string;
+  /** Failed provider name (for fallback notifications) */
+  failedProvider?: string;
 }
 
 // ── Provider Configuration ──────────────────────────────

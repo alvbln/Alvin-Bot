@@ -6,6 +6,7 @@ import os from "os";
 import { getSession, resetSession, type EffortLevel } from "../services/session.js";
 import { getRegistry } from "../engine.js";
 import { reloadSoul } from "../services/personality.js";
+import { parseDuration, createReminder, listReminders, cancelReminder } from "../services/reminders.js";
 
 const EFFORT_LABELS: Record<EffortLevel, string> = {
   low: "Low — Schnelle, knappe Antworten",
@@ -44,6 +45,7 @@ export function registerCommands(bot: Bot): void {
     { command: "status", description: "Aktueller Status" },
     { command: "new", description: "Neue Session starten" },
     { command: "dir", description: "Arbeitsverzeichnis wechseln" },
+    { command: "remind", description: "Erinnerung setzen (z.B. /remind 30m Text)" },
     { command: "cancel", description: "Laufende Anfrage abbrechen" },
   ]).catch(err => console.error("Failed to set bot commands:", err));
 
@@ -244,6 +246,71 @@ export function registerCommands(bot: Bot): void {
     } else {
       await ctx.answerCallbackQuery(`Modell "${key}" nicht gefunden`);
     }
+  });
+
+  bot.command("remind", async (ctx) => {
+    const userId = ctx.from!.id;
+    const chatId = ctx.chat!.id;
+    const input = ctx.match?.trim();
+
+    if (!input) {
+      // List reminders
+      const pending = listReminders(userId);
+      if (pending.length === 0) {
+        await ctx.reply("Keine aktiven Erinnerungen.\n\nNeu: `/remind 30m Mama anrufen`", { parse_mode: "Markdown" });
+      } else {
+        const lines = pending.map(r => `• *${r.remaining}* — ${r.text} (ID: ${r.id})`);
+        await ctx.reply(
+          `⏰ *Aktive Erinnerungen:*\n\n${lines.join("\n")}\n\nLöschen: \`/remind cancel <ID>\``,
+          { parse_mode: "Markdown" }
+        );
+      }
+      return;
+    }
+
+    // Cancel a reminder
+    if (input.startsWith("cancel ")) {
+      const id = parseInt(input.slice(7).trim());
+      if (isNaN(id)) {
+        await ctx.reply("Ungültige ID. Nutze: `/remind cancel <ID>`", { parse_mode: "Markdown" });
+        return;
+      }
+      if (cancelReminder(id, userId)) {
+        await ctx.reply(`✅ Erinnerung #${id} gelöscht.`);
+      } else {
+        await ctx.reply(`❌ Erinnerung #${id} nicht gefunden.`);
+      }
+      return;
+    }
+
+    // Parse: /remind <duration> <text>
+    const spaceIdx = input.indexOf(" ");
+    if (spaceIdx === -1) {
+      await ctx.reply("Format: `/remind 30m Text der Erinnerung`", { parse_mode: "Markdown" });
+      return;
+    }
+
+    const durationStr = input.slice(0, spaceIdx);
+    const text = input.slice(spaceIdx + 1).trim();
+    const delayMs = parseDuration(durationStr);
+
+    if (!delayMs) {
+      await ctx.reply("Ungültige Dauer. Beispiele: `30s`, `5m`, `2h`, `1d`", { parse_mode: "Markdown" });
+      return;
+    }
+
+    if (!text) {
+      await ctx.reply("Bitte einen Text angeben: `/remind 30m Mama anrufen`", { parse_mode: "Markdown" });
+      return;
+    }
+
+    const reminder = createReminder(chatId, userId, text, delayMs, ctx.api);
+
+    // Format trigger time
+    const triggerDate = new Date(reminder.triggerAt);
+    const timeStr = triggerDate.toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" });
+
+    await ctx.reply(`✅ Erinnerung gesetzt für *${timeStr}*: ${text}`, { parse_mode: "Markdown" });
   });
 
   bot.command("reload", async (ctx) => {

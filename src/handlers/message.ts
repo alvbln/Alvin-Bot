@@ -18,8 +18,18 @@ async function react(ctx: Context, emoji: string): Promise<void> {
 }
 
 export async function handleMessage(ctx: Context): Promise<void> {
-  const text = ctx.message?.text;
-  if (!text || text.startsWith("/")) return;
+  const rawText = ctx.message?.text;
+  if (!rawText || rawText.startsWith("/")) return;
+
+  // Build prompt with reply context if user is replying to a message
+  let text = rawText;
+  const replyTo = ctx.message?.reply_to_message;
+  if (replyTo?.text) {
+    const quotedText = replyTo.text.length > 500
+      ? replyTo.text.slice(0, 500) + "..."
+      : replyTo.text;
+    text = `[Bezug auf vorherige Nachricht: "${quotedText}"]\n\n${rawText}`;
+  }
 
   const userId = ctx.from!.id;
   const session = getSession(userId);
@@ -91,6 +101,13 @@ export async function handleMessage(ctx: Context): Promise<void> {
           if (chunk.sessionId) session.sessionId = chunk.sessionId;
           if (chunk.costUsd) session.totalCost += chunk.costUsd;
           session.lastActivity = Date.now();
+          break;
+
+        case "fallback":
+          await ctx.reply(
+            `⚡ _${chunk.failedProvider} nicht verfügbar — wechsle zu ${chunk.providerName}_`,
+            { parse_mode: "Markdown" }
+          );
           break;
 
         case "error":

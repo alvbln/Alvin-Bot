@@ -134,6 +134,19 @@ export class ProviderRegistry {
 
       if (hadError) {
         console.log(`Provider "${key}" failed: ${lastError}. Trying next...`);
+        // Find next provider to notify about fallback
+        const nextIdx = chain.indexOf(key) + 1;
+        if (nextIdx < chain.length) {
+          const nextProvider = this.providers.get(chain[nextIdx]);
+          if (nextProvider) {
+            yield {
+              type: "fallback",
+              failedProvider: provider.getInfo().name,
+              providerName: nextProvider.getInfo().name,
+              error: lastError,
+            };
+          }
+        }
         continue;
       }
 
