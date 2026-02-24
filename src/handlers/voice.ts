@@ -56,7 +56,7 @@ export async function handleVoice(ctx: Context): Promise<void> {
   session.isProcessing = true;
   session.abortController = new AbortController();
 
-  const streamer = new TelegramStreamer(ctx.chat!.id, ctx.api);
+  const streamer = new TelegramStreamer(ctx.chat!.id, ctx.api, ctx.message?.message_id);
   let finalText = "";
 
   const typingInterval = setInterval(() => {

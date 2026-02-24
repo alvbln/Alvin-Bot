@@ -69,7 +69,7 @@ process.on("unhandledRejection", (reason) => {
 // Start
 await bot.start({
   onStart: () => {
-    console.log(`🤖 Mr. Levin v2.1.0 gestartet`);
+    console.log(`🤖 Mr. Levin v2.2.0 gestartet`);
     console.log(`   Provider: ${registry.getActiveKey()}`);
     console.log(`   Users: ${config.allowedUsers.length} authorized`);
   },

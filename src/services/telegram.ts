@@ -6,24 +6,27 @@ export class TelegramStreamer {
   private messageId: number | null = null;
   private chatId: number;
   private api: Api;
+  private replyTo: number | undefined;
   private lastEditTime = 0;
   private pendingText: string | null = null;
   private editTimer: ReturnType<typeof setTimeout> | null = null;
   private lastSentText = "";
 
-  constructor(chatId: number, api: Api) {
+  constructor(chatId: number, api: Api, replyToMessageId?: number) {
     this.chatId = chatId;
     this.api = api;
+    this.replyTo = replyToMessageId;
   }
 
   async update(fullText: string): Promise<void> {
     const displayText = sanitizeTelegramMarkdown(this.truncate(fullText) || "...");
 
     if (!this.messageId) {
-      const msg = await this.api.sendMessage(this.chatId, displayText, {
-        parse_mode: "Markdown",
-      }).catch(() =>
-        this.api.sendMessage(this.chatId, displayText)
+      const opts: Record<string, unknown> = { parse_mode: "Markdown" };
+      if (this.replyTo) opts.reply_to_message_id = this.replyTo;
+
+      const msg = await this.api.sendMessage(this.chatId, displayText, opts as Parameters<Api["sendMessage"]>[2]).catch(() =>
+        this.api.sendMessage(this.chatId, displayText, this.replyTo ? { reply_to_message_id: this.replyTo } as Parameters<Api["sendMessage"]>[2] : undefined)
       );
       this.messageId = msg.message_id;
       this.lastSentText = displayText;

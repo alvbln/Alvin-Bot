@@ -36,7 +36,13 @@ export function buildSystemPrompt(isSDK: boolean, language: "de" | "en" = "de"):
     ? "Respond in English unless the user writes in another language."
     : "Antworte auf Deutsch, es sei denn der User schreibt auf Englisch.";
 
-  const parts = [BASE_PROMPT, langInstruction];
+  // Current date/time context
+  const now = new Date();
+  const dateStr = now.toLocaleDateString("de-DE", { weekday: "long", year: "numeric", month: "long", day: "numeric" });
+  const timeStr = now.toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" });
+  const timeContext = `Aktuelles Datum: ${dateStr}, ${timeStr} Uhr (Europe/Berlin).`;
+
+  const parts = [BASE_PROMPT, langInstruction, timeContext];
 
   if (soulContent) {
     parts.push(soulContent);
