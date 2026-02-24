@@ -230,13 +230,13 @@ Mr. Levin aims to become a **fully-featured, human-feeling AI assistant** that a
 **Goal:** A beautiful, self-hosted dashboard to manage and chat with Mr. Levin.
 
 - [x] **Real-time chat UI** — WebSocket-based, streaming responses, dark theme
-- [ ] **Session browser** — View, search, and continue past conversations
+- [x] **Session browser** — View active sessions, history, stats per user
 - [x] **Memory viewer/editor** — Browse and edit MEMORY.md + daily logs, save from UI
 - [x] **Settings panel** — View config, API key status, provider setup
-- [ ] **File manager** — Upload, browse, and manage files the agent works with
+- [x] **File manager** — Browse project files, open + edit + save, directory navigation
 - [x] **Activity feed** — Tool use indicators, fallback notifications in chat
 - [x] **Cost dashboard** — Per-query cost tracking in chat, dashboard overview
-- [ ] **Terminal** — Embedded terminal to see agent's shell commands live
+- [x] **Terminal** — Embedded terminal with command history (↑↓), output display, error highlighting
 - [x] **Mobile-responsive** — Collapsible sidebar, touch-friendly on phones
 - [x] **Auth** — Password-protected login page (WEB_PASSWORD env var)
 - [x] **Tech:** Vanilla HTML/CSS/JS (zero build step) + Node.js http + WebSocket (ws)

@@ -98,3 +98,12 @@ export function addToHistory(userId: number, message: ChatMessage): void {
     session.history = session.history.slice(-MAX_HISTORY);
   }
 }
+
+/** Get all active sessions (for web UI session browser). */
+export function getAllSessions(): Array<{ userId: number; session: UserSession }> {
+  const result: Array<{ userId: number; session: UserSession }> = [];
+  for (const [userId, session] of sessions) {
+    result.push({ userId, session });
+  }
+  return result;
+}

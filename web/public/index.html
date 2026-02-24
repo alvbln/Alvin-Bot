@@ -89,6 +89,18 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
   .msg { max-width: 95%; }
 }
 
+/* File list */
+.file-item { padding: 10px 16px; border-bottom: 1px solid var(--bg3); display: flex; align-items: center; gap: 10px; cursor: pointer; font-size: 0.9em; }
+.file-item:hover { background: var(--bg3); }
+.file-item .file-icon { font-size: 1.1em; width: 24px; text-align: center; }
+.file-item .file-name { flex: 1; }
+.file-item .file-meta { color: var(--fg2); font-size: 0.8em; }
+
+/* Terminal */
+.term-line { margin-bottom: 2px; }
+.term-cmd { color: var(--accent2); }
+.term-err { color: var(--red); }
+
 /* Scrollbar */
 ::-webkit-scrollbar { width: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
@@ -107,7 +119,10 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
     <div class="nav-item" data-page="dashboard">📊 <span>Dashboard</span></div>
     <div class="nav-item" data-page="memory">🧠 <span>Memory</span></div>
     <div class="nav-item" data-page="models">🤖 <span>Models</span></div>
+    <div class="nav-item" data-page="sessions">📋 <span>Sessions</span></div>
     <div class="nav-item" data-page="plugins">🔌 <span>Plugins</span></div>
+    <div class="nav-item" data-page="files">📁 <span>Files</span></div>
+    <div class="nav-item" data-page="terminal">💻 <span>Terminal</span></div>
     <div class="nav-item" data-page="users">👥 <span>Users</span></div>
     <div class="nav-item" data-page="settings">⚙️ <span>Settings</span></div>
   </div>
@@ -160,6 +175,38 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
     <div id="users-list"></div>
   </div>
 
+  <!-- Sessions Page -->
+  <div class="page content" id="page-sessions" style="display:none">
+    <div id="sessions-list"></div>
+  </div>
+
+  <!-- Files Page -->
+  <div class="page content" id="page-files" style="display:none">
+    <div class="editor-toolbar">
+      <span id="file-breadcrumb" style="flex:1;color:var(--fg2);font-size:0.85em">📁 /</span>
+      <button onclick="navigateFiles('..')">⬆️ Hoch</button>
+    </div>
+    <div id="file-list"></div>
+    <div id="file-editor-area" style="display:none;margin-top:16px">
+      <div class="editor-toolbar">
+        <span id="file-edit-name" style="flex:1;color:var(--accent2);font-family:monospace"></span>
+        <button class="save-btn" onclick="saveFile()">💾 Speichern</button>
+        <button onclick="closeFileEditor()">✕ Schließen</button>
+      </div>
+      <textarea class="editor" id="file-editor"></textarea>
+    </div>
+  </div>
+
+  <!-- Terminal Page -->
+  <div class="page content" id="page-terminal" style="display:none">
+    <div id="terminal-output" style="background:var(--bg2);border-radius:8px;padding:16px;font-family:'SF Mono',Monaco,monospace;font-size:0.85em;min-height:300px;max-height:60vh;overflow-y:auto;white-space:pre-wrap;color:var(--green);margin-bottom:12px"></div>
+    <div class="input-area" style="border-top:none;padding:0;background:transparent">
+      <span style="color:var(--accent);padding:10px 0;font-family:monospace">$</span>
+      <textarea id="terminal-input" placeholder="Befehl eingeben..." rows="1" style="font-family:'SF Mono',Monaco,monospace"></textarea>
+      <button onclick="runCommand()">Run</button>
+    </div>
+  </div>
+
   <!-- Settings Page -->
   <div class="page content" id="page-settings" style="display:none">
     <div class="card" style="max-width:500px">
@@ -186,7 +233,9 @@ document.querySelectorAll('.nav-item').forEach(item => {
     if (page === 'dashboard') loadDashboard();
     if (page === 'memory') loadMemory();
     if (page === 'models') loadModels();
+    if (page === 'sessions') loadSessions();
     if (page === 'plugins') loadPlugins();
+    if (page === 'files') navigateFiles('.');
     if (page === 'users') loadUsers();
     if (page === 'settings') loadSettings();
   });
@@ -420,6 +469,191 @@ async function loadSettings() {
     ${keys}
   `;
 }
+
+// ── Sessions ────────────────────────────────────────────
+async function loadSessions() {
+  const res = await fetch(API + '/api/sessions');
+  const data = await res.json();
+  const list = document.getElementById('sessions-list');
+
+  if (data.sessions.length === 0) {
+    list.innerHTML = '<div class="card"><h3>Keine aktiven Sessions</h3><p>Sessions werden erstellt wenn User chatten.</p></div>';
+    return;
+  }
+
+  list.innerHTML = data.sessions.map(s => {
+    const dur = Math.floor((s.lastActivity - s.startedAt) / 60000);
+    const status = s.isProcessing ? '<span class="badge badge-yellow">Processing</span>' : '<span class="badge badge-green">Idle</span>';
+    return `
+      <div class="list-item" onclick="viewSessionHistory(${s.userId})" style="cursor:pointer">
+        <div class="icon">💬</div>
+        <div class="info">
+          <div class="name">${s.name}${s.username ? ' (@' + s.username + ')' : ''} ${status}</div>
+          <div class="desc">${s.messageCount} msgs, ${s.toolUseCount} tools, $${s.totalCost.toFixed(4)} | ${dur}min | ${s.provider || 'none'}</div>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+async function viewSessionHistory(userId) {
+  const res = await fetch(API + '/api/sessions/' + userId + '/history');
+  const data = await res.json();
+  const list = document.getElementById('sessions-list');
+
+  if (data.history.length === 0) {
+    list.innerHTML += '<div class="card" style="margin-top:16px"><h3>Kein Verlauf</h3><p>SDK-Sessions speichern History serverseitig.</p></div>';
+    return;
+  }
+
+  const html = data.history.map(h => {
+    const role = h.role === 'user' ? '👤' : h.role === 'assistant' ? '🤖' : '⚙️';
+    const preview = h.content.length > 300 ? h.content.slice(0, 300) + '...' : h.content;
+    return `<div class="list-item"><div class="icon">${role}</div><div class="info"><div class="desc" style="white-space:pre-wrap">${escapeHtml(preview)}</div></div></div>`;
+  }).join('');
+
+  list.innerHTML += `<div style="margin-top:16px;background:var(--bg2);border-radius:12px;border:1px solid var(--bg3)">${html}</div>`;
+}
+
+function escapeHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// ── Files ───────────────────────────────────────────────
+let currentFilePath = '.';
+
+async function navigateFiles(dir) {
+  if (dir === '..') {
+    const parts = currentFilePath.split('/').filter(Boolean);
+    parts.pop();
+    currentFilePath = parts.join('/') || '.';
+  } else if (dir !== '.') {
+    currentFilePath = currentFilePath === '.' ? dir : currentFilePath + '/' + dir;
+  }
+
+  const res = await fetch(API + '/api/files?path=' + encodeURIComponent(currentFilePath));
+  const data = await res.json();
+
+  document.getElementById('file-breadcrumb').textContent = '📁 /' + (currentFilePath === '.' ? '' : currentFilePath);
+
+  if (data.entries) {
+    document.getElementById('file-editor-area').style.display = 'none';
+    const list = document.getElementById('file-list');
+    list.innerHTML = data.entries.map(e => {
+      const icon = e.type === 'dir' ? '📁' : getFileIcon(e.name);
+      const size = e.type === 'file' ? formatSize(e.size) : '';
+      const fpath = (currentFilePath === '.' ? '' : currentFilePath + '/') + e.name;
+      const onclick = e.type === 'dir'
+        ? `navigateFiles('${e.name}')`
+        : `openFile('${fpath}')`;
+      return `<div class="file-item" onclick="${onclick}"><span class="file-icon">${icon}</span><span class="file-name">${e.name}</span><span class="file-meta">${size}</span></div>`;
+    }).join('');
+  } else if (data.content !== undefined) {
+    openFileContent(currentFilePath, data.content);
+    const parts = currentFilePath.split('/');
+    parts.pop();
+    currentFilePath = parts.join('/') || '.';
+  }
+}
+
+async function openFile(filePath) {
+  const res = await fetch(API + '/api/files?path=' + encodeURIComponent(filePath));
+  const data = await res.json();
+  if (data.content !== undefined) {
+    openFileContent(filePath, data.content);
+  }
+}
+
+function openFileContent(filePath, content) {
+  document.getElementById('file-editor-area').style.display = '';
+  document.getElementById('file-edit-name').textContent = filePath;
+  document.getElementById('file-editor').value = content;
+}
+
+function closeFileEditor() {
+  document.getElementById('file-editor-area').style.display = 'none';
+}
+
+async function saveFile() {
+  const filePath = document.getElementById('file-edit-name').textContent;
+  const content = document.getElementById('file-editor').value;
+  const res = await fetch(API + '/api/files/save', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ path: filePath, content }),
+  });
+  const data = await res.json();
+  alert(data.ok ? '✅ Gespeichert!' : '❌ ' + data.error);
+}
+
+function getFileIcon(name) {
+  const ext = name.split('.').pop()?.toLowerCase();
+  const icons = { ts: '🔷', js: '🟡', json: '📋', md: '📝', html: '🌐', css: '🎨', yml: '⚙️', yaml: '⚙️', sh: '⚡', py: '🐍', txt: '📄', env: '🔒' };
+  return icons[ext] || '📄';
+}
+
+function formatSize(bytes) {
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1024*1024) return (bytes/1024).toFixed(1) + ' KB';
+  return (bytes/1024/1024).toFixed(1) + ' MB';
+}
+
+// ── Terminal ────────────────────────────────────────────
+const termHistory = [];
+let termHistIdx = -1;
+
+async function runCommand() {
+  const input = document.getElementById('terminal-input');
+  const output = document.getElementById('terminal-output');
+  const cmd = input.value.trim();
+  if (!cmd) return;
+
+  termHistory.unshift(cmd);
+  termHistIdx = -1;
+  input.value = '';
+
+  output.innerHTML += `<div class="term-line term-cmd">$ ${escapeHtml(cmd)}</div>`;
+
+  try {
+    const res = await fetch(API + '/api/terminal', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ command: cmd }),
+    });
+    const data = await res.json();
+    const cls = data.exitCode ? 'term-err' : '';
+    if (data.output) {
+      output.innerHTML += `<div class="term-line ${cls}">${escapeHtml(data.output)}</div>`;
+    }
+  } catch (err) {
+    output.innerHTML += `<div class="term-line term-err">Error: ${err.message}</div>`;
+  }
+
+  output.scrollTop = output.scrollHeight;
+}
+
+document.getElementById('terminal-input').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    runCommand();
+  }
+  if (e.key === 'ArrowUp') {
+    e.preventDefault();
+    if (termHistIdx < termHistory.length - 1) {
+      termHistIdx++;
+      e.target.value = termHistory[termHistIdx];
+    }
+  }
+  if (e.key === 'ArrowDown') {
+    e.preventDefault();
+    if (termHistIdx > 0) {
+      termHistIdx--;
+      e.target.value = termHistory[termHistIdx];
+    } else {
+      termHistIdx = -1;
+      e.target.value = '';
+    }
+  }
+});
 
 // ── Init ────────────────────────────────────────────────
 connectWS();

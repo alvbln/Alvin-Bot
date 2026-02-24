@@ -13,9 +13,10 @@ import fs from "fs";
 import path from "path";
 import { resolve, dirname } from "path";
 import { fileURLToPath } from "url";
+import { execSync } from "child_process";
 import { WebSocketServer, WebSocket } from "ws";
 import { getRegistry } from "../engine.js";
-import { getSession, resetSession } from "../services/session.js";
+import { getSession, resetSession, getAllSessions } from "../services/session.js";
 import { getMemoryStats, loadLongTermMemory, loadDailyLog, appendDailyLog } from "../services/memory.js";
 import { getIndexStats } from "../services/embeddings.js";
 import { getLoadedPlugins } from "../services/plugins.js";
@@ -238,6 +239,137 @@ function handleAPI(req: http.IncomingMessage, res: http.ServerResponse, urlPath:
         openrouter: !!config.apiKeys.openrouter,
       },
     }));
+    return;
+  }
+
+  // GET /api/sessions
+  if (urlPath === "/api/sessions") {
+    const sessions = getAllSessions();
+    const profiles = listProfiles();
+    const data = sessions.map(s => {
+      const profile = profiles.find(p => p.userId === s.userId);
+      return {
+        userId: s.userId,
+        name: profile?.name || `User ${s.userId}`,
+        username: profile?.username,
+        messageCount: s.session.messageCount,
+        toolUseCount: s.session.toolUseCount,
+        totalCost: s.session.totalCost,
+        effort: s.session.effort,
+        startedAt: s.session.startedAt,
+        lastActivity: s.session.lastActivity,
+        historyLength: s.session.history.length,
+        isProcessing: s.session.isProcessing,
+        provider: Object.keys(s.session.queriesByProvider).join(", ") || "none",
+      };
+    });
+    res.end(JSON.stringify({ sessions: data }));
+    return;
+  }
+
+  // GET /api/sessions/:userId/history
+  if (urlPath.match(/^\/api\/sessions\/\d+\/history$/)) {
+    const userId = parseInt(urlPath.split("/")[3]);
+    const session = getSession(userId);
+    res.end(JSON.stringify({
+      userId,
+      history: session.history.map(h => ({ role: h.role, content: h.content.slice(0, 2000) })),
+    }));
+    return;
+  }
+
+  // GET /api/files?path=...
+  if (urlPath === "/api/files") {
+    const params = new URLSearchParams((req.url || "").split("?")[1] || "");
+    const reqPath = params.get("path") || "";
+    const basePath = resolve(BOT_ROOT, reqPath || ".");
+
+    // Security: must be within BOT_ROOT
+    if (!basePath.startsWith(BOT_ROOT)) {
+      res.statusCode = 403;
+      res.end(JSON.stringify({ error: "Access denied" }));
+      return;
+    }
+
+    try {
+      const stat = fs.statSync(basePath);
+      if (stat.isDirectory()) {
+        const entries = fs.readdirSync(basePath, { withFileTypes: true })
+          .filter(e => !e.name.startsWith(".") && e.name !== "node_modules")
+          .map(e => ({
+            name: e.name,
+            type: e.isDirectory() ? "dir" : "file",
+            size: e.isFile() ? fs.statSync(resolve(basePath, e.name)).size : 0,
+            modified: fs.statSync(resolve(basePath, e.name)).mtimeMs,
+          }))
+          .sort((a, b) => {
+            if (a.type !== b.type) return a.type === "dir" ? -1 : 1;
+            return a.name.localeCompare(b.name);
+          });
+        res.end(JSON.stringify({ path: reqPath || ".", entries }));
+      } else {
+        // Read file content (text files only, max 100KB)
+        if (stat.size > 100_000) {
+          res.end(JSON.stringify({ path: reqPath, content: `[File too large: ${(stat.size / 1024).toFixed(1)} KB]`, size: stat.size }));
+        } else {
+          const content = fs.readFileSync(basePath, "utf-8");
+          res.end(JSON.stringify({ path: reqPath, content, size: stat.size }));
+        }
+      }
+    } catch {
+      res.statusCode = 404;
+      res.end(JSON.stringify({ error: "Not found" }));
+    }
+    return;
+  }
+
+  // POST /api/files/save
+  if (urlPath === "/api/files/save" && req.method === "POST") {
+    try {
+      const { path: filePath, content } = JSON.parse(body);
+      const absPath = resolve(BOT_ROOT, filePath);
+      if (!absPath.startsWith(BOT_ROOT)) {
+        res.statusCode = 403;
+        res.end(JSON.stringify({ error: "Access denied" }));
+        return;
+      }
+      fs.writeFileSync(absPath, content);
+      res.end(JSON.stringify({ ok: true }));
+    } catch (err: unknown) {
+      res.statusCode = 400;
+      const error = err instanceof Error ? err.message : "Invalid request";
+      res.end(JSON.stringify({ error }));
+    }
+    return;
+  }
+
+  // POST /api/terminal
+  if (urlPath === "/api/terminal" && req.method === "POST") {
+    try {
+      const { command } = JSON.parse(body);
+      if (!command) {
+        res.statusCode = 400;
+        res.end(JSON.stringify({ error: "No command" }));
+        return;
+      }
+      // Security: limit command length
+      if (command.length > 1000) {
+        res.statusCode = 400;
+        res.end(JSON.stringify({ error: "Command too long" }));
+        return;
+      }
+      const output = execSync(command, {
+        cwd: BOT_ROOT,
+        stdio: "pipe",
+        timeout: 30000,
+        env: process.env,
+      }).toString();
+      res.end(JSON.stringify({ output: output.slice(0, 50000) }));
+    } catch (err: unknown) {
+      const error = err as { stderr?: Buffer; message: string };
+      const stderr = error.stderr?.toString()?.trim() || "";
+      res.end(JSON.stringify({ output: stderr || error.message, exitCode: 1 }));
+    }
     return;
   }
 
