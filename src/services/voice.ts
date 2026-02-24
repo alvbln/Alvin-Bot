@@ -44,7 +44,7 @@ export async function transcribeAudio(audioPath: string): Promise<string> {
         path: "/openai/v1/audio/transcriptions",
         method: "POST",
         headers: {
-          Authorization: `Bearer ${config.groqApiKey}`,
+          Authorization: `Bearer ${config.apiKeys.groq}`,
           "Content-Type": `multipart/form-data; boundary=${boundary}`,
           "Content-Length": fullBody.length,
         },

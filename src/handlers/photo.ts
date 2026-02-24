@@ -4,13 +4,13 @@ import path from "path";
 import os from "os";
 import https from "https";
 import { config } from "../config.js";
-import { getSession } from "../services/session.js";
+import { getSession, addToHistory } from "../services/session.js";
 import { TelegramStreamer } from "../services/telegram.js";
-import { runClaudeAgent } from "../claude.js";
+import { getRegistry } from "../engine.js";
+import type { QueryOptions } from "../providers/types.js";
 
 const TEMP_DIR = path.join(os.tmpdir(), "alvin-bot");
 
-// Ensure temp dir exists
 if (!fs.existsSync(TEMP_DIR)) {
   fs.mkdirSync(TEMP_DIR, { recursive: true });
 }
@@ -62,34 +62,94 @@ export async function handlePhoto(ctx: Context): Promise<void> {
     const imagePath = path.join(TEMP_DIR, `photo_${Date.now()}${ext}`);
     await downloadFile(fileUrl, imagePath);
 
-    const caption = ctx.message?.caption || "";
-    const prompt = `Analysiere dieses Bild: ${imagePath}\n\n${caption}`;
+    const caption = ctx.message?.caption || "Analysiere dieses Bild.";
 
     session.messageCount++;
 
-    await runClaudeAgent({
-      prompt,
-      sessionId: session.sessionId,
-      workingDir: session.workingDir,
-      effort: session.effort,
-      abortController: session.abortController,
-      messageCount: session.messageCount,
-      toolUseCount: session.toolUseCount,
-      onText: async (fullText) => {
-        finalText = fullText;
-        await streamer.update(fullText);
-      },
-      onToolUseCount: (count) => {
-        session.toolUseCount += count;
-      },
-      onComplete: ({ sessionId, cost }) => {
-        session.sessionId = sessionId;
-        session.totalCost += cost;
-        session.lastActivity = Date.now();
-      },
-    });
+    const registry = getRegistry();
+    const activeProvider = registry.getActive();
+    const isSDK = activeProvider.config.type === "claude-sdk";
+
+    let queryOpts: QueryOptions & { _sessionState?: { messageCount: number; toolUseCount: number } };
+
+    if (isSDK) {
+      // SDK: pass image path in prompt — SDK's Read tool handles it natively
+      queryOpts = {
+        prompt: `Analysiere dieses Bild: ${imagePath}\n\n${caption}`,
+        systemPrompt: `Du bist ein autonomer AI-Agent, gesteuert über Telegram.
+Halte Antworten kurz und prägnant.
+Nutze Markdown-Formatierung kompatibel mit Telegram.
+Antworte auf Deutsch, es sei denn der User schreibt auf Englisch.
+Wenn du Commands ausführst oder Dateien bearbeitest, erkläre kurz was du getan hast.`,
+        workingDir: session.workingDir,
+        effort: session.effort,
+        abortSignal: session.abortController.signal,
+        sessionId: session.sessionId,
+        _sessionState: {
+          messageCount: session.messageCount,
+          toolUseCount: session.toolUseCount,
+        },
+      };
+    } else {
+      // Non-SDK: encode image as base64 for vision API
+      let imageContent: string;
+      if (activeProvider.config.supportsVision) {
+        const imageBuffer = fs.readFileSync(imagePath);
+        imageContent = imageBuffer.toString("base64");
+      } else {
+        // No vision support — tell the user
+        imageContent = "";
+      }
+
+      if (!activeProvider.config.supportsVision) {
+        await ctx.reply(`⚠️ Das aktuelle Modell (${activeProvider.config.name}) unterstützt keine Bildanalyse. Wechsle mit /model zu einem Vision-Modell.`);
+        return;
+      }
+
+      addToHistory(userId, {
+        role: "user",
+        content: caption,
+        images: [imageContent],
+      });
+
+      queryOpts = {
+        prompt: caption,
+        systemPrompt: `Du bist ein autonomer AI-Agent, gesteuert über Telegram.
+Halte Antworten kurz und prägnant.
+Nutze Markdown-Formatierung kompatibel mit Telegram.
+Antworte auf Deutsch, es sei denn der User schreibt auf Englisch.`,
+        workingDir: session.workingDir,
+        effort: session.effort,
+        abortSignal: session.abortController.signal,
+        history: session.history,
+      };
+    }
+
+    for await (const chunk of registry.queryWithFallback(queryOpts)) {
+      switch (chunk.type) {
+        case "text":
+          finalText = chunk.text || "";
+          await streamer.update(finalText);
+          break;
+        case "tool_use":
+          if (chunk.toolName) session.toolUseCount++;
+          break;
+        case "done":
+          if (chunk.sessionId) session.sessionId = chunk.sessionId;
+          if (chunk.costUsd) session.totalCost += chunk.costUsd;
+          session.lastActivity = Date.now();
+          break;
+        case "error":
+          await ctx.reply(`Fehler: ${chunk.error}`);
+          break;
+      }
+    }
 
     await streamer.finalize(finalText);
+
+    if (!isSDK && finalText) {
+      addToHistory(userId, { role: "assistant", content: finalText });
+    }
 
     // Clean up temp file
     fs.unlink(imagePath, () => {});

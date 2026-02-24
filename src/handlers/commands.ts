@@ -3,6 +3,7 @@ import fs from "fs";
 import path from "path";
 import os from "os";
 import { getSession, resetSession, type EffortLevel } from "../services/session.js";
+import { getRegistry } from "../engine.js";
 
 const EFFORT_LABELS: Record<EffortLevel, string> = {
   low: "Low — Schnelle, knappe Antworten",
@@ -64,13 +65,20 @@ export function registerCommands(bot: Bot): void {
   bot.command("status", async (ctx) => {
     const userId = ctx.from!.id;
     const session = getSession(userId);
+    const registry = getRegistry();
+    const active = registry.getActive();
+    const info = active.getInfo();
+
     await ctx.reply(
-      `Verzeichnis: ${session.workingDir}\n` +
-      `Session: ${session.sessionId || "keine"}\n` +
-      `Verarbeitung: ${session.isProcessing ? "ja" : "nein"}\n` +
-      `Effort: ${EFFORT_LABELS[session.effort]}\n` +
-      `Voice: ${session.voiceReply ? "an" : "aus"}\n` +
-      `Kosten (Session): $${session.totalCost.toFixed(4)}`
+      `🤖 *Mr. Levin Status*\n\n` +
+      `*Modell:* ${info.name} (${info.model})\n` +
+      `*Effort:* ${EFFORT_LABELS[session.effort]}\n` +
+      `*Voice:* ${session.voiceReply ? "an" : "aus"}\n` +
+      `*Verzeichnis:* \`${session.workingDir}\`\n` +
+      `*Session:* ${session.sessionId ? "aktiv" : "keine"}\n` +
+      `*History:* ${session.history.length} Nachrichten\n` +
+      `*Kosten:* $${session.totalCost.toFixed(4)}`,
+      { parse_mode: "Markdown" }
     );
   });
 
@@ -105,6 +113,35 @@ export function registerCommands(bot: Bot): void {
 
     session.effort = level as EffortLevel;
     await ctx.reply(`Effort: ${EFFORT_LABELS[session.effort]}`);
+  });
+
+  bot.command("model", async (ctx) => {
+    const arg = ctx.match?.trim().toLowerCase();
+    const registry = getRegistry();
+
+    if (!arg) {
+      // Show available models
+      const providers = await registry.listAll();
+      const lines = providers.map(p => {
+        const marker = p.active ? "→" : "  ";
+        return `${marker} \`${p.key}\` — ${p.name}`;
+      });
+      await ctx.reply(
+        `Aktuelles Modell: \`${registry.getActiveKey()}\`\n\n` +
+        `Verfügbare Modelle:\n${lines.join("\n")}\n\n` +
+        `Wechseln: /model <key>`,
+        { parse_mode: "Markdown" }
+      );
+      return;
+    }
+
+    if (registry.switchTo(arg)) {
+      const provider = registry.get(arg)!;
+      const info = provider.getInfo();
+      await ctx.reply(`Modell gewechselt: ${info.name} (${info.model})`);
+    } else {
+      await ctx.reply(`Modell "${arg}" nicht gefunden. /model für alle Optionen.`);
+    }
   });
 
   bot.command("cancel", async (ctx) => {

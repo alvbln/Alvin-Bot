@@ -5,10 +5,11 @@ import path from "path";
 import os from "os";
 import https from "https";
 import { config } from "../config.js";
-import { getSession } from "../services/session.js";
+import { getSession, addToHistory } from "../services/session.js";
 import { TelegramStreamer } from "../services/telegram.js";
 import { transcribeAudio, textToSpeech } from "../services/voice.js";
-import { runClaudeAgent } from "../claude.js";
+import { getRegistry } from "../engine.js";
+import type { QueryOptions } from "../providers/types.js";
 
 const TEMP_DIR = path.join(os.tmpdir(), "alvin-bot");
 
@@ -41,7 +42,7 @@ export async function handleVoice(ctx: Context): Promise<void> {
     return;
   }
 
-  if (!config.groqApiKey) {
+  if (!config.apiKeys.groq) {
     await ctx.reply("Voice nicht konfiguriert (GROQ_API_KEY fehlt).");
     return;
   }
@@ -77,40 +78,67 @@ export async function handleVoice(ctx: Context): Promise<void> {
     // Show what was understood
     await ctx.reply(`"${transcript}"`);
 
-    // 3. Send to Claude
+    // 3. Send to AI via provider system
     session.messageCount++;
 
-    await runClaudeAgent({
+    const registry = getRegistry();
+    const activeProvider = registry.getActive();
+    const isSDK = activeProvider.config.type === "claude-sdk";
+
+    const queryOpts: QueryOptions & { _sessionState?: { messageCount: number; toolUseCount: number } } = {
       prompt: transcript,
-      sessionId: session.sessionId,
+      systemPrompt: `Du bist ein autonomer AI-Agent, gesteuert über Telegram.
+Halte Antworten kurz und prägnant, aber gründlich.
+Nutze Markdown-Formatierung kompatibel mit Telegram.
+Antworte auf Deutsch, es sei denn der User schreibt auf Englisch.`,
       workingDir: session.workingDir,
       effort: session.effort,
-      abortController: session.abortController,
-      messageCount: session.messageCount,
-      toolUseCount: session.toolUseCount,
-      onText: async (fullText) => {
-        finalText = fullText;
-        await streamer.update(fullText);
-      },
-      onToolUseCount: (count) => {
-        session.toolUseCount += count;
-      },
-      onComplete: ({ sessionId, cost }) => {
-        session.sessionId = sessionId;
-        session.totalCost += cost;
-        session.lastActivity = Date.now();
-      },
-    });
+      abortSignal: session.abortController.signal,
+      sessionId: isSDK ? session.sessionId : null,
+      history: !isSDK ? session.history : undefined,
+      _sessionState: isSDK ? {
+        messageCount: session.messageCount,
+        toolUseCount: session.toolUseCount,
+      } : undefined,
+    };
+
+    if (!isSDK) {
+      addToHistory(userId, { role: "user", content: transcript });
+    }
+
+    for await (const chunk of registry.queryWithFallback(queryOpts)) {
+      switch (chunk.type) {
+        case "text":
+          finalText = chunk.text || "";
+          await streamer.update(finalText);
+          break;
+        case "tool_use":
+          if (chunk.toolName) session.toolUseCount++;
+          break;
+        case "done":
+          if (chunk.sessionId) session.sessionId = chunk.sessionId;
+          if (chunk.costUsd) session.totalCost += chunk.costUsd;
+          session.lastActivity = Date.now();
+          break;
+        case "error":
+          await ctx.reply(`Fehler: ${chunk.error}`);
+          break;
+      }
+    }
 
     await streamer.finalize(finalText);
+
+    if (!isSDK && finalText) {
+      addToHistory(userId, { role: "assistant", content: finalText });
+    }
 
     // 4. Send voice reply if enabled
     if (session.voiceReply && finalText.trim()) {
       try {
         await ctx.api.sendChatAction(ctx.chat!.id, "upload_voice");
-        const audioPath = await textToSpeech(finalText);
-        await ctx.replyWithVoice(new InputFile(fs.readFileSync(audioPath), "response.mp3"));
-        fs.unlink(audioPath, () => {});
+        const ttsPath = await textToSpeech(finalText);
+        await ctx.replyWithVoice(new InputFile(fs.readFileSync(ttsPath), "response.mp3"));
+        fs.unlink(ttsPath, () => {});
       } catch (err) {
         console.error("TTS error:", err);
       }

@@ -1,10 +1,26 @@
 import type { Context } from "grammy";
 import { InputFile } from "grammy";
 import fs from "fs";
-import { getSession } from "../services/session.js";
+import { getSession, addToHistory } from "../services/session.js";
 import { TelegramStreamer } from "../services/telegram.js";
-import { runClaudeAgent } from "../claude.js";
+import { getRegistry } from "../engine.js";
 import { textToSpeech } from "../services/voice.js";
+import type { QueryOptions } from "../providers/types.js";
+
+/** Build system prompt based on provider type */
+function buildSystemPrompt(isSDK: boolean): string {
+  const base = `Du bist ein autonomer AI-Agent, gesteuert über Telegram.
+Halte Antworten kurz und prägnant, aber gründlich.
+Nutze Markdown-Formatierung kompatibel mit Telegram (fett, kursiv, Code-Blöcke).
+Antworte auf Deutsch, es sei denn der User schreibt auf Englisch.`;
+
+  if (isSDK) {
+    // SDK provider gets tool instructions (CLAUDE.md is injected separately)
+    return `${base}\nWenn du Commands ausführst oder Dateien bearbeitest, erkläre kurz was du getan hast.`;
+  }
+
+  return base;
+}
 
 export async function handleMessage(ctx: Context): Promise<void> {
   const text = ctx.message?.text;
@@ -30,35 +46,68 @@ export async function handleMessage(ctx: Context): Promise<void> {
 
   try {
     await ctx.api.sendChatAction(ctx.chat!.id, "typing");
-
     session.messageCount++;
 
-    await runClaudeAgent({
+    const registry = getRegistry();
+    const activeProvider = registry.getActive();
+    const isSDK = activeProvider.config.type === "claude-sdk";
+
+    // Build query options
+    const queryOpts: QueryOptions & { _sessionState?: { messageCount: number; toolUseCount: number } } = {
       prompt: text,
-      sessionId: session.sessionId,
+      systemPrompt: buildSystemPrompt(isSDK),
       workingDir: session.workingDir,
       effort: session.effort,
-      abortController: session.abortController,
-      messageCount: session.messageCount,
-      toolUseCount: session.toolUseCount,
-      onText: async (fullText) => {
-        finalText = fullText;
-        await streamer.update(fullText);
-      },
-      onToolUse: async (toolName) => {
-        // Could show tool activity, keeping it silent for now
-      },
-      onToolUseCount: (count) => {
-        session.toolUseCount += count;
-      },
-      onComplete: ({ sessionId, cost }) => {
-        session.sessionId = sessionId;
-        session.totalCost += cost;
-        session.lastActivity = Date.now();
-      },
-    });
+      abortSignal: session.abortController.signal,
+      // SDK-specific
+      sessionId: isSDK ? session.sessionId : null,
+      // Non-SDK: include conversation history
+      history: !isSDK ? session.history : undefined,
+      // SDK checkpoint tracking
+      _sessionState: isSDK ? {
+        messageCount: session.messageCount,
+        toolUseCount: session.toolUseCount,
+      } : undefined,
+    };
+
+    // Add user message to history (for non-SDK providers)
+    if (!isSDK) {
+      addToHistory(userId, { role: "user", content: text });
+    }
+
+    // Stream response from provider (with fallback)
+    for await (const chunk of registry.queryWithFallback(queryOpts)) {
+      switch (chunk.type) {
+        case "text":
+          finalText = chunk.text || "";
+          await streamer.update(finalText);
+          break;
+
+        case "tool_use":
+          // Could show tool activity indicator
+          if (chunk.toolName) {
+            session.toolUseCount++;
+          }
+          break;
+
+        case "done":
+          if (chunk.sessionId) session.sessionId = chunk.sessionId;
+          if (chunk.costUsd) session.totalCost += chunk.costUsd;
+          session.lastActivity = Date.now();
+          break;
+
+        case "error":
+          await ctx.reply(`Fehler: ${chunk.error}`);
+          break;
+      }
+    }
 
     await streamer.finalize(finalText);
+
+    // Add assistant response to history (for non-SDK providers)
+    if (!isSDK && finalText) {
+      addToHistory(userId, { role: "assistant", content: finalText });
+    }
 
     // Voice reply if enabled
     if (session.voiceReply && finalText.trim()) {
