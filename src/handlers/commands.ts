@@ -13,6 +13,14 @@ import { config } from "../config.js";
 /** Bot start time for uptime tracking */
 const botStartTime = Date.now();
 
+/** Format bytes to human-readable */
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
+}
+
 const EFFORT_LABELS: Record<EffortLevel, string> = {
   low: "Low — Schnelle, knappe Antworten",
   medium: "Medium — Moderate Denktiefe",
@@ -482,6 +490,38 @@ export function registerCommands(bot: Bot): void {
     await ctx.replyWithDocument(new InputFile(buffer, filename), {
       caption: `📄 Export: ${session.history.length} Nachrichten`,
     });
+  });
+
+  bot.command("system", async (ctx) => {
+    const memTotal = os.totalmem();
+    const memFree = os.freemem();
+    const memUsed = memTotal - memFree;
+    const memPercent = Math.round((memUsed / memTotal) * 100);
+
+    const uptime = os.uptime();
+    const uptimeH = Math.floor(uptime / 3600);
+    const uptimeM = Math.floor((uptime % 3600) / 60);
+
+    const cpus = os.cpus();
+    const loadAvg = os.loadavg();
+
+    const procMem = process.memoryUsage();
+
+    await ctx.reply(
+      `🖥 *System Info*\n\n` +
+      `*OS:* ${os.platform()} ${os.arch()} (${os.release()})\n` +
+      `*Host:* ${os.hostname()}\n` +
+      `*CPUs:* ${cpus.length}x ${cpus[0]?.model?.trim() || "unknown"}\n` +
+      `*Load:* ${loadAvg.map(l => l.toFixed(2)).join(", ")}\n` +
+      `*RAM:* ${formatBytes(memUsed)} / ${formatBytes(memTotal)} (${memPercent}%)\n` +
+      `*System Uptime:* ${uptimeH}h ${uptimeM}m\n\n` +
+      `🤖 *Bot Process*\n` +
+      `*Node:* ${process.version}\n` +
+      `*Heap:* ${formatBytes(procMem.heapUsed)} / ${formatBytes(procMem.heapTotal)}\n` +
+      `*RSS:* ${formatBytes(procMem.rss)}\n` +
+      `*PID:* ${process.pid}`,
+      { parse_mode: "Markdown" }
+    );
   });
 
   bot.command("reload", async (ctx) => {
