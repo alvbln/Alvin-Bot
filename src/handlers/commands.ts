@@ -17,6 +17,7 @@ import { searchMemory, reindexMemory, getIndexStats } from "../services/embeddin
 import { listProfiles, addUserNote } from "../services/users.js";
 import { getLoadedPlugins, getPluginsDir } from "../services/plugins.js";
 import { getMCPStatus, getMCPTools, callMCPTool } from "../services/mcp.js";
+import { listCustomTools, executeCustomTool, hasCustomTools } from "../services/custom-tools.js";
 import { config } from "../config.js";
 
 /** Bot start time for uptime tracking */
@@ -703,6 +704,59 @@ export function registerCommands(bot: Bot): void {
     } else {
       await ctx.reply("Unbekannt. Nutze `/security` für Optionen.", { parse_mode: "Markdown" });
     }
+  });
+
+  // ── Custom Tools ──────────────────────────────────────
+
+  bot.command("tools", async (ctx) => {
+    const arg = ctx.match?.toString().trim();
+
+    // /tools run <name> [params json]
+    if (arg?.startsWith("run ")) {
+      const parts = arg.slice(4).trim().split(/\s+/);
+      const toolName = parts[0];
+      let params: Record<string, unknown> = {};
+      if (parts.length > 1) {
+        try { params = JSON.parse(parts.slice(1).join(" ")); } catch {
+          await ctx.reply("❌ Ungültiges JSON für Parameter.", { parse_mode: "Markdown" });
+          return;
+        }
+      }
+
+      try {
+        await ctx.api.sendChatAction(ctx.chat!.id, "typing");
+        const result = await executeCustomTool(toolName, params);
+        const truncated = result.length > 3000 ? result.slice(0, 3000) + "\n..." : result;
+        await ctx.reply(`🔧 *${toolName}:*\n\`\`\`\n${truncated}\n\`\`\``, { parse_mode: "Markdown" });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        await ctx.reply(`❌ Tool-Fehler: ${msg}`);
+      }
+      return;
+    }
+
+    // /tools — list all
+    const tools = listCustomTools();
+    if (tools.length === 0) {
+      await ctx.reply(
+        "🔧 *Custom Tools*\n\n" +
+        "Keine Tools konfiguriert.\n" +
+        "Erstelle `docs/tools.json` (siehe `docs/tools.example.json`).",
+        { parse_mode: "Markdown" }
+      );
+      return;
+    }
+
+    const lines = tools.map(t => {
+      const icon = t.type === "http" ? "🌐" : "⚡";
+      return `${icon} \`${t.name}\` — ${t.description}`;
+    });
+
+    await ctx.reply(
+      `🔧 *Custom Tools (${tools.length}):*\n\n${lines.join("\n")}\n\n` +
+      `_Ausführen: \`/tools run <name> {"param":"value"}\`_`,
+      { parse_mode: "Markdown" }
+    );
   });
 
   // ── MCP ────────────────────────────────────────────────

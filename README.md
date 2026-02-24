@@ -197,15 +197,14 @@ Mr. Levin aims to become a **fully-featured, human-feeling AI assistant** that a
 
 - [x] **Plugin system** — Drop-in `plugins/` directory, auto-loading, commands + tools + message hooks + lifecycle
 - [x] **MCP (Model Context Protocol) support** — stdio transport, `/mcp` status + tool calling, `docs/mcp.json` config
-- [x] **Built-in plugins:**
-  - 🌤️ Weather (wttr.in, `/weather` command + AI tool)
-- [ ] **More built-in plugins:**
-  - 📧 Email (read/send via IMAP/SMTP)
-  - 📅 Calendar (Google Calendar, Apple Calendar)
-  - 🏠 Smart Home (Hue, Sonos, HomeKit)
-  - 💹 Finance (stock prices, portfolio tracking)
-  - 📝 Notes (Apple Notes, Obsidian)
-- [ ] **Custom tool registration** — Users define their own tools via config
+- [x] **Built-in plugins (6):**
+  - 🌤️ Weather — wttr.in, `/weather` command + AI tool
+  - 💹 Finance — `/stock`, `/crypto`, `/fx` (Yahoo Finance, CoinGecko, Frankfurter)
+  - 📝 Notes — `/notes` add/view/search/delete, markdown files
+  - 📅 Calendar — `/cal` add/view/delete, natural language dates
+  - 📧 Email — `/email` inbox/read/send/search (via himalaya CLI)
+  - 🏠 Smart Home — `/home` on/off/brightness/scenes (Hue, webhooks)
+- [x] **Custom tool registration** — `/tools` command, `docs/tools.json` config, shell + HTTP tools with parameter templates
 
 ### 📦 Phase 5: One-Click Installer
 
