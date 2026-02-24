@@ -1,5 +1,5 @@
-import type { Bot, Context } from "grammy";
-import { InlineKeyboard } from "grammy";
+import type { Bot } from "grammy";
+import { InlineKeyboard, InputFile } from "grammy";
 import fs from "fs";
 import path from "path";
 import os from "os";
@@ -7,6 +7,8 @@ import { getSession, resetSession, type EffortLevel } from "../services/session.
 import { getRegistry } from "../engine.js";
 import { reloadSoul } from "../services/personality.js";
 import { parseDuration, createReminder, listReminders, cancelReminder } from "../services/reminders.js";
+import { generateImage } from "../services/imagegen.js";
+import { config } from "../config.js";
 
 const EFFORT_LABELS: Record<EffortLevel, string> = {
   low: "Low — Schnelle, knappe Antworten",
@@ -45,6 +47,7 @@ export function registerCommands(bot: Bot): void {
     { command: "status", description: "Aktueller Status" },
     { command: "new", description: "Neue Session starten" },
     { command: "dir", description: "Arbeitsverzeichnis wechseln" },
+    { command: "imagine", description: "Bild generieren (z.B. /imagine Ein Fuchs)" },
     { command: "remind", description: "Erinnerung setzen (z.B. /remind 30m Text)" },
     { command: "cancel", description: "Laufende Anfrage abbrechen" },
   ]).catch(err => console.error("Failed to set bot commands:", err));
@@ -245,6 +248,38 @@ export function registerCommands(bot: Bot): void {
       await ctx.answerCallbackQuery(`Gewechselt: ${info.name}`);
     } else {
       await ctx.answerCallbackQuery(`Modell "${key}" nicht gefunden`);
+    }
+  });
+
+  bot.command("imagine", async (ctx) => {
+    const prompt = ctx.match?.trim();
+    if (!prompt) {
+      await ctx.reply("Beschreibe was ich generieren soll:\n`/imagine Ein Fuchs der auf dem Mond sitzt`", { parse_mode: "Markdown" });
+      return;
+    }
+
+    if (!config.apiKeys.google) {
+      await ctx.reply("⚠️ Bildgenerierung nicht verfügbar (GOOGLE_API_KEY fehlt).");
+      return;
+    }
+
+    await ctx.api.sendChatAction(ctx.chat!.id, "upload_photo");
+
+    const result = await generateImage(prompt, config.apiKeys.google);
+
+    if (result.success && result.filePath) {
+      try {
+        const fileData = fs.readFileSync(result.filePath);
+        await ctx.replyWithPhoto(new InputFile(fileData, `generated${result.filePath.endsWith(".png") ? ".png" : ".jpg"}`), {
+          caption: `🎨 _${prompt}_`,
+          parse_mode: "Markdown",
+        });
+        fs.unlink(result.filePath, () => {});
+      } catch (err) {
+        await ctx.reply(`Fehler beim Senden: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    } else {
+      await ctx.reply(`❌ ${result.error || "Bildgenerierung fehlgeschlagen."}`);
     }
   });
 
