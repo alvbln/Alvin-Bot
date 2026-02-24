@@ -505,6 +505,48 @@ export function registerCommands(bot: Bot): void {
     });
   });
 
+  bot.command("lang", async (ctx) => {
+    const userId = ctx.from!.id;
+    const session = getSession(userId);
+    const arg = ctx.match?.trim().toLowerCase();
+
+    if (!arg) {
+      const keyboard = new InlineKeyboard()
+        .text(session.language === "de" ? "✅ Deutsch" : "Deutsch", "lang:de")
+        .text(session.language === "en" ? "✅ English" : "English", "lang:en");
+
+      await ctx.reply(`🌐 *Sprache / Language:* ${session.language === "de" ? "Deutsch" : "English"}`, {
+        parse_mode: "Markdown",
+        reply_markup: keyboard,
+      });
+      return;
+    }
+
+    if (arg === "de" || arg === "en") {
+      session.language = arg;
+      await ctx.reply(arg === "de" ? "✅ Sprache: Deutsch" : "✅ Language: English");
+    } else {
+      await ctx.reply("Nutze: `/lang de` oder `/lang en`", { parse_mode: "Markdown" });
+    }
+  });
+
+  bot.callbackQuery(/^lang:(de|en)$/, async (ctx) => {
+    const lang = ctx.match![1] as "de" | "en";
+    const userId = ctx.from!.id;
+    const session = getSession(userId);
+    session.language = lang;
+
+    const keyboard = new InlineKeyboard()
+      .text(lang === "de" ? "✅ Deutsch" : "Deutsch", "lang:de")
+      .text(lang === "en" ? "✅ English" : "English", "lang:en");
+
+    await ctx.editMessageText(`🌐 *Sprache / Language:* ${lang === "de" ? "Deutsch" : "English"}`, {
+      parse_mode: "Markdown",
+      reply_markup: keyboard,
+    });
+    await ctx.answerCallbackQuery(lang === "de" ? "Deutsch" : "English");
+  });
+
   bot.command("memory", async (ctx) => {
     const stats = getMemoryStats();
     const arg = ctx.match?.trim();

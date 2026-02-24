@@ -83,7 +83,7 @@ export async function handlePhoto(ctx: Context): Promise<void> {
       // SDK: pass image path in prompt — SDK's Read tool handles it natively
       queryOpts = {
         prompt: `Analysiere dieses Bild: ${imagePath}\n\n${caption}`,
-        systemPrompt: buildSystemPrompt(true),
+        systemPrompt: buildSystemPrompt(true, session.language),
         workingDir: session.workingDir,
         effort: session.effort,
         abortSignal: session.abortController.signal,
@@ -117,7 +117,7 @@ export async function handlePhoto(ctx: Context): Promise<void> {
 
       queryOpts = {
         prompt: caption,
-        systemPrompt: buildSystemPrompt(false),
+        systemPrompt: buildSystemPrompt(false, session.language),
         workingDir: session.workingDir,
         effort: session.effort,
         abortSignal: session.abortController.signal,

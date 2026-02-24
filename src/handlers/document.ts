@@ -104,7 +104,7 @@ export async function handleDocument(ctx: Context): Promise<void> {
       // SDK provider: pass file path — Claude can read files natively
       queryOpts = {
         prompt: `Der User hat eine Datei gesendet: ${localPath}\nDateiname: ${filename}\n\nLies die Datei mit dem Read-Tool und bearbeite folgende Anfrage:\n${userInstruction}`,
-        systemPrompt: buildSystemPrompt(true),
+        systemPrompt: buildSystemPrompt(true, session.language),
         workingDir: session.workingDir,
         effort: session.effort,
         abortSignal: session.abortController.signal,
@@ -139,7 +139,7 @@ export async function handleDocument(ctx: Context): Promise<void> {
 
       queryOpts = {
         prompt: fullPrompt,
-        systemPrompt: buildSystemPrompt(false),
+        systemPrompt: buildSystemPrompt(false, session.language),
         workingDir: session.workingDir,
         effort: session.effort,
         abortSignal: session.abortController.signal,

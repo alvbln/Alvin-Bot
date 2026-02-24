@@ -94,7 +94,7 @@ export async function handleVoice(ctx: Context): Promise<void> {
 
     const queryOpts: QueryOptions & { _sessionState?: { messageCount: number; toolUseCount: number } } = {
       prompt: transcript,
-      systemPrompt: buildSystemPrompt(isSDK),
+      systemPrompt: buildSystemPrompt(isSDK, session.language),
       workingDir: session.workingDir,
       effort: session.effort,
       abortSignal: session.abortController.signal,

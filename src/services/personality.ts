@@ -29,9 +29,14 @@ const SDK_ADDON = `Wenn du Commands ausführst oder Dateien bearbeitest, erklär
 /**
  * Build the full system prompt for a query.
  * @param isSDK Whether the active provider is the Claude SDK (has tool use)
+ * @param language Preferred language ('de' or 'en')
  */
-export function buildSystemPrompt(isSDK: boolean): string {
-  const parts = [BASE_PROMPT];
+export function buildSystemPrompt(isSDK: boolean, language: "de" | "en" = "de"): string {
+  const langInstruction = language === "en"
+    ? "Respond in English unless the user writes in another language."
+    : "Antworte auf Deutsch, es sei denn der User schreibt auf Englisch.";
+
+  const parts = [BASE_PROMPT, langInstruction];
 
   if (soulContent) {
     parts.push(soulContent);

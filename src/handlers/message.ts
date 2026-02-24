@@ -21,14 +21,24 @@ export async function handleMessage(ctx: Context): Promise<void> {
   const rawText = ctx.message?.text;
   if (!rawText || rawText.startsWith("/")) return;
 
-  // Build prompt with reply context if user is replying to a message
+  // Build prompt with context
   let text = rawText;
+
+  // Forwarded message — add forward context
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const msgAny = ctx.message as any;
+  if (msgAny?.forward_origin || msgAny?.forward_date) {
+    const forwardFrom = msgAny.forward_sender_name || "unbekannt";
+    text = `[Weitergeleitete Nachricht von ${forwardFrom}]\n\n${rawText}`;
+  }
+
+  // Reply context — include quoted message
   const replyTo = ctx.message?.reply_to_message;
   if (replyTo?.text) {
     const quotedText = replyTo.text.length > 500
       ? replyTo.text.slice(0, 500) + "..."
       : replyTo.text;
-    text = `[Bezug auf vorherige Nachricht: "${quotedText}"]\n\n${rawText}`;
+    text = `[Bezug auf vorherige Nachricht: "${quotedText}"]\n\n${text}`;
   }
 
   const userId = ctx.from!.id;
@@ -62,7 +72,7 @@ export async function handleMessage(ctx: Context): Promise<void> {
     // Build query options
     const queryOpts: QueryOptions & { _sessionState?: { messageCount: number; toolUseCount: number } } = {
       prompt: text,
-      systemPrompt: buildSystemPrompt(isSDK),
+      systemPrompt: buildSystemPrompt(isSDK, session.language),
       workingDir: session.workingDir,
       effort: session.effort,
       abortSignal: session.abortController.signal,
