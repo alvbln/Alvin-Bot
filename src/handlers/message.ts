@@ -1,7 +1,7 @@
 import type { Context } from "grammy";
 import { InputFile } from "grammy";
 import fs from "fs";
-import { getSession, addToHistory } from "../services/session.js";
+import { getSession, addToHistory, trackProviderUsage } from "../services/session.js";
 import { TelegramStreamer } from "../services/telegram.js";
 import { getRegistry } from "../engine.js";
 import { textToSpeech } from "../services/voice.js";
@@ -100,6 +100,7 @@ export async function handleMessage(ctx: Context): Promise<void> {
         case "done":
           if (chunk.sessionId) session.sessionId = chunk.sessionId;
           if (chunk.costUsd) session.totalCost += chunk.costUsd;
+          trackProviderUsage(userId, registry.getActiveKey(), chunk.costUsd || 0);
           session.lastActivity = Date.now();
           break;
 

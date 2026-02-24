@@ -10,6 +10,9 @@ import { parseDuration, createReminder, listReminders, cancelReminder } from "..
 import { generateImage } from "../services/imagegen.js";
 import { config } from "../config.js";
 
+/** Bot start time for uptime tracking */
+const botStartTime = Date.now();
+
 const EFFORT_LABELS: Record<EffortLevel, string> = {
   low: "Low — Schnelle, knappe Antworten",
   medium: "Medium — Moderate Denktiefe",
@@ -61,6 +64,7 @@ export function registerCommands(bot: Bot): void {
     { command: "status", description: "Aktueller Status" },
     { command: "new", description: "Neue Session starten" },
     { command: "dir", description: "Arbeitsverzeichnis wechseln" },
+    { command: "web", description: "Schnelle Websuche" },
     { command: "imagine", description: "Bild generieren (z.B. /imagine Ein Fuchs)" },
     { command: "remind", description: "Erinnerung setzen (z.B. /remind 30m Text)" },
     { command: "export", description: "Gesprächsverlauf exportieren" },
@@ -133,15 +137,37 @@ export function registerCommands(bot: Bot): void {
     const active = registry.getActive();
     const info = active.getInfo();
 
+    // Uptime
+    const uptimeMs = Date.now() - botStartTime;
+    const uptimeH = Math.floor(uptimeMs / 3_600_000);
+    const uptimeM = Math.floor((uptimeMs % 3_600_000) / 60_000);
+
+    // Session duration
+    const sessionMs = Date.now() - session.startedAt;
+    const sessionM = Math.floor(sessionMs / 60_000);
+
+    // Cost breakdown
+    let costLines = "";
+    const providers = Object.entries(session.queriesByProvider);
+    if (providers.length > 0) {
+      costLines = providers.map(([key, queries]) => {
+        const cost = session.costByProvider[key] || 0;
+        return `  ${key}: ${queries} queries, $${cost.toFixed(4)}`;
+      }).join("\n");
+    }
+
     await ctx.reply(
       `🤖 *Mr. Levin Status*\n\n` +
-      `*Modell:* ${info.name} (${info.model})\n` +
+      `*Modell:* ${info.name}\n` +
       `*Effort:* ${EFFORT_LABELS[session.effort]}\n` +
       `*Voice:* ${session.voiceReply ? "an" : "aus"}\n` +
-      `*Verzeichnis:* \`${session.workingDir}\`\n` +
-      `*Session:* ${session.sessionId ? "aktiv" : "keine"}\n` +
-      `*History:* ${session.history.length} Nachrichten\n` +
-      `*Kosten:* $${session.totalCost.toFixed(4)}`,
+      `*Verzeichnis:* \`${session.workingDir}\`\n\n` +
+      `📊 *Session* (${sessionM} Min)\n` +
+      `*Nachrichten:* ${session.messageCount}\n` +
+      `*Tool-Calls:* ${session.toolUseCount}\n` +
+      `*Kosten:* $${session.totalCost.toFixed(4)}\n` +
+      (costLines ? `\n📈 *Provider-Nutzung:*\n${costLines}\n` : "") +
+      `\n⏱ *Bot-Uptime:* ${uptimeH}h ${uptimeM}m`,
       { parse_mode: "Markdown" }
     );
   });
@@ -263,6 +289,65 @@ export function registerCommands(bot: Bot): void {
       await ctx.answerCallbackQuery(`Gewechselt: ${info.name}`);
     } else {
       await ctx.answerCallbackQuery(`Modell "${key}" nicht gefunden`);
+    }
+  });
+
+  bot.command("web", async (ctx) => {
+    const query = ctx.match?.trim();
+    if (!query) {
+      await ctx.reply("Suche: `/web Deine Suchanfrage`", { parse_mode: "Markdown" });
+      return;
+    }
+
+    await ctx.api.sendChatAction(ctx.chat!.id, "typing");
+
+    try {
+      // Use DuckDuckGo instant answer API (no key needed)
+      const encoded = encodeURIComponent(query);
+      const res = await fetch(`https://api.duckduckgo.com/?q=${encoded}&format=json&no_html=1&skip_disambig=1`);
+      const data = await res.json() as {
+        AbstractText?: string;
+        AbstractSource?: string;
+        AbstractURL?: string;
+        Answer?: string;
+        RelatedTopics?: Array<{ Text?: string; FirstURL?: string }>;
+      };
+
+      const lines: string[] = [];
+
+      if (data.Answer) {
+        lines.push(`💡 *${data.Answer}*\n`);
+      }
+
+      if (data.AbstractText) {
+        const text = data.AbstractText.length > 500
+          ? data.AbstractText.slice(0, 500) + "..."
+          : data.AbstractText;
+        lines.push(text);
+        if (data.AbstractSource && data.AbstractURL) {
+          lines.push(`\n_Quelle: [${data.AbstractSource}](${data.AbstractURL})_`);
+        }
+      }
+
+      if (lines.length === 0 && data.RelatedTopics && data.RelatedTopics.length > 0) {
+        lines.push(`🔍 *Ergebnisse für "${query}":*\n`);
+        for (const topic of data.RelatedTopics.slice(0, 5)) {
+          if (topic.Text) {
+            const short = topic.Text.length > 150 ? topic.Text.slice(0, 150) + "..." : topic.Text;
+            lines.push(`• ${short}`);
+          }
+        }
+      }
+
+      if (lines.length === 0) {
+        lines.push(`Keine Ergebnisse für "${query}". Probier es als normale Nachricht — ich suche dann mit dem AI-Modell.`);
+      }
+
+      await ctx.reply(lines.join("\n"), { parse_mode: "Markdown" }).catch(() =>
+        ctx.reply(lines.join("\n"))
+      );
+    } catch (err) {
+      await ctx.reply(`Suchfehler: ${err instanceof Error ? err.message : String(err)}`);
     }
   });
 

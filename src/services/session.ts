@@ -15,8 +15,14 @@ export interface UserSession {
   abortController: AbortController | null;
   /** Last activity timestamp */
   lastActivity: number;
+  /** Session start time */
+  startedAt: number;
   /** Total cost in USD for this session */
   totalCost: number;
+  /** Cost breakdown per provider */
+  costByProvider: Record<string, number>;
+  /** Queries per provider */
+  queriesByProvider: Record<string, number>;
   /** Thinking effort level */
   effort: EffortLevel;
   /** Whether to send voice replies */
@@ -43,7 +49,10 @@ export function getSession(userId: number): UserSession {
       isProcessing: false,
       abortController: null,
       lastActivity: Date.now(),
+      startedAt: Date.now(),
       totalCost: 0,
+      costByProvider: {},
+      queriesByProvider: {},
       effort: "high",
       voiceReply: false,
       messageCount: 0,
@@ -59,9 +68,19 @@ export function resetSession(userId: number): void {
   const session = getSession(userId);
   session.sessionId = null;
   session.totalCost = 0;
+  session.costByProvider = {};
+  session.queriesByProvider = {};
   session.messageCount = 0;
   session.toolUseCount = 0;
   session.history = [];
+  session.startedAt = Date.now();
+}
+
+/** Track cost and query count for a provider. */
+export function trackProviderUsage(userId: number, providerKey: string, cost: number): void {
+  const session = getSession(userId);
+  session.costByProvider[providerKey] = (session.costByProvider[providerKey] || 0) + cost;
+  session.queriesByProvider[providerKey] = (session.queriesByProvider[providerKey] || 0) + 1;
 }
 
 /** Add a message to conversation history (for non-SDK providers). */

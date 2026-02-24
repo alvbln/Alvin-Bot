@@ -149,7 +149,7 @@ Mr. Levin aims to become a **fully-featured, human-feeling AI assistant** that a
   - OpenRouter (any model, one API)
 - [x] **Fallback chain** — Auto-switch to next provider on failure (like OpenClaw)
 - [x] **Per-chat model selection** — `/model gemini` to switch mid-conversation
-- [ ] **Cost tracking per provider** — Know what each model costs you
+- [x] **Cost tracking per provider** — Per-provider breakdown in `/status`
 
 ### 🧠 Phase 2: Enhanced Memory & Personality
 
