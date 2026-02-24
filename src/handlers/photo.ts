@@ -13,6 +13,7 @@ import { getSession, addToHistory } from "../services/session.js";
 import { TelegramStreamer } from "../services/telegram.js";
 import { getRegistry } from "../engine.js";
 import type { QueryOptions } from "../providers/types.js";
+import { buildSystemPrompt } from "../services/personality.js";
 
 const TEMP_DIR = path.join(os.tmpdir(), "alvin-bot");
 
@@ -82,11 +83,7 @@ export async function handlePhoto(ctx: Context): Promise<void> {
       // SDK: pass image path in prompt — SDK's Read tool handles it natively
       queryOpts = {
         prompt: `Analysiere dieses Bild: ${imagePath}\n\n${caption}`,
-        systemPrompt: `Du bist ein autonomer AI-Agent, gesteuert über Telegram.
-Halte Antworten kurz und prägnant.
-Nutze Markdown-Formatierung kompatibel mit Telegram.
-Antworte auf Deutsch, es sei denn der User schreibt auf Englisch.
-Wenn du Commands ausführst oder Dateien bearbeitest, erkläre kurz was du getan hast.`,
+        systemPrompt: buildSystemPrompt(true),
         workingDir: session.workingDir,
         effort: session.effort,
         abortSignal: session.abortController.signal,
@@ -120,10 +117,7 @@ Wenn du Commands ausführst oder Dateien bearbeitest, erkläre kurz was du getan
 
       queryOpts = {
         prompt: caption,
-        systemPrompt: `Du bist ein autonomer AI-Agent, gesteuert über Telegram.
-Halte Antworten kurz und prägnant.
-Nutze Markdown-Formatierung kompatibel mit Telegram.
-Antworte auf Deutsch, es sei denn der User schreibt auf Englisch.`,
+        systemPrompt: buildSystemPrompt(false),
         workingDir: session.workingDir,
         effort: session.effort,
         abortSignal: session.abortController.signal,

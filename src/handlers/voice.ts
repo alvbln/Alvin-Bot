@@ -15,6 +15,7 @@ import { TelegramStreamer } from "../services/telegram.js";
 import { transcribeAudio, textToSpeech } from "../services/voice.js";
 import { getRegistry } from "../engine.js";
 import type { QueryOptions } from "../providers/types.js";
+import { buildSystemPrompt } from "../services/personality.js";
 
 const TEMP_DIR = path.join(os.tmpdir(), "alvin-bot");
 
@@ -93,10 +94,7 @@ export async function handleVoice(ctx: Context): Promise<void> {
 
     const queryOpts: QueryOptions & { _sessionState?: { messageCount: number; toolUseCount: number } } = {
       prompt: transcript,
-      systemPrompt: `Du bist ein autonomer AI-Agent, gesteuert über Telegram.
-Halte Antworten kurz und prägnant, aber gründlich.
-Nutze Markdown-Formatierung kompatibel mit Telegram.
-Antworte auf Deutsch, es sei denn der User schreibt auf Englisch.`,
+      systemPrompt: buildSystemPrompt(isSDK),
       workingDir: session.workingDir,
       effort: session.effort,
       abortSignal: session.abortController.signal,

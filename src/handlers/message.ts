@@ -6,6 +6,7 @@ import { TelegramStreamer } from "../services/telegram.js";
 import { getRegistry } from "../engine.js";
 import { textToSpeech } from "../services/voice.js";
 import type { QueryOptions } from "../providers/types.js";
+import { buildSystemPrompt } from "../services/personality.js";
 
 /** React to a message with an emoji. Silently fails if reactions aren't supported. */
 async function react(ctx: Context, emoji: string): Promise<void> {
@@ -14,21 +15,6 @@ async function react(ctx: Context, emoji: string): Promise<void> {
   } catch {
     // Reactions not supported in this chat — silently ignore
   }
-}
-
-/** Build system prompt based on provider type */
-function buildSystemPrompt(isSDK: boolean): string {
-  const base = `Du bist ein autonomer AI-Agent, gesteuert über Telegram.
-Halte Antworten kurz und prägnant, aber gründlich.
-Nutze Markdown-Formatierung kompatibel mit Telegram (fett, kursiv, Code-Blöcke).
-Antworte auf Deutsch, es sei denn der User schreibt auf Englisch.`;
-
-  if (isSDK) {
-    // SDK provider gets tool instructions (CLAUDE.md is injected separately)
-    return `${base}\nWenn du Commands ausführst oder Dateien bearbeitest, erkläre kurz was du getan hast.`;
-  }
-
-  return base;
 }
 
 export async function handleMessage(ctx: Context): Promise<void> {

@@ -10,6 +10,7 @@ import { TelegramStreamer } from "../services/telegram.js";
 import { getRegistry } from "../engine.js";
 import { textToSpeech } from "../services/voice.js";
 import type { QueryOptions } from "../providers/types.js";
+import { buildSystemPrompt } from "../services/personality.js";
 
 const TEMP_DIR = path.join(os.tmpdir(), "alvin-bot");
 if (!fs.existsSync(TEMP_DIR)) fs.mkdirSync(TEMP_DIR, { recursive: true });
@@ -103,11 +104,7 @@ export async function handleDocument(ctx: Context): Promise<void> {
       // SDK provider: pass file path — Claude can read files natively
       queryOpts = {
         prompt: `Der User hat eine Datei gesendet: ${localPath}\nDateiname: ${filename}\n\nLies die Datei mit dem Read-Tool und bearbeite folgende Anfrage:\n${userInstruction}`,
-        systemPrompt: `Du bist ein autonomer AI-Agent, gesteuert über Telegram.
-Halte Antworten kurz und prägnant, aber gründlich.
-Nutze Markdown-Formatierung kompatibel mit Telegram.
-Antworte auf Deutsch, es sei denn der User schreibt auf Englisch.
-Wenn du Commands ausführst oder Dateien bearbeitest, erkläre kurz was du getan hast.`,
+        systemPrompt: buildSystemPrompt(true),
         workingDir: session.workingDir,
         effort: session.effort,
         abortSignal: session.abortController.signal,
@@ -142,10 +139,7 @@ Wenn du Commands ausführst oder Dateien bearbeitest, erkläre kurz was du getan
 
       queryOpts = {
         prompt: fullPrompt,
-        systemPrompt: `Du bist ein autonomer AI-Agent, gesteuert über Telegram.
-Halte Antworten kurz und prägnant, aber gründlich.
-Nutze Markdown-Formatierung kompatibel mit Telegram.
-Antworte auf Deutsch, es sei denn der User schreibt auf Englisch.`,
+        systemPrompt: buildSystemPrompt(false),
         workingDir: session.workingDir,
         effort: session.effort,
         abortSignal: session.abortController.signal,

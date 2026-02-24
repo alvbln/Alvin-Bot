@@ -5,6 +5,7 @@ import path from "path";
 import os from "os";
 import { getSession, resetSession, type EffortLevel } from "../services/session.js";
 import { getRegistry } from "../engine.js";
+import { reloadSoul } from "../services/personality.js";
 
 const EFFORT_LABELS: Record<EffortLevel, string> = {
   low: "Low — Schnelle, knappe Antworten",
@@ -34,31 +35,53 @@ export function registerCommands(bot: Bot): void {
     );
   });
 
+  // Register bot commands in Telegram's menu
+  bot.api.setMyCommands([
+    { command: "help", description: "Alle Befehle anzeigen" },
+    { command: "model", description: "KI-Modell wechseln" },
+    { command: "effort", description: "Denktiefe einstellen" },
+    { command: "voice", description: "Sprachantworten an/aus" },
+    { command: "status", description: "Aktueller Status" },
+    { command: "new", description: "Neue Session starten" },
+    { command: "dir", description: "Arbeitsverzeichnis wechseln" },
+    { command: "cancel", description: "Laufende Anfrage abbrechen" },
+  ]).catch(err => console.error("Failed to set bot commands:", err));
+
   bot.command("start", async (ctx) => {
-    const userId = ctx.from!.id;
-    const session = getSession(userId);
+    const registry = getRegistry();
+    const activeInfo = registry.getActive().getInfo();
+
     await ctx.reply(
-      `Claude Agent Bot aktiv.\n\n` +
-      `User-ID: ${userId}\n` +
-      `Arbeitsverzeichnis: ${session.workingDir}\n` +
-      `Session: ${session.sessionId ? "aktiv" : "keine"}\n` +
-      `Kosten: $${session.totalCost.toFixed(4)}\n\n` +
-      `Effort: ${EFFORT_LABELS[session.effort]}\n` +
-      `Voice: ${session.voiceReply ? "an" : "aus"}\n\n` +
-      `Befehle:\n` +
-      `/new — Neue Session\n` +
-      `/dir <pfad> — Verzeichnis wechseln\n` +
-      `/effort <low|medium|high|max> — Denktiefe einstellen\n` +
-      `/voice — Sprachantworten an/aus\n` +
-      `/status — Status anzeigen\n` +
-      `/cancel — Laufende Anfrage abbrechen`
+      `👋 *Hey! Ich bin Mr. Levin.*\n\n` +
+      `Dein autonomer KI-Assistent auf Telegram. Schreib mir einfach — ` +
+      `ich verstehe Text, Sprachnachrichten, Fotos und Dokumente.\n\n` +
+      `🤖 Modell: *${activeInfo.name}*\n` +
+      `🧠 Denktiefe: High\n\n` +
+      `Tippe /help für alle Befehle.`,
+      { parse_mode: "Markdown" }
     );
   });
 
   bot.command("new", async (ctx) => {
     const userId = ctx.from!.id;
+    const session = getSession(userId);
+
+    const hadSession = !!session.sessionId || session.history.length > 0;
+    const msgCount = session.messageCount;
+    const cost = session.totalCost;
+
     resetSession(userId);
-    await ctx.reply("Neue Session gestartet.");
+
+    if (hadSession) {
+      await ctx.reply(
+        `🔄 *Neue Session gestartet.*\n\n` +
+        `Vorherige Session: ${msgCount} Nachrichten, $${cost.toFixed(4)} Kosten.\n` +
+        `Kontext wurde zurückgesetzt.`,
+        { parse_mode: "Markdown" }
+      );
+    } else {
+      await ctx.reply("🔄 Neue Session gestartet.");
+    }
   });
 
   bot.command("dir", async (ctx) => {
@@ -221,6 +244,11 @@ export function registerCommands(bot: Bot): void {
     } else {
       await ctx.answerCallbackQuery(`Modell "${key}" nicht gefunden`);
     }
+  });
+
+  bot.command("reload", async (ctx) => {
+    const success = reloadSoul();
+    await ctx.reply(success ? "✅ SOUL.md neu geladen." : "❌ SOUL.md nicht gefunden.");
   });
 
   bot.command("cancel", async (ctx) => {
