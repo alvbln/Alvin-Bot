@@ -30,6 +30,7 @@
     <div class="nav-item" data-page="files">📁 <span>Files</span></div>
 
     <div class="nav-section">System</div>
+    <div class="nav-item" data-page="tools">🛠️ <span>Tools</span></div>
     <div class="nav-item" data-page="plugins">🔌 <span>Plugins</span></div>
     <div class="nav-item" data-page="platforms">📱 <span>Platforms</span></div>
     <div class="nav-item" data-page="users">👥 <span>Users</span></div>
@@ -132,6 +133,15 @@
       </div>
       <textarea class="editor" id="file-editor"></textarea>
     </div>
+  </div>
+
+  <!-- Tools -->
+  <div class="page content" id="page-tools">
+    <div style="margin-bottom:16px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <input type="text" id="tools-search" placeholder="🔍 Tool suchen..." style="flex:1;min-width:200px;background:var(--bg3);border:1px solid var(--bg3);border-radius:var(--radius-sm);padding:8px 12px;color:var(--fg);font:inherit;font-size:0.85em;outline:none" oninput="filterTools()">
+      <span class="badge badge-accent" id="tools-count">0 Tools</span>
+    </div>
+    <div id="tools-list"></div>
   </div>
 
   <!-- Plugins -->

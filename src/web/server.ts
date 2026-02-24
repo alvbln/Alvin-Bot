@@ -22,7 +22,7 @@ import { getIndexStats } from "../services/embeddings.js";
 import { getLoadedPlugins } from "../services/plugins.js";
 import { getMCPStatus } from "../services/mcp.js";
 import { listProfiles } from "../services/users.js";
-import { listCustomTools } from "../services/custom-tools.js";
+import { listCustomTools, getCustomTools, executeCustomTool } from "../services/custom-tools.js";
 import { buildSystemPrompt, reloadSoul, getSoulContent } from "../services/personality.js";
 import { config } from "../config.js";
 import type { QueryOptions, StreamChunk } from "../providers/types.js";
@@ -67,7 +67,7 @@ function checkAuth(req: http.IncomingMessage): boolean {
 
 // ── REST API ────────────────────────────────────────────
 
-function handleAPI(req: http.IncomingMessage, res: http.ServerResponse, urlPath: string, body: string): void {
+async function handleAPI(req: http.IncomingMessage, res: http.ServerResponse, urlPath: string, body: string): Promise<void> {
   res.setHeader("Content-Type", "application/json");
 
   // POST /api/login
@@ -222,7 +222,26 @@ function handleAPI(req: http.IncomingMessage, res: http.ServerResponse, urlPath:
 
   // GET /api/tools
   if (urlPath === "/api/tools") {
-    res.end(JSON.stringify({ tools: listCustomTools() }));
+    const tools = getCustomTools();
+    res.end(JSON.stringify({ tools }));
+    return;
+  }
+
+  // POST /api/tools/execute — run a tool by name
+  if (urlPath === "/api/tools/execute" && req.method === "POST") {
+    try {
+      const { name, params } = JSON.parse(body);
+      if (!name) {
+        res.statusCode = 400;
+        res.end(JSON.stringify({ error: "No tool name" }));
+        return;
+      }
+      const output = await executeCustomTool(name, params || {});
+      res.end(JSON.stringify({ ok: true, output }));
+    } catch (err: unknown) {
+      const error = err instanceof Error ? err.message : String(err);
+      res.end(JSON.stringify({ error }));
+    }
     return;
   }
 
@@ -354,18 +373,19 @@ function handleAPI(req: http.IncomingMessage, res: http.ServerResponse, urlPath:
         return;
       }
       // Security: limit command length
-      if (command.length > 1000) {
+      if (command.length > 10000) {
         res.statusCode = 400;
-        res.end(JSON.stringify({ error: "Command too long" }));
+        res.end(JSON.stringify({ error: "Command too long (max 10000 chars)" }));
         return;
       }
+      const cwd = typeof (JSON.parse(body)).cwd === "string" ? resolve(JSON.parse(body).cwd) : BOT_ROOT;
       const output = execSync(command, {
-        cwd: BOT_ROOT,
+        cwd,
         stdio: "pipe",
-        timeout: 30000,
-        env: process.env,
+        timeout: 120000,
+        env: { ...process.env, PATH: process.env.PATH + ":/opt/homebrew/bin:/usr/local/bin" },
       }).toString();
-      res.end(JSON.stringify({ output: output.slice(0, 50000) }));
+      res.end(JSON.stringify({ output: output.slice(0, 100000) }));
     } catch (err: unknown) {
       const error = err as { stderr?: Buffer; message: string };
       const stderr = error.stderr?.toString()?.trim() || "";

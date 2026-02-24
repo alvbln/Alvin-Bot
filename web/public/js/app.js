@@ -29,7 +29,7 @@ document.querySelectorAll('.nav-item').forEach(item => {
     document.getElementById('page-title').textContent = item.textContent.trim();
 
     const loaders = { dashboard: loadDashboard, memory: loadMemory, models: loadModels,
-      sessions: loadSessions, plugins: loadPlugins, files: () => navigateFiles('.'),
+      sessions: loadSessions, plugins: loadPlugins, tools: loadTools, files: () => navigateFiles('.'),
       users: loadUsers, settings: loadSettings, platforms: loadPlatforms, personality: loadPersonality };
     if (loaders[page]) loaders[page]();
   });
@@ -483,6 +483,118 @@ function formatSize(bytes) {
   if (bytes < 1024) return bytes + ' B';
   if (bytes < 1048576) return (bytes/1024).toFixed(1) + ' KB';
   return (bytes/1048576).toFixed(1) + ' MB';
+}
+
+// ── Tools ───────────────────────────────────────────────
+let allTools = [];
+
+async function loadTools() {
+  const res = await fetch(API + '/api/tools');
+  const data = await res.json();
+  allTools = data.tools || [];
+  document.getElementById('tools-count').textContent = allTools.length + ' Tools';
+  renderTools(allTools);
+}
+
+function filterTools() {
+  const q = document.getElementById('tools-search').value.toLowerCase();
+  const filtered = q ? allTools.filter(t => t.name.toLowerCase().includes(q) || t.description.toLowerCase().includes(q)) : allTools;
+  document.getElementById('tools-count').textContent = filtered.length + ' Tools';
+  renderTools(filtered);
+}
+
+function renderTools(tools) {
+  const categories = {};
+  tools.forEach(t => {
+    const cat = categorize(t.name);
+    if (!categories[cat]) categories[cat] = [];
+    categories[cat].push(t);
+  });
+
+  const icons = { '🖥️ System': '🖥️', '📧 Email': '📧', '🖱️ Automation': '🖱️', '📄 PDF': '📄', '🔧 Dev Tools': '🔧', '🌐 Network': '🌐', '🎨 Media': '🎨', '📋 Clipboard': '📋', '📁 Files': '📁', '🔨 Other': '🔨' };
+
+  let html = '';
+  for (const [cat, catTools] of Object.entries(categories)) {
+    html += `<div style="margin-bottom:20px"><h3 style="font-size:0.85em;color:var(--fg2);margin-bottom:8px">${cat}</h3>`;
+    html += catTools.map(t => {
+      const params = Object.keys(t.parameters || {});
+      const paramBadges = params.map(p => `<span class="badge" style="font-size:0.65em">${p}</span>`).join(' ');
+      return `<div class="list-item" style="cursor:pointer" onclick="runTool('${escapeHtml(t.name)}')">
+        <div class="info">
+          <div class="name" style="font-family:monospace;font-size:0.85em">${t.name} ${paramBadges}</div>
+          <div class="desc">${t.description}</div>
+        </div>
+        <button class="btn btn-sm btn-outline" onclick="event.stopPropagation();runTool('${escapeHtml(t.name)}')">▶️ Run</button>
+      </div>`;
+    }).join('');
+    html += '</div>';
+  }
+  document.getElementById('tools-list').innerHTML = html || '<div class="card"><h3>Keine Tools</h3><div class="sub">Tools in docs/tools.json konfigurieren.</div></div>';
+}
+
+function categorize(name) {
+  if (['run_shell','sudo_command','system_info','volume_set','brightness_set','bluetooth_control','wifi_status','say_text','notify','process_list','kill_process'].includes(name)) return '🖥️ System';
+  if (name.startsWith('email_')) return '📧 Email';
+  if (['osascript','osascript_js','cliclick_type','cliclick_click','cliclick_key'].includes(name)) return '🖱️ Automation';
+  if (name.startsWith('pdf_') || name.includes('_to_pdf')) return '📄 PDF';
+  if (['git_status','git_commit','pm2_status','pm2_restart','pm2_logs','ssh_command','docker_ps'].includes(name)) return '🔧 Dev Tools';
+  if (['web_fetch','network_check','open_url'].includes(name)) return '🌐 Network';
+  if (['image_convert','image_resize','ffmpeg_convert','whisper_transcribe','screenshot'].includes(name)) return '🎨 Media';
+  if (['clipboard_get','clipboard_set'].includes(name)) return '📋 Clipboard';
+  if (['find_files','disk_usage','open_file','calendar_today','calendar_upcoming'].includes(name)) return '📁 Files';
+  return '🔨 Other';
+}
+
+function runTool(name) {
+  const tool = allTools.find(t => t.name === name);
+  if (!tool) return;
+  const params = Object.entries(tool.parameters || {});
+
+  if (params.length === 0) {
+    // No params — run directly
+    executeTool(name, {});
+    return;
+  }
+
+  // Prompt for params
+  const values = {};
+  for (const [key, def] of params) {
+    const val = prompt(`${key}: ${def.description}`, '');
+    if (val === null) return; // Cancelled
+    if (val) values[key] = val;
+  }
+  executeTool(name, values);
+}
+
+async function executeTool(name, params) {
+  toast(`Running ${name}...`);
+  try {
+    const res = await fetch(API + '/api/tools/execute', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, params }),
+    });
+    const data = await res.json();
+    if (data.error) {
+      toast(data.error, 'error');
+    } else {
+      // Show result in a dialog or terminal
+      const output = data.output || '(no output)';
+      // Switch to terminal and show output
+      document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
+      document.querySelector('[data-page="terminal"]').classList.add('active');
+      document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+      document.getElementById('page-terminal').classList.add('active');
+      document.getElementById('page-title').textContent = '💻 Terminal';
+      const termOutput = document.getElementById('terminal-output');
+      termOutput.innerHTML += `<div class="term-cmd">🛠️ ${escapeHtml(name)} ${JSON.stringify(params)}</div>`;
+      termOutput.innerHTML += `<div>${escapeHtml(output)}</div>`;
+      termOutput.scrollTop = termOutput.scrollHeight;
+      toast('Tool ausgeführt!');
+    }
+  } catch (err) {
+    toast('Fehler: ' + err.message, 'error');
+  }
 }
 
 // ── Terminal ────────────────────────────────────────────
