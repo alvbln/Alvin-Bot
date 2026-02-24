@@ -1,13 +1,27 @@
 {
-  "name": "alvin-bot",
-  "version": "2.0.0",
-  "description": "Telegram Bot with Claude Agent SDK — autonomous AI agent",
+  "name": "mr-levin",
+  "version": "2.1.0",
+  "description": "Mr. Levin — Autonomous AI Telegram Agent with multi-model support",
   "type": "module",
   "main": "dist/index.js",
+  "bin": {
+    "mr-levin": "./bin/cli.js"
+  },
   "scripts": {
     "dev": "tsx src/index.ts",
     "build": "tsc",
-    "start": "node dist/index.js"
+    "start": "node dist/index.js",
+    "setup": "node bin/cli.js setup"
+  },
+  "keywords": [
+    "telegram", "bot", "ai", "claude", "agent", "llm", "multi-model",
+    "gpt", "gemini", "nvidia", "self-hosted", "autonomous"
+  ],
+  "author": "Ali Levin",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/alvbln/alvin-bot"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.2.50",
