@@ -35,6 +35,8 @@ export interface UserSession {
   history: ChatMessage[];
   /** Preferred language */
   language: "de" | "en";
+  /** Message queue (messages received while processing) */
+  messageQueue: string[];
 }
 
 /** Max history entries to keep (to avoid token overflow) */
@@ -61,6 +63,7 @@ export function getSession(userId: number): UserSession {
       toolUseCount: 0,
       history: [],
       language: "de",
+      messageQueue: [],
     };
     sessions.set(userId, session);
   }

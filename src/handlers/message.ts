@@ -22,7 +22,6 @@ export async function handleMessage(ctx: Context): Promise<void> {
   const rawText = ctx.message?.text;
   if (!rawText || rawText.startsWith("/")) return;
 
-  // Build prompt with context
   let text = rawText;
 
   // Forwarded message — add forward context (if allowed)
@@ -50,8 +49,20 @@ export async function handleMessage(ctx: Context): Promise<void> {
   const session = getSession(userId);
 
   if (session.isProcessing) {
-    await ctx.reply("Bitte warten, vorherige Anfrage läuft noch... (/cancel zum Abbrechen)");
+    // Queue the message instead of rejecting it (max 3)
+    if (session.messageQueue.length < 3) {
+      session.messageQueue.push(text);
+      await react(ctx, "📝");
+    } else {
+      await ctx.reply("⏳ Warteschlange voll (3 Nachrichten). Bitte warten oder /cancel.");
+    }
     return;
+  }
+
+  // Consume queued messages (sent while previous query was processing)
+  if (session.messageQueue.length > 0) {
+    const queued = session.messageQueue.splice(0);
+    text = [...queued, text].join("\n\n");
   }
 
   session.isProcessing = true;
@@ -165,5 +176,8 @@ export async function handleMessage(ctx: Context): Promise<void> {
     clearInterval(typingInterval);
     session.isProcessing = false;
     session.abortController = null;
+
+    // Check for queued messages — they'll be prepended to the next real message
+    // Queue stays in session and gets consumed on next handleMessage call
   }
 }
