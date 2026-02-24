@@ -31,18 +31,25 @@ export async function handleMessage(ctx: Context): Promise<void> {
   try {
     await ctx.api.sendChatAction(ctx.chat!.id, "typing");
 
+    session.messageCount++;
+
     await runClaudeAgent({
       prompt: text,
       sessionId: session.sessionId,
       workingDir: session.workingDir,
       effort: session.effort,
       abortController: session.abortController,
+      messageCount: session.messageCount,
+      toolUseCount: session.toolUseCount,
       onText: async (fullText) => {
         finalText = fullText;
         await streamer.update(fullText);
       },
       onToolUse: async (toolName) => {
         // Could show tool activity, keeping it silent for now
+      },
+      onToolUseCount: (count) => {
+        session.toolUseCount += count;
       },
       onComplete: ({ sessionId, cost }) => {
         session.sessionId = sessionId;

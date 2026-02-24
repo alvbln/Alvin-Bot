@@ -78,15 +78,22 @@ export async function handleVoice(ctx: Context): Promise<void> {
     await ctx.reply(`"${transcript}"`);
 
     // 3. Send to Claude
+    session.messageCount++;
+
     await runClaudeAgent({
       prompt: transcript,
       sessionId: session.sessionId,
       workingDir: session.workingDir,
       effort: session.effort,
       abortController: session.abortController,
+      messageCount: session.messageCount,
+      toolUseCount: session.toolUseCount,
       onText: async (fullText) => {
         finalText = fullText;
         await streamer.update(fullText);
+      },
+      onToolUseCount: (count) => {
+        session.toolUseCount += count;
       },
       onComplete: ({ sessionId, cost }) => {
         session.sessionId = sessionId;

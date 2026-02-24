@@ -65,15 +65,22 @@ export async function handlePhoto(ctx: Context): Promise<void> {
     const caption = ctx.message?.caption || "";
     const prompt = `Analysiere dieses Bild: ${imagePath}\n\n${caption}`;
 
+    session.messageCount++;
+
     await runClaudeAgent({
       prompt,
       sessionId: session.sessionId,
       workingDir: session.workingDir,
       effort: session.effort,
       abortController: session.abortController,
+      messageCount: session.messageCount,
+      toolUseCount: session.toolUseCount,
       onText: async (fullText) => {
         finalText = fullText;
         await streamer.update(fullText);
+      },
+      onToolUseCount: (count) => {
+        session.toolUseCount += count;
       },
       onComplete: ({ sessionId, cost }) => {
         session.sessionId = sessionId;

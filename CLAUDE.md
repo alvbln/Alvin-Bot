@@ -57,6 +57,34 @@ Du wachst jede Session frisch auf. Die folgenden Dateien sind dein Gedächtnis �
 | Debug-Details, temporäres | `docs/memory/YYYY-MM-DD.md` |
 | Dauerhafte Erkenntnisse | `docs/MEMORY.md` |
 
+### Checkpoints (Compacting-Schutz)
+
+Dein Kontext-Fenster ist begrenzt. Wenn es voll wird, komprimiert das System deinen Gesprächsverlauf zu einem kurzen Summary — du verlierst Details. **Checkpoints schützen dagegen.**
+
+**Wann Checkpoints schreiben (PFLICHT):**
+- Nach Abschluss eines komplexen Tasks (Deployment, Debugging, Recherche)
+- Wenn du den Hinweis `[CHECKPOINT]` im Prompt siehst (wird automatisch vom Bot eingefügt)
+- Vor dem Wechsel zu einem komplett anderen Thema
+- Wenn der User eine wichtige Entscheidung trifft oder Info teilt
+
+**Was in einen Checkpoint gehört** (in `docs/memory/YYYY-MM-DD.md`):
+- Aktueller Task und Fortschritt
+- Wichtige Entscheidungen oder Erkenntnisse
+- Offene Fragen oder nächste Schritte
+- Pfade zu erstellten/geänderten Dateien
+
+### Nach Compacting — Kontext wiederherstellen
+
+**Wenn dein Gesprächsverlauf dünn oder lückenhaft wirkt** (du erinnerst dich nicht an Details die der User erwähnt), dann wurde vermutlich kompaktiert. In dem Fall:
+1. **SOFORT** `docs/memory/YYYY-MM-DD.md` (heute + gestern) lesen — BEVOR du antwortest
+2. `docs/MEMORY.md` lesen
+3. Erst DANN auf die Nachricht reagieren
+
+**Erkennungszeichen für Compacting:**
+- Der User bezieht sich auf etwas das du nicht im Verlauf siehst
+- Du hast nur einen kurzen Summary statt detaillierter Nachrichten
+- Details wie Dateinamen, Code-Snippets oder Entscheidungen fehlen
+
 ### Memory-Hygiene
 
 - Tägliche Files werden **nie gelöscht** — sie bleiben als durchsuchbares Archiv
