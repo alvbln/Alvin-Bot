@@ -245,11 +245,11 @@ Mr. Levin aims to become a **fully-featured, human-feeling AI assistant** that a
 
 **Goal:** Not just Telegram — reach users where they are.
 
-- [ ] **WhatsApp** (via Baileys/wacli)
-- [ ] **Discord**
-- [ ] **Signal**
-- [ ] **Web UI chat** (integrated into Phase 6 dashboard)
-- [ ] **Platform abstraction** — Single bot logic, multiple frontends
+- [x] **WhatsApp** — via Baileys (@whiskeysockets/baileys), QR code pairing, auto-reconnect
+- [x] **Discord** — via discord.js, @mention + reply detection, message chunking (2000 char limit)
+- [x] **Signal** — via signal-cli REST API, polling-based, group + DM support
+- [x] **Web UI chat** — integrated into Phase 6 dashboard (WebSocket streaming)
+- [x] **Platform abstraction** — `PlatformAdapter` interface, auto-detect from env vars, unified message routing
 
 ---
 

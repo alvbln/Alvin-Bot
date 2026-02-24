@@ -107,7 +107,7 @@ const webServer = startWebServer();
 // Start
 await bot.start({
   onStart: () => {
-    console.log(`🤖 Mr. Levin v2.3.0 gestartet`);
+    console.log(`🤖 Mr. Levin v3.0.0 gestartet`);
     console.log(`   Provider: ${registry.getActiveKey()}`);
     console.log(`   Users: ${config.allowedUsers.length} authorized`);
   },
