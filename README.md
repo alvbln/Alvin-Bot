@@ -183,9 +183,9 @@ Mr. Levin aims to become a **fully-featured, human-feeling AI assistant** that a
 
 - [x] **Document handling** — Receive and process PDFs, Excel, Word, code files, CSV, JSON, etc.
 - [x] **Image generation** — `/imagine` generates images via Gemini (Nano Banana)
-- [ ] **Video messages** — Process and create short video responses
-- [ ] **Browser automation** — Full web browsing via Playwright (scraping, form filling, screenshots, downloads)
-- [ ] **Email integration** — Read/send emails via IMAP/SMTP (Apple Mail, Gmail, etc.)
+- [x] **Video messages** — Process videos + video notes: key frame extraction, audio transcription, AI analysis
+- [x] **Browser automation** — `/browse` screenshots, text extraction, PDF generation via Playwright
+- [x] **Email integration** — `/email` inbox/read/send/search via himalaya CLI (see Email plugin)
 - [x] **Inline keyboards** — Interactive buttons for /model and /effort selection
 - [x] **Reactions** — React to messages with emoji (🤔 thinking, 🎧 listening, 👀 looking, 👍 done, 👎 error)
 - [x] **Scheduled messages** — `/remind 30m Text` with list, cancel, auto-fire

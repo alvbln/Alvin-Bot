@@ -6,6 +6,7 @@ import { handleMessage } from "./handlers/message.js";
 import { handlePhoto } from "./handlers/photo.js";
 import { handleVoice } from "./handlers/voice.js";
 import { handleDocument } from "./handlers/document.js";
+import { handleVideo } from "./handlers/video.js";
 import { initEngine } from "./engine.js";
 import { loadPlugins, registerPluginCommands, unloadPlugins } from "./services/plugins.js";
 import { initMCP, disconnectMCP, hasMCPConfig } from "./services/mcp.js";
@@ -49,6 +50,8 @@ registerPluginCommands(bot);
 
 // Content handlers (Reihenfolge wichtig: spezifisch vor allgemein)
 bot.on("message:voice", handleVoice);
+bot.on("message:video", handleVideo);
+bot.on("message:video_note", handleVideo);
 bot.on("message:photo", handlePhoto);
 bot.on("message:document", handleDocument);
 bot.on("message:text", handleMessage);

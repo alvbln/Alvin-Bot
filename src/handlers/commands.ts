@@ -18,6 +18,7 @@ import { listProfiles, addUserNote } from "../services/users.js";
 import { getLoadedPlugins, getPluginsDir } from "../services/plugins.js";
 import { getMCPStatus, getMCPTools, callMCPTool } from "../services/mcp.js";
 import { listCustomTools, executeCustomTool, hasCustomTools } from "../services/custom-tools.js";
+import { screenshotUrl, extractText, generatePdf, hasPlaywright } from "../services/browser.js";
 import { config } from "../config.js";
 
 /** Bot start time for uptime tracking */
@@ -67,6 +68,10 @@ export function registerCommands(bot: Bot): void {
       `/recall <query> — Semantische Suche\n` +
       `/remember <text> — Etwas merken\n` +
       `/reindex — Gedächtnis neu indexieren\n\n` +
+      `🌐 *Browser*\n` +
+      `/browse <URL> — Screenshot\n` +
+      `/browse text <URL> — Text extrahieren\n` +
+      `/browse pdf <URL> — Als PDF\n\n` +
       `🔌 *Erweiterungen*\n` +
       `/plugins — Geladene Plugins\n` +
       `/mcp — MCP Server & Tools\n` +
@@ -703,6 +708,67 @@ export function registerCommands(bot: Bot): void {
       await ctx.reply(`${val === "on" || val === "true" ? "⚠️" : "✅"} Auto-Approve: ${val === "on" || val === "true" ? "AN" : "AUS"}`);
     } else {
       await ctx.reply("Unbekannt. Nutze `/security` für Optionen.", { parse_mode: "Markdown" });
+    }
+  });
+
+  // ── Browser Automation ─────────────────────────────────
+
+  bot.command("browse", async (ctx) => {
+    const arg = ctx.match?.toString().trim();
+    if (!arg) {
+      await ctx.reply(
+        "🌐 *Browser-Befehle:*\n\n" +
+        "`/browse <URL>` — Screenshot einer Webseite\n" +
+        "`/browse text <URL>` — Text extrahieren\n" +
+        "`/browse pdf <URL>` — Seite als PDF speichern",
+        { parse_mode: "Markdown" }
+      );
+      return;
+    }
+
+    if (!hasPlaywright()) {
+      await ctx.reply(
+        "❌ Playwright nicht installiert.\n`npm install playwright && npx playwright install chromium`",
+        { parse_mode: "Markdown" }
+      );
+      return;
+    }
+
+    try {
+      await ctx.api.sendChatAction(ctx.chat!.id, "typing");
+
+      // /browse text <url>
+      if (arg.startsWith("text ")) {
+        const url = arg.slice(5).trim();
+        const text = await extractText(url);
+        const truncated = text.length > 3500 ? text.slice(0, 3500) + "\n\n_[...gekürzt]_" : text;
+        await ctx.reply(`🌐 *Text von ${url}:*\n\n${truncated}`, { parse_mode: "Markdown" });
+        return;
+      }
+
+      // /browse pdf <url>
+      if (arg.startsWith("pdf ")) {
+        const url = arg.slice(4).trim();
+        await ctx.api.sendChatAction(ctx.chat!.id, "upload_document");
+        const pdfPath = await generatePdf(url);
+        await ctx.replyWithDocument(new InputFile(fs.readFileSync(pdfPath), "page.pdf"), {
+          caption: `📄 PDF von ${url}`,
+        });
+        fs.unlink(pdfPath, () => {});
+        return;
+      }
+
+      // Default: screenshot
+      const url = arg.startsWith("http") ? arg : `https://${arg}`;
+      await ctx.api.sendChatAction(ctx.chat!.id, "upload_photo");
+      const screenshotPath = await screenshotUrl(url, { fullPage: false });
+      await ctx.replyWithPhoto(new InputFile(fs.readFileSync(screenshotPath), "screenshot.png"), {
+        caption: `🌐 ${url}`,
+      });
+      fs.unlink(screenshotPath, () => {});
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      await ctx.reply(`❌ Browser-Fehler: ${msg}`);
     }
   });
 
