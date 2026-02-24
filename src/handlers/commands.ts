@@ -14,6 +14,26 @@ const EFFORT_LABELS: Record<EffortLevel, string> = {
 };
 
 export function registerCommands(bot: Bot): void {
+  bot.command("help", async (ctx) => {
+    await ctx.reply(
+      `🤖 *Mr. Levin — Befehle*\n\n` +
+      `💬 *Chat*\n` +
+      `Einfach schreiben — ich antworte.\n` +
+      `Sprachnachrichten & Fotos verstehe ich auch.\n\n` +
+      `⚙️ *Steuerung*\n` +
+      `/model — KI-Modell wechseln\n` +
+      `/effort — Denktiefe einstellen\n` +
+      `/voice — Sprachantworten an/aus\n` +
+      `/dir <pfad> — Arbeitsverzeichnis\n\n` +
+      `📊 *Session*\n` +
+      `/status — Aktueller Status\n` +
+      `/new — Neue Session starten\n` +
+      `/cancel — Laufende Anfrage abbrechen\n\n` +
+      `_Tipp: Schick mir Dokumente (PDF, Excel, Word) — ich kann sie lesen._`,
+      { parse_mode: "Markdown" }
+    );
+  });
+
   bot.command("start", async (ctx) => {
     const userId = ctx.from!.id;
     const session = getSession(userId);
@@ -100,10 +120,15 @@ export function registerCommands(bot: Bot): void {
     const level = ctx.match?.trim().toLowerCase();
 
     if (!level) {
-      const lines = Object.entries(EFFORT_LABELS).map(
-        ([key, label]) => `${key === session.effort ? "→" : "  "} /effort ${key} — ${label}`
+      const keyboard = new InlineKeyboard();
+      for (const [key, label] of Object.entries(EFFORT_LABELS)) {
+        const marker = key === session.effort ? "✅ " : "";
+        keyboard.text(`${marker}${label}`, `effort:${key}`).row();
+      }
+      await ctx.reply(
+        `🧠 *Denktiefe wählen:*\n\nAktiv: *${EFFORT_LABELS[session.effort]}*`,
+        { parse_mode: "Markdown", reply_markup: keyboard }
       );
-      await ctx.reply(`Aktuell: ${session.effort}\n\n${lines.join("\n")}`);
       return;
     }
 
@@ -113,7 +138,32 @@ export function registerCommands(bot: Bot): void {
     }
 
     session.effort = level as EffortLevel;
-    await ctx.reply(`Effort: ${EFFORT_LABELS[session.effort]}`);
+    await ctx.reply(`✅ Effort: ${EFFORT_LABELS[session.effort]}`);
+  });
+
+  // Inline keyboard callback for effort switching
+  bot.callbackQuery(/^effort:(.+)$/, async (ctx) => {
+    const level = ctx.match![1];
+    if (!["low", "medium", "high", "max"].includes(level)) {
+      await ctx.answerCallbackQuery("Ungültiges Level");
+      return;
+    }
+
+    const userId = ctx.from!.id;
+    const session = getSession(userId);
+    session.effort = level as EffortLevel;
+
+    const keyboard = new InlineKeyboard();
+    for (const [key, label] of Object.entries(EFFORT_LABELS)) {
+      const marker = key === session.effort ? "✅ " : "";
+      keyboard.text(`${marker}${label}`, `effort:${key}`).row();
+    }
+
+    await ctx.editMessageText(
+      `🧠 *Denktiefe wählen:*\n\nAktiv: *${EFFORT_LABELS[session.effort]}*`,
+      { parse_mode: "Markdown", reply_markup: keyboard }
+    );
+    await ctx.answerCallbackQuery(`Effort: ${EFFORT_LABELS[session.effort]}`);
   });
 
   bot.command("model", async (ctx) => {

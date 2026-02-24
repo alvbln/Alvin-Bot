@@ -161,13 +161,13 @@ Mr. Levin aims to become a **fully-featured, human-feeling AI assistant** that a
 
 **Goal:** Go beyond text — make interactions feel natural.
 
-- [ ] **Document handling** — Receive and process PDFs, Excel, Word files
+- [x] **Document handling** — Receive and process PDFs, Excel, Word, code files, CSV, JSON, etc.
 - [ ] **Image generation** — Generate images via DALL-E, Gemini Imagen, or Nano Banana
 - [ ] **Video messages** — Process and create short video responses
 - [ ] **Browser automation** — Full web browsing via Playwright (scraping, form filling, screenshots, downloads)
 - [ ] **Email integration** — Read/send emails via IMAP/SMTP (Apple Mail, Gmail, etc.)
-- [ ] **Inline keyboards** — Interactive buttons for common actions
-- [ ] **Reactions** — React to messages with emoji (acknowledgment, humor)
+- [x] **Inline keyboards** — Interactive buttons for /model and /effort selection
+- [x] **Reactions** — React to messages with emoji (🤔 thinking, 🎧 listening, 👀 looking, 👍 done, 👎 error)
 - [ ] **Scheduled messages** — Cron-like reminders and proactive check-ins
 - [ ] **Group chat support** — Participate in group chats intelligently (speak when relevant, stay quiet when not)
 

@@ -5,6 +5,7 @@ import { registerCommands } from "./handlers/commands.js";
 import { handleMessage } from "./handlers/message.js";
 import { handlePhoto } from "./handlers/photo.js";
 import { handleVoice } from "./handlers/voice.js";
+import { handleDocument } from "./handlers/document.js";
 import { initEngine } from "./engine.js";
 
 // Initialize multi-model engine
@@ -22,6 +23,7 @@ registerCommands(bot);
 // Content handlers (Reihenfolge wichtig: spezifisch vor allgemein)
 bot.on("message:voice", handleVoice);
 bot.on("message:photo", handlePhoto);
+bot.on("message:document", handleDocument);
 bot.on("message:text", handleMessage);
 
 // Error handling
