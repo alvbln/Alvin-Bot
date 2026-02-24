@@ -1,0 +1,24 @@
+{
+  "$schema": "https://github.com/alvbln/alvin-bot#config",
+  "bot": {
+    "name": "Mr. Levin",
+    "language": "de",
+    "streamThrottleMs": 1500
+  },
+  "ai": {
+    "primaryProvider": "claude-sdk",
+    "fallbackProviders": ["nvidia-kimi-k2.5", "nvidia-llama-3.3-70b"],
+    "maxBudgetUsd": 5.0,
+    "defaultEffort": "high"
+  },
+  "voice": {
+    "sttProvider": "groq",
+    "ttsVoice": "de-DE-ConradNeural",
+    "autoVoiceReply": false
+  },
+  "memory": {
+    "maxHistory": 40,
+    "checkpointToolThreshold": 15,
+    "checkpointMsgThreshold": 10
+  }
+}

@@ -223,7 +223,7 @@ Mr. Levin aims to become a **fully-featured, human-feeling AI assistant** that a
 - [x] **Docker support** — `docker compose up -d` with Dockerfile + compose
 - [x] **Update mechanism** — `mr-levin update` pulls latest + rebuilds
 - [x] **Health check** — `mr-levin doctor` validates config, deps, and build
-- [ ] **Config file** — `mr-levin.config.json` for all settings (models, personality, tools, users)
+- [x] **Config file** — `mr-levin.config.json` for models, voice, memory settings (example included)
 
 ### 🖥️ Phase 6: Local Web Interface
 
