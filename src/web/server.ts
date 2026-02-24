@@ -543,7 +543,7 @@ function handleWebSocket(wss: WebSocketServer): void {
 
           const queryOpts: QueryOptions = {
             prompt: text,
-            systemPrompt: buildSystemPrompt(isSDK, session.language),
+            systemPrompt: buildSystemPrompt(isSDK, session.language, "web-dashboard"),
             workingDir: session.workingDir,
             effort: effort || session.effort,
             sessionId: isSDK ? session.sessionId : null,

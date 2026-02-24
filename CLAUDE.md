@@ -106,6 +106,86 @@ Dein Kontext-Fenster ist begrenzt. Wenn es voll wird, komprimiert das System dei
 - Periodisch: wichtige Erkenntnisse aus älteren Tages-Files → `docs/MEMORY.md` übertragen
 - Veraltetes aus `docs/MEMORY.md` entfernen
 
+## Cron Jobs — Geplante Aufgaben
+
+Du hast Zugriff auf ein Cron-System. Wenn der User dich bittet, etwas regelmäßig zu tun (Mails checken, Reminder setzen, Health Checks, etc.), **erstelle selbständig einen Cron-Job**.
+
+### Cron-Jobs erstellen via Bash
+
+```bash
+# Job-Datei: docs/cron-jobs.json (Array von Jobs)
+# Format eines Jobs:
+{
+  "id": "unique-id",
+  "name": "Beschreibender Name",
+  "type": "shell",            # reminder | shell | http | message | ai-query
+  "schedule": "0 8 * * *",    # Cron-Expression ODER Intervall (5m, 1h, 1d)
+  "oneShot": false,            # true = nur einmal ausführen
+  "payload": {
+    "command": "himalaya list -s 5",  # Für shell
+    "text": "Guten Morgen!",         # Für reminder/message
+    "url": "https://...",            # Für http
+    "prompt": "Fasse zusammen..."    # Für ai-query
+  },
+  "target": {
+    "platform": "telegram",    # telegram | web
+    "chatId": "USER_CHAT_ID"
+  },
+  "enabled": true,
+  "createdAt": 1234567890,
+  "lastRunAt": null,
+  "lastResult": null,
+  "lastError": null,
+  "nextRunAt": null,
+  "runCount": 0,
+  "createdBy": "agent"
+}
+```
+
+**Praktisch:** Lies die bestehende Datei, füge den neuen Job hinzu, schreibe sie zurück. Der Scheduler (30s-Loop) erkennt neue Jobs automatisch.
+
+**Beispiel — User sagt "Check jeden Morgen um 8 meine Mails":**
+1. Lies `docs/cron-jobs.json`
+2. Füge einen neuen Job hinzu: `type: "shell"`, `schedule: "0 8 * * *"`, `command: "himalaya list -s 10 --account icloud"`
+3. Schreibe die Datei zurück
+4. Bestätige dem User: "✅ Cron-Job erstellt: Jeden Morgen um 8 Uhr werden deine Mails gecheckt."
+
+**Wichtig:** Die chatId des aktuellen Users findest du NICHT im Kontext. Nutze als Target `"platform": "telegram", "chatId": "OWNER"` — der Bot löst `OWNER` auf den erlaubten User auf. Oder frag den User nach seiner Chat-ID.
+
+### Schedule-Formate
+
+- **Intervall:** `30s`, `5m`, `1h`, `6h`, `1d` (ab Erstellung/letztem Lauf)
+- **Cron:** `MIN HOUR DAY MONTH WEEKDAY` (0=Sonntag)
+  - `0 8 * * *` = Jeden Tag um 8:00
+  - `0 9 * * 1` = Jeden Montag um 9:00
+  - `*/15 * * * *` = Alle 15 Minuten
+  - `0 8,20 * * *` = Um 8:00 und 20:00
+
+### User fragt nach laufenden Jobs
+
+Wenn der User fragt "welche Cron-Jobs laufen?" → Lies `docs/cron-jobs.json` und zeige eine übersichtliche Liste.
+
+## Verfügbare System-Tools
+
+Du kannst über Bash alle Tools nutzen, die auf dem System installiert sind. Einige wichtige:
+
+- **himalaya** — E-Mail CLI (IMAP/SMTP): `himalaya list`, `himalaya read <id>`, `himalaya send`
+- **osascript** — macOS Automation (AppleScript/JXA)
+- **cliclick** — Maus/Tastatur-Automation: `cliclick t:"text"`, `cliclick c:x,y`, `cliclick kp:return`
+- **ffmpeg** — Audio/Video-Konvertierung
+- **pdftotext / pdfinfo / gs** — PDF-Verarbeitung (lesen, mergen, splitten, komprimieren)
+- **pdftoppm** — PDF zu Bildern
+- **pandoc** — Markdown/HTML/LaTeX/PDF Konvertierung
+- **sips** — macOS Bildbearbeitung (resize, convert)
+- **pm2** — Process Manager (Dienste verwalten)
+- **gh** — GitHub CLI
+- **curl / wget** — HTTP Requests
+- **pbcopy / pbpaste** — Clipboard
+- **screencapture** — Screenshots
+- **brightness / blueutil** — Display/Bluetooth-Steuerung
+
+Konfigurierte Custom-Tools: siehe `docs/tools.json` (52 vordefinierte Tool-Definitionen).
+
 ## Projekt-Kontext
 
 Dieses Projekt ist der Telegram Bot selbst. Source Code liegt in `src/`.

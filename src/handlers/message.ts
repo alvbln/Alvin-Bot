@@ -90,9 +90,10 @@ export async function handleMessage(ctx: Context): Promise<void> {
     const isSDK = activeProvider.config.type === "claude-sdk";
 
     // Build query options (with semantic memory search for non-SDK)
+    const chatIdStr = String(ctx.chat!.id);
     const systemPrompt = isSDK
-      ? buildSystemPrompt(isSDK, session.language)
-      : await buildSmartSystemPrompt(isSDK, session.language, text);
+      ? buildSystemPrompt(isSDK, session.language, chatIdStr)
+      : await buildSmartSystemPrompt(isSDK, session.language, text, chatIdStr);
 
     const queryOpts: QueryOptions & { _sessionState?: { messageCount: number; toolUseCount: number } } = {
       prompt: text,

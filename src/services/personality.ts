@@ -32,7 +32,7 @@ const SDK_ADDON = `Wenn du Commands ausführst oder Dateien bearbeitest, erklär
  * @param isSDK Whether the active provider is the Claude SDK (has tool use)
  * @param language Preferred language ('de' or 'en')
  */
-export function buildSystemPrompt(isSDK: boolean, language: "de" | "en" = "de"): string {
+export function buildSystemPrompt(isSDK: boolean, language: "de" | "en" = "de", chatId?: number | string): string {
   const langInstruction = language === "en"
     ? "Respond in English unless the user writes in another language."
     : "Antworte auf Deutsch, es sei denn der User schreibt auf Englisch.";
@@ -51,6 +51,11 @@ export function buildSystemPrompt(isSDK: boolean, language: "de" | "en" = "de"):
 
   if (isSDK) {
     parts.push(SDK_ADDON);
+  }
+
+  // Inject chat context for cron job creation
+  if (chatId) {
+    parts.push(`Aktueller Chat: Platform=telegram, ChatID=${chatId}. Nutze diese ChatID wenn du Cron-Jobs erstellst die Ergebnisse an diesen Chat senden sollen.`);
   }
 
   // Non-SDK providers get memory injected into system prompt
@@ -72,9 +77,10 @@ export function buildSystemPrompt(isSDK: boolean, language: "de" | "en" = "de"):
 export async function buildSmartSystemPrompt(
   isSDK: boolean,
   language: "de" | "en" = "de",
-  userMessage?: string
+  userMessage?: string,
+  chatId?: number | string
 ): Promise<string> {
-  const base = buildSystemPrompt(isSDK, language);
+  const base = buildSystemPrompt(isSDK, language, chatId);
 
   // SDK providers read memory directly via tools — skip
   if (isSDK || !userMessage) return base;
