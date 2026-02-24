@@ -1,7 +1,7 @@
 import type { Bot } from "grammy";
 import { InlineKeyboard, InputFile } from "grammy";
 import fs from "fs";
-import path from "path";
+import path, { resolve } from "path";
 import os from "os";
 import { getSession, resetSession, type EffortLevel } from "../services/session.js";
 import { getRegistry } from "../engine.js";
@@ -19,6 +19,7 @@ import { getLoadedPlugins, getPluginsDir } from "../services/plugins.js";
 import { getMCPStatus, getMCPTools, callMCPTool } from "../services/mcp.js";
 import { listCustomTools, executeCustomTool, hasCustomTools } from "../services/custom-tools.js";
 import { screenshotUrl, extractText, generatePdf, hasPlaywright } from "../services/browser.js";
+import { listJobs, createJob, deleteJob, toggleJob, runJobNow, formatNextRun, type JobType } from "../services/cron.js";
 import { config } from "../config.js";
 
 /** Bot start time for uptime tracking */
@@ -101,6 +102,8 @@ export function registerCommands(bot: Bot): void {
     { command: "export", description: "Gesprächsverlauf exportieren" },
     { command: "recall", description: "Semantische Gedächtnis-Suche" },
     { command: "remember", description: "Etwas merken" },
+    { command: "cron", description: "Geplante Jobs verwalten" },
+    { command: "setup", description: "API Keys & Plattformen einrichten" },
     { command: "cancel", description: "Laufende Anfrage abbrechen" },
   ]).catch(err => console.error("Failed to set bot commands:", err));
 
@@ -1026,6 +1029,337 @@ export function registerCommands(bot: Bot): void {
       const msg = err instanceof Error ? err.message : String(err);
       await ctx.reply(`❌ Reindex-Fehler: ${msg}`);
     }
+  });
+
+  // ── Cron Jobs ──────────────────────────────────────────
+
+  bot.command("cron", async (ctx) => {
+    const arg = ctx.match?.toString().trim() || "";
+    const userId = ctx.from!.id;
+    const chatId = ctx.chat!.id;
+
+    // /cron — list all jobs
+    if (!arg) {
+      const jobs = listJobs();
+      if (jobs.length === 0) {
+        await ctx.reply(
+          "⏰ *Cron Jobs*\n\nKeine Jobs konfiguriert.\n\n" +
+          "Erstellen:\n" +
+          "`/cron add 5m reminder Wasser trinken`\n" +
+          "`/cron add \"0 9 * * 1\" shell pm2 status`\n" +
+          "`/cron add 1h http https://api.example.com/health`\n\n" +
+          "_Verwalte Jobs auch im Web UI unter ⏰ Cron._",
+          { parse_mode: "Markdown" }
+        );
+        return;
+      }
+
+      const lines = jobs.map(j => {
+        const status = j.enabled ? "🟢" : "⏸️";
+        const next = j.enabled ? formatNextRun(j.nextRunAt) : "pausiert";
+        const lastErr = j.lastError ? " ⚠️" : "";
+        return `${status} *${j.name}* (${j.schedule})\n   Typ: ${j.type} | Nächst: ${next} | Runs: ${j.runCount}${lastErr}\n   ID: \`${j.id}\``;
+      });
+
+      const keyboard = new InlineKeyboard();
+      for (const j of jobs) {
+        const label = j.enabled ? `⏸ ${j.name}` : `▶️ ${j.name}`;
+        keyboard.text(label, `cron:toggle:${j.id}`);
+        keyboard.text(`🗑`, `cron:delete:${j.id}`);
+        keyboard.row();
+      }
+
+      await ctx.reply(
+        `⏰ *Cron Jobs (${jobs.length}):*\n\n${lines.join("\n\n")}\n\n` +
+        `_Befehle: \`/cron add|delete|toggle|run|info <id>\`_`,
+        { parse_mode: "Markdown", reply_markup: keyboard }
+      );
+      return;
+    }
+
+    // /cron add <schedule> <type> <payload>
+    if (arg.startsWith("add ")) {
+      const rest = arg.slice(4).trim();
+
+      // Parse: schedule can be "5m" or "0 9 * * 1" (quoted)
+      let schedule: string;
+      let remainder: string;
+
+      if (rest.startsWith('"')) {
+        const endQuote = rest.indexOf('"', 1);
+        if (endQuote < 0) { await ctx.reply("❌ Fehlende schließende Anführungszeichen für Cron-Ausdruck."); return; }
+        schedule = rest.slice(1, endQuote);
+        remainder = rest.slice(endQuote + 1).trim();
+      } else {
+        const sp = rest.indexOf(" ");
+        if (sp < 0) { await ctx.reply("Format: `/cron add <schedule> <type> <payload>`", { parse_mode: "Markdown" }); return; }
+        schedule = rest.slice(0, sp);
+        remainder = rest.slice(sp + 1).trim();
+      }
+
+      // Parse type + payload
+      const typeSp = remainder.indexOf(" ");
+      const typeStr = typeSp >= 0 ? remainder.slice(0, typeSp) : remainder;
+      const payloadStr = typeSp >= 0 ? remainder.slice(typeSp + 1).trim() : "";
+
+      const validTypes = ["reminder", "shell", "http", "message", "ai-query"];
+      if (!validTypes.includes(typeStr)) {
+        await ctx.reply(`❌ Ungültiger Typ "${typeStr}". Erlaubt: ${validTypes.join(", ")}`);
+        return;
+      }
+
+      const payload: Record<string, string> = {};
+      switch (typeStr) {
+        case "reminder": case "message": payload.text = payloadStr; break;
+        case "shell": payload.command = payloadStr; break;
+        case "http": payload.url = payloadStr; break;
+        case "ai-query": payload.prompt = payloadStr; break;
+      }
+
+      const name = `${typeStr}: ${payloadStr.slice(0, 30)}${payloadStr.length > 30 ? "..." : ""}`;
+
+      const job = createJob({
+        name,
+        type: typeStr as JobType,
+        schedule,
+        payload,
+        target: { platform: "telegram", chatId: String(chatId) },
+        createdBy: `telegram:${userId}`,
+      });
+
+      await ctx.reply(
+        `✅ *Cron Job erstellt*\n\n` +
+        `*Name:* ${job.name}\n` +
+        `*Schedule:* ${job.schedule}\n` +
+        `*Typ:* ${job.type}\n` +
+        `*Nächster Lauf:* ${formatNextRun(job.nextRunAt)}\n` +
+        `*ID:* \`${job.id}\``,
+        { parse_mode: "Markdown" }
+      );
+      return;
+    }
+
+    // /cron delete <id>
+    if (arg.startsWith("delete ")) {
+      const id = arg.slice(7).trim();
+      if (deleteJob(id)) {
+        await ctx.reply(`✅ Job \`${id}\` gelöscht.`, { parse_mode: "Markdown" });
+      } else {
+        await ctx.reply(`❌ Job \`${id}\` nicht gefunden.`, { parse_mode: "Markdown" });
+      }
+      return;
+    }
+
+    // /cron toggle <id>
+    if (arg.startsWith("toggle ")) {
+      const id = arg.slice(7).trim();
+      const job = toggleJob(id);
+      if (job) {
+        await ctx.reply(`${job.enabled ? "▶️" : "⏸️"} Job "${job.name}" ${job.enabled ? "aktiviert" : "pausiert"}.`);
+      } else {
+        await ctx.reply(`❌ Job nicht gefunden.`);
+      }
+      return;
+    }
+
+    // /cron run <id>
+    if (arg.startsWith("run ")) {
+      const id = arg.slice(4).trim();
+      await ctx.api.sendChatAction(ctx.chat!.id, "typing");
+      const result = await (runJobNow(id) || Promise.resolve(null));
+      if (!result) {
+        await ctx.reply(`❌ Job nicht gefunden.`);
+        return;
+      }
+      const output = result.output ? `\`\`\`\n${result.output.slice(0, 2000)}\n\`\`\`` : "(kein Output)";
+      await ctx.reply(`🔧 Job ausgeführt:\n${output}${result.error ? `\n\n❌ ${result.error}` : ""}`, { parse_mode: "Markdown" });
+      return;
+    }
+
+    await ctx.reply("Unbekannter Cron-Befehl. Nutze `/cron` für Hilfe.", { parse_mode: "Markdown" });
+  });
+
+  // Inline keyboard callbacks for cron
+  bot.callbackQuery(/^cron:toggle:(.+)$/, async (ctx) => {
+    const id = ctx.match![1];
+    const job = toggleJob(id);
+    if (job) {
+      await ctx.answerCallbackQuery(`${job.enabled ? "Aktiviert" : "Pausiert"}: ${job.name}`);
+      // Refresh the cron list
+      (ctx as any).match = "";
+      // Re-render the list message
+      const jobs = listJobs();
+      const lines = jobs.map(j => {
+        const status = j.enabled ? "🟢" : "⏸️";
+        const next = j.enabled ? formatNextRun(j.nextRunAt) : "pausiert";
+        return `${status} *${j.name}* (${j.schedule})\n   Typ: ${j.type} | Nächst: ${next} | Runs: ${j.runCount}\n   ID: \`${j.id}\``;
+      });
+      const keyboard = new InlineKeyboard();
+      for (const j of jobs) {
+        keyboard.text(j.enabled ? `⏸ ${j.name}` : `▶️ ${j.name}`, `cron:toggle:${j.id}`);
+        keyboard.text(`🗑`, `cron:delete:${j.id}`);
+        keyboard.row();
+      }
+      await ctx.editMessageText(`⏰ *Cron Jobs (${jobs.length}):*\n\n${lines.join("\n\n")}`, { parse_mode: "Markdown", reply_markup: keyboard });
+    }
+  });
+
+  bot.callbackQuery(/^cron:delete:(.+)$/, async (ctx) => {
+    const id = ctx.match![1];
+    deleteJob(id);
+    await ctx.answerCallbackQuery("Gelöscht");
+    // Refresh
+    const jobs = listJobs();
+    if (jobs.length === 0) {
+      await ctx.editMessageText("⏰ Keine Cron Jobs vorhanden.");
+    } else {
+      const lines = jobs.map(j => {
+        const status = j.enabled ? "🟢" : "⏸️";
+        return `${status} *${j.name}* (${j.schedule})\n   ID: \`${j.id}\``;
+      });
+      const keyboard = new InlineKeyboard();
+      for (const j of jobs) {
+        keyboard.text(j.enabled ? `⏸ ${j.name}` : `▶️ ${j.name}`, `cron:toggle:${j.id}`);
+        keyboard.text(`🗑`, `cron:delete:${j.id}`);
+        keyboard.row();
+      }
+      await ctx.editMessageText(`⏰ *Cron Jobs (${jobs.length}):*\n\n${lines.join("\n\n")}`, { parse_mode: "Markdown", reply_markup: keyboard });
+    }
+  });
+
+  // ── Setup (API Keys & Platforms via Telegram) ─────────
+
+  bot.command("setup", async (ctx) => {
+    const arg = ctx.match?.toString().trim() || "";
+
+    if (!arg) {
+      const registry = getRegistry();
+      const providers = await registry.listAll();
+      const activeInfo = registry.getActive().getInfo();
+
+      const keyboard = new InlineKeyboard()
+        .text("🔑 API Keys verwalten", "setup:keys").row()
+        .text("📱 Plattformen", "setup:platforms").row()
+        .text("🔧 Web Dashboard öffnen", "setup:web").row();
+
+      await ctx.reply(
+        `⚙️ *Mr. Levin Setup*\n\n` +
+        `*Aktives Modell:* ${activeInfo.name}\n` +
+        `*Provider:* ${providers.length} konfiguriert\n` +
+        `*Web UI:* http://localhost:${process.env.WEB_PORT || 3100}\n\n` +
+        `Was möchtest du einrichten?`,
+        { parse_mode: "Markdown", reply_markup: keyboard }
+      );
+      return;
+    }
+
+    // /setup key <provider> <key>
+    if (arg.startsWith("key ")) {
+      const parts = arg.slice(4).trim().split(/\s+/);
+      if (parts.length < 2) {
+        await ctx.reply(
+          "🔑 *API Key setzen:*\n\n" +
+          "`/setup key openai sk-...`\n" +
+          "`/setup key google AIza...`\n" +
+          "`/setup key nvidia nvapi-...`\n" +
+          "`/setup key openrouter sk-or-...`\n\n" +
+          "_Der Key wird in .env gespeichert. Neustart nötig._",
+          { parse_mode: "Markdown" }
+        );
+        return;
+      }
+
+      const envMap: Record<string, string> = {
+        openai: "OPENAI_API_KEY",
+        google: "GOOGLE_API_KEY",
+        nvidia: "NVIDIA_API_KEY",
+        openrouter: "OPENROUTER_API_KEY",
+        groq: "GROQ_API_KEY",
+      };
+
+      const provider = parts[0].toLowerCase();
+      const key = parts.slice(1).join(" ");
+      const envKey = envMap[provider];
+
+      if (!envKey) {
+        await ctx.reply(`❌ Unbekannter Provider "${provider}". Nutze: ${Object.keys(envMap).join(", ")}`);
+        return;
+      }
+
+      // Write to .env
+      const envFile = resolve(process.cwd(), ".env");
+      let content = fs.existsSync(envFile) ? fs.readFileSync(envFile, "utf-8") : "";
+      const regex = new RegExp(`^${envKey}=.*$`, "m");
+      if (regex.test(content)) content = content.replace(regex, `${envKey}=${key}`);
+      else content = content.trimEnd() + `\n${envKey}=${key}\n`;
+      fs.writeFileSync(envFile, content);
+
+      await ctx.reply(`✅ ${envKey} gespeichert! Bitte Bot neustarten (/system restart oder Web UI).`);
+      return;
+    }
+  });
+
+  bot.callbackQuery(/^setup:(.+)$/, async (ctx) => {
+    const action = ctx.match![1];
+
+    switch (action) {
+      case "keys": {
+        const envMap = [
+          { name: "OpenAI", env: "OPENAI_API_KEY", has: !!config.apiKeys.openai },
+          { name: "Google", env: "GOOGLE_API_KEY", has: !!config.apiKeys.google },
+          { name: "NVIDIA", env: "NVIDIA_API_KEY", has: !!config.apiKeys.nvidia },
+          { name: "OpenRouter", env: "OPENROUTER_API_KEY", has: !!config.apiKeys.openrouter },
+          { name: "Groq", env: "GROQ_API_KEY", has: !!config.apiKeys.groq },
+        ];
+
+        const lines = envMap.map(e => `${e.has ? "✅" : "❌"} *${e.name}* — \`${e.env}\``);
+
+        await ctx.editMessageText(
+          `🔑 *API Keys*\n\n${lines.join("\n")}\n\n` +
+          `Key setzen: \`/setup key <provider> <key>\`\n` +
+          `Beispiel: \`/setup key nvidia nvapi-...\`\n\n` +
+          `_Neustart nötig nach Änderungen._`,
+          { parse_mode: "Markdown" }
+        );
+        break;
+      }
+
+      case "platforms": {
+        const platforms = [
+          { name: "Telegram", icon: "📱", env: "BOT_TOKEN", has: !!process.env.BOT_TOKEN },
+          { name: "Discord", icon: "🎮", env: "DISCORD_TOKEN", has: !!process.env.DISCORD_TOKEN },
+          { name: "WhatsApp", icon: "💬", env: "WHATSAPP_ENABLED", has: process.env.WHATSAPP_ENABLED === "true" },
+          { name: "Signal", icon: "🔒", env: "SIGNAL_API_URL", has: !!process.env.SIGNAL_API_URL },
+        ];
+
+        const lines = platforms.map(p => `${p.has ? "✅" : "❌"} ${p.icon} *${p.name}* — \`${p.env}\``);
+
+        await ctx.editMessageText(
+          `📱 *Plattformen*\n\n${lines.join("\n")}\n\n` +
+          `_Plattformen im Web UI einrichten: Models → Platforms_\n` +
+          `_Dort kannst du Token eingeben und Dependencies installieren._`,
+          { parse_mode: "Markdown" }
+        );
+        break;
+      }
+
+      case "web": {
+        await ctx.editMessageText(
+          `🌐 *Web Dashboard*\n\n` +
+          `URL: \`http://localhost:${process.env.WEB_PORT || 3100}\`\n\n` +
+          `Im Dashboard kannst du:\n` +
+          `• 🤖 Modelle & API Keys verwalten\n` +
+          `• 📱 Plattformen einrichten\n` +
+          `• ⏰ Cron Jobs verwalten\n` +
+          `• 🧠 Memory editieren\n` +
+          `• 💻 Terminal nutzen\n` +
+          `• 🛠️ Tools ausführen`,
+          { parse_mode: "Markdown" }
+        );
+        break;
+      }
+    }
+    await ctx.answerCallbackQuery();
   });
 
   bot.command("cancel", async (ctx) => {

@@ -55,8 +55,9 @@ document.querySelectorAll('.nav-item').forEach(item => {
     document.getElementById('page-title').textContent = item.textContent.trim();
 
     const loaders = { dashboard: loadDashboard, memory: loadMemory, models: loadModels,
-      sessions: loadSessions, plugins: loadPlugins, tools: loadTools, files: () => navigateFiles('.'),
-      users: loadUsers, settings: loadSettings, platforms: loadPlatforms, personality: loadPersonality };
+      sessions: loadSessions, plugins: loadPlugins, tools: loadTools, cron: loadCron,
+      files: () => navigateFiles('.'), users: loadUsers, settings: loadSettings,
+      platforms: loadPlatforms, personality: loadPersonality };
     if (loaders[page]) loaders[page]();
   });
 });
@@ -840,6 +841,106 @@ function formatSize(bytes) {
   if (bytes < 1024) return bytes + ' B';
   if (bytes < 1048576) return (bytes/1024).toFixed(1) + ' KB';
   return (bytes/1048576).toFixed(1) + ' MB';
+}
+
+// ── Cron ────────────────────────────────────────────────
+async function loadCron() {
+  const res = await fetch(API + '/api/cron');
+  const data = await res.json();
+  const list = document.getElementById('cron-list');
+
+  if (data.jobs.length === 0) {
+    list.innerHTML = '<div class="card"><h3>Keine Jobs</h3><div class="sub">Erstelle einen Job oben oder via Telegram: /cron add 5m reminder Text</div></div>';
+    return;
+  }
+
+  list.innerHTML = data.jobs.map(j => {
+    const statusIcon = j.enabled ? '🟢' : '⏸️';
+    const errIcon = j.lastError ? ' <span style="color:var(--red)">⚠️</span>' : '';
+    const typeIcons = { reminder: '⏰', shell: '⚡', http: '🌐', message: '💬', 'ai-query': '🤖' };
+    const icon = typeIcons[j.type] || '📋';
+    const payload = j.payload.text || j.payload.command || j.payload.url || j.payload.prompt || '';
+
+    return `<div class="card" style="margin-bottom:12px">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+        <span style="font-size:1.2em">${statusIcon}</span>
+        <span style="font-weight:500;flex:1">${icon} ${escapeHtml(j.name)}${errIcon}</span>
+        <span class="badge">${j.schedule}</span>
+        ${j.oneShot ? '<span class="badge badge-yellow">Einmalig</span>' : ''}
+      </div>
+      <div style="font-size:0.82em;color:var(--fg2);margin-bottom:8px">
+        <span>Nächster Lauf: <strong>${j.nextRunFormatted || '—'}</strong></span> · 
+        <span>Runs: ${j.runCount}</span> · 
+        <span>Zuletzt: ${j.lastRunFormatted || 'nie'}</span>
+      </div>
+      ${payload ? `<div style="font-size:0.78em;font-family:monospace;color:var(--fg2);padding:6px 8px;background:var(--bg3);border-radius:4px;margin-bottom:8px;word-break:break-all">${escapeHtml(payload.slice(0, 200))}</div>` : ''}
+      ${j.lastError ? `<div style="font-size:0.78em;color:var(--red);margin-bottom:8px">❌ ${escapeHtml(j.lastError)}</div>` : ''}
+      <div style="display:flex;gap:6px">
+        <button class="btn btn-sm btn-outline" onclick="toggleCronJob('${j.id}')">${j.enabled ? '⏸ Pause' : '▶️ Start'}</button>
+        <button class="btn btn-sm btn-outline" onclick="runCronJob('${j.id}')">▶ Jetzt</button>
+        <button class="btn btn-sm btn-outline" style="color:var(--red)" onclick="deleteCronJob('${j.id}')">🗑</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function showCreateCron() {
+  document.getElementById('cron-create-form').style.display = '';
+}
+
+async function createCronJob() {
+  const name = document.getElementById('cron-name').value.trim();
+  const type = document.getElementById('cron-type').value;
+  const schedule = document.getElementById('cron-schedule').value.trim();
+  const payloadText = document.getElementById('cron-payload').value.trim();
+  const oneShot = document.getElementById('cron-oneshot').checked;
+
+  if (!name || !schedule) { toast('Name und Schedule sind Pflicht', 'error'); return; }
+
+  const payload = {};
+  switch (type) {
+    case 'reminder': case 'message': payload.text = payloadText; break;
+    case 'shell': payload.command = payloadText; break;
+    case 'http': payload.url = payloadText; break;
+    case 'ai-query': payload.prompt = payloadText; break;
+  }
+
+  const res = await fetch(API + '/api/cron/create', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name, type, schedule, oneShot, payload, target: { platform: 'web', chatId: 'dashboard' } }),
+  });
+  const data = await res.json();
+  if (data.ok) {
+    toast('✅ Job erstellt!');
+    document.getElementById('cron-create-form').style.display = 'none';
+    document.getElementById('cron-name').value = '';
+    document.getElementById('cron-payload').value = '';
+    document.getElementById('cron-schedule').value = '';
+    loadCron();
+  } else {
+    toast(data.error, 'error');
+  }
+}
+
+async function toggleCronJob(id) {
+  await fetch(API + '/api/cron/toggle', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) });
+  loadCron();
+}
+
+async function deleteCronJob(id) {
+  if (!confirm('Job löschen?')) return;
+  await fetch(API + '/api/cron/delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) });
+  toast('Gelöscht');
+  loadCron();
+}
+
+async function runCronJob(id) {
+  toast('Wird ausgeführt...');
+  const res = await fetch(API + '/api/cron/run', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) });
+  const data = await res.json();
+  if (data.error) toast('❌ ' + data.error, 'error');
+  else toast('✅ Ausgeführt!');
+  loadCron();
 }
 
 // ── Tools ───────────────────────────────────────────────

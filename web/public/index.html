@@ -30,6 +30,7 @@
     <div class="nav-item" data-page="files">📁 <span>Files</span></div>
 
     <div class="nav-section">System</div>
+    <div class="nav-item" data-page="cron">⏰ <span>Cron</span></div>
     <div class="nav-item" data-page="tools">🛠️ <span>Tools</span></div>
     <div class="nav-item" data-page="plugins">🔌 <span>Plugins</span></div>
     <div class="nav-item" data-page="platforms">📱 <span>Platforms</span></div>
@@ -133,6 +134,39 @@
       </div>
       <textarea class="editor" id="file-editor"></textarea>
     </div>
+  </div>
+
+  <!-- Cron -->
+  <div class="page content" id="page-cron">
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
+      <div style="flex:1">
+        <h3 style="font-size:1em;margin-bottom:4px">⏰ Cron Jobs</h3>
+        <div class="sub">Geplante wiederkehrende oder einmalige Aufgaben.</div>
+      </div>
+      <button class="btn btn-sm" onclick="showCreateCron()">+ Job erstellen</button>
+    </div>
+    <div id="cron-create-form" style="display:none;margin-bottom:16px;padding:16px;background:var(--bg2);border:1px solid var(--bg3);border-radius:var(--radius)">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+        <input id="cron-name" placeholder="Name (z.B. Health Check)" style="background:var(--bg3);border:1px solid var(--bg4);border-radius:6px;padding:8px;color:var(--fg);font:inherit;font-size:0.82em">
+        <select id="cron-type" style="background:var(--bg3);border:1px solid var(--bg4);border-radius:6px;padding:8px;color:var(--fg);font:inherit;font-size:0.82em">
+          <option value="reminder">⏰ Reminder</option>
+          <option value="shell">⚡ Shell Command</option>
+          <option value="http">🌐 HTTP Request</option>
+          <option value="message">💬 Nachricht</option>
+          <option value="ai-query">🤖 AI Query</option>
+        </select>
+        <input id="cron-schedule" placeholder="Schedule: 5m, 1h, 1d oder Cron (0 9 * * 1)" style="background:var(--bg3);border:1px solid var(--bg4);border-radius:6px;padding:8px;color:var(--fg);font:inherit;font-size:0.82em;font-family:monospace">
+        <input id="cron-payload" placeholder="Payload (Text, Command, URL, Prompt)" style="background:var(--bg3);border:1px solid var(--bg4);border-radius:6px;padding:8px;color:var(--fg);font:inherit;font-size:0.82em">
+      </div>
+      <label style="display:flex;align-items:center;gap:6px;font-size:0.82em;margin-bottom:8px;cursor:pointer">
+        <input type="checkbox" id="cron-oneshot" style="accent-color:var(--accent)"> Einmalig (nach Ausführung deaktivieren)
+      </label>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-sm" onclick="createCronJob()">💾 Erstellen</button>
+        <button class="btn btn-sm btn-outline" onclick="document.getElementById('cron-create-form').style.display='none'">Abbrechen</button>
+      </div>
+    </div>
+    <div id="cron-list"></div>
   </div>
 
   <!-- Tools -->

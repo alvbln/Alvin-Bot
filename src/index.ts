@@ -11,6 +11,7 @@ import { initEngine } from "./engine.js";
 import { loadPlugins, registerPluginCommands, unloadPlugins } from "./services/plugins.js";
 import { initMCP, disconnectMCP, hasMCPConfig } from "./services/mcp.js";
 import { startWebServer } from "./web/server.js";
+import { startScheduler, stopScheduler, setNotifyCallback } from "./services/cron.js";
 
 // Initialize multi-model engine
 const registry = initEngine();
@@ -76,7 +77,8 @@ const shutdown = async () => {
   isShuttingDown = true;
   console.log("Graceful shutdown initiated...");
 
-  // Unload plugins & disconnect MCP
+  // Stop scheduler, unload plugins & disconnect MCP
+  stopScheduler();
   await unloadPlugins().catch(err => console.error("Plugin unload error:", err));
   await disconnectMCP().catch(err => console.error("MCP disconnect error:", err));
 
@@ -103,6 +105,21 @@ process.on("unhandledRejection", (reason) => {
 
 // Start Web UI
 const webServer = startWebServer();
+
+// Start Cron Scheduler
+setNotifyCallback(async (target, text) => {
+  if (target.platform === "telegram" && target.chatId) {
+    try {
+      await bot.api.sendMessage(Number(target.chatId), text, { parse_mode: "Markdown" }).catch(() =>
+        bot.api.sendMessage(Number(target.chatId), text) // Fallback without markdown
+      );
+    } catch (err) {
+      console.error("Cron notify error:", err);
+    }
+  }
+  // TODO: Add Discord/WhatsApp/Signal notify when adapters are wired
+});
+startScheduler();
 
 // Start
 await bot.start({

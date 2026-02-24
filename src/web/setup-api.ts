@@ -14,6 +14,7 @@ import { execSync } from "child_process";
 import http from "http";
 import { getRegistry } from "../engine.js";
 import { PROVIDER_PRESETS, type ProviderConfig } from "../providers/types.js";
+import { listJobs, createJob, deleteJob, toggleJob, runJobNow, formatNextRun, type CronJob, type JobType } from "../services/cron.js";
 
 const BOT_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const ENV_FILE = resolve(BOT_ROOT, ".env");
@@ -492,6 +493,81 @@ export async function handleSetupAPI(
     } catch (err: unknown) {
       const error = err instanceof Error ? err.message : String(err);
       res.end(JSON.stringify({ ok: false, error }));
+    }
+    return true;
+  }
+
+  // ── Cron Jobs ───────────────────────────────────────
+
+  // GET /api/cron — list all jobs
+  if (urlPath === "/api/cron") {
+    const jobs = listJobs();
+    const enriched = jobs.map(j => ({
+      ...j,
+      nextRunFormatted: formatNextRun(j.nextRunAt),
+      lastRunFormatted: j.lastRunAt ? new Date(j.lastRunAt).toLocaleString("de-DE") : null,
+    }));
+    res.end(JSON.stringify({ jobs: enriched }));
+    return true;
+  }
+
+  // POST /api/cron/create — create a new job
+  if (urlPath === "/api/cron/create" && req.method === "POST") {
+    try {
+      const data = JSON.parse(body);
+      const job = createJob({
+        name: data.name,
+        type: data.type as JobType,
+        schedule: data.schedule,
+        oneShot: data.oneShot || false,
+        payload: data.payload || {},
+        target: data.target || { platform: "web", chatId: "dashboard" },
+        createdBy: "web-ui",
+      });
+      res.end(JSON.stringify({ ok: true, job }));
+    } catch (err: unknown) {
+      res.statusCode = 400;
+      const error = err instanceof Error ? err.message : "Invalid request";
+      res.end(JSON.stringify({ error }));
+    }
+    return true;
+  }
+
+  // POST /api/cron/delete — delete a job
+  if (urlPath === "/api/cron/delete" && req.method === "POST") {
+    try {
+      const { id } = JSON.parse(body);
+      const ok = deleteJob(id);
+      res.end(JSON.stringify({ ok }));
+    } catch {
+      res.statusCode = 400;
+      res.end(JSON.stringify({ error: "Invalid request" }));
+    }
+    return true;
+  }
+
+  // POST /api/cron/toggle — enable/disable a job
+  if (urlPath === "/api/cron/toggle" && req.method === "POST") {
+    try {
+      const { id } = JSON.parse(body);
+      const job = toggleJob(id);
+      res.end(JSON.stringify({ ok: !!job, job }));
+    } catch {
+      res.statusCode = 400;
+      res.end(JSON.stringify({ error: "Invalid request" }));
+    }
+    return true;
+  }
+
+  // POST /api/cron/run — run a job immediately
+  if (urlPath === "/api/cron/run" && req.method === "POST") {
+    try {
+      const { id } = JSON.parse(body);
+      const result = await (runJobNow(id) || Promise.resolve({ output: "", error: "Job not found" }));
+      res.end(JSON.stringify(result));
+    } catch (err: unknown) {
+      const error = err instanceof Error ? err.message : String(err);
+      res.end(JSON.stringify({ error }));
     }
     return true;
   }
