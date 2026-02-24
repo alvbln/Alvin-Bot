@@ -7,12 +7,16 @@ import { getSession, resetSession, type EffortLevel } from "../services/session.
 import { getRegistry } from "../engine.js";
 import { reloadSoul } from "../services/personality.js";
 import { parseDuration, createReminder, listReminders, cancelReminder } from "../services/reminders.js";
-import { writeSessionSummary, getMemoryStats } from "../services/memory.js";
+import { writeSessionSummary, getMemoryStats, appendDailyLog } from "../services/memory.js";
 import {
   approveGroup, blockGroup, removeGroup, listGroups,
   getSettings, setForwardingAllowed, setAutoApprove,
 } from "../services/access.js";
 import { generateImage } from "../services/imagegen.js";
+import { searchMemory, reindexMemory, getIndexStats } from "../services/embeddings.js";
+import { listProfiles, addUserNote } from "../services/users.js";
+import { getLoadedPlugins, getPluginsDir } from "../services/plugins.js";
+import { getMCPStatus, getMCPTools, callMCPTool } from "../services/mcp.js";
 import { config } from "../config.js";
 
 /** Bot start time for uptime tracking */
@@ -58,6 +62,14 @@ export function registerCommands(bot: Bot): void {
       `/imagine <prompt> — Bild generieren\n` +
       `/remind <zeit> <text> — Erinnerung setzen\n` +
       `/export — Gesprächsverlauf exportieren\n\n` +
+      `🧠 *Gedächtnis*\n` +
+      `/recall <query> — Semantische Suche\n` +
+      `/remember <text> — Etwas merken\n` +
+      `/reindex — Gedächtnis neu indexieren\n\n` +
+      `🔌 *Erweiterungen*\n` +
+      `/plugins — Geladene Plugins\n` +
+      `/mcp — MCP Server & Tools\n` +
+      `/users — User-Profile\n\n` +
       `📊 *Session*\n` +
       `/status — Aktueller Status\n` +
       `/new — Neue Session starten\n` +
@@ -81,6 +93,8 @@ export function registerCommands(bot: Bot): void {
     { command: "imagine", description: "Bild generieren (z.B. /imagine Ein Fuchs)" },
     { command: "remind", description: "Erinnerung setzen (z.B. /remind 30m Text)" },
     { command: "export", description: "Gesprächsverlauf exportieren" },
+    { command: "recall", description: "Semantische Gedächtnis-Suche" },
+    { command: "remember", description: "Etwas merken" },
     { command: "cancel", description: "Laufende Anfrage abbrechen" },
   ]).catch(err => console.error("Failed to set bot commands:", err));
 
@@ -191,7 +205,7 @@ export function registerCommands(bot: Bot): void {
       `*Tool-Calls:* ${session.toolUseCount}\n` +
       `*Kosten:* $${session.totalCost.toFixed(4)}\n` +
       (costLines ? `\n📈 *Provider-Nutzung:*\n${costLines}\n` : "") +
-      `\n🧠 *Memory:* ${(() => { const m = getMemoryStats(); return `${m.dailyLogs} Tage, ${m.todayEntries} Einträge heute, ${formatBytes(m.longTermSize)} LTM`; })()}\n` +
+      `\n🧠 *Memory:* ${(() => { const m = getMemoryStats(); const idx = getIndexStats(); return `${m.dailyLogs} Tage, ${m.todayEntries} Einträge heute, ${formatBytes(m.longTermSize)} LTM | 🔍 ${idx.entries} Vektoren (${formatBytes(idx.sizeBytes)})`; })()}\n` +
       `⏱ *Bot-Uptime:* ${uptimeH}h ${uptimeM}m`,
       { parse_mode: "Markdown" }
     );
@@ -688,6 +702,209 @@ export function registerCommands(bot: Bot): void {
       await ctx.reply(`${val === "on" || val === "true" ? "⚠️" : "✅"} Auto-Approve: ${val === "on" || val === "true" ? "AN" : "AUS"}`);
     } else {
       await ctx.reply("Unbekannt. Nutze `/security` für Optionen.", { parse_mode: "Markdown" });
+    }
+  });
+
+  // ── MCP ────────────────────────────────────────────────
+
+  bot.command("mcp", async (ctx) => {
+    const arg = ctx.match?.toString().trim();
+
+    // /mcp call <server> <tool> <json-args>
+    if (arg?.startsWith("call ")) {
+      const parts = arg.slice(5).trim().split(/\s+/);
+      if (parts.length < 2) {
+        await ctx.reply("Format: `/mcp call <server> <tool> {\"arg\":\"value\"}`", { parse_mode: "Markdown" });
+        return;
+      }
+      const [server, tool, ...rest] = parts;
+      let args: Record<string, unknown> = {};
+      if (rest.length > 0) {
+        try { args = JSON.parse(rest.join(" ")); } catch {
+          await ctx.reply("❌ Ungültiges JSON für Tool-Argumente.");
+          return;
+        }
+      }
+      try {
+        await ctx.api.sendChatAction(ctx.chat!.id, "typing");
+        const result = await callMCPTool(server, tool, args);
+        const truncated = result.length > 3000 ? result.slice(0, 3000) + "\n..." : result;
+        await ctx.reply(`🔧 *${server}/${tool}:*\n\`\`\`\n${truncated}\n\`\`\``, { parse_mode: "Markdown" });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        await ctx.reply(`❌ MCP-Fehler: ${msg}`);
+      }
+      return;
+    }
+
+    // Default: show status
+    const mcpServers = getMCPStatus();
+    const tools = getMCPTools();
+
+    if (mcpServers.length === 0) {
+      await ctx.reply(
+        `🔌 *MCP (Model Context Protocol)*\n\n` +
+        `Keine Server konfiguriert.\n` +
+        `Erstelle \`docs/mcp.json\` (siehe \`docs/mcp.example.json\`).`,
+        { parse_mode: "Markdown" }
+      );
+      return;
+    }
+
+    const serverLines = mcpServers.map(s => {
+      const status = s.connected ? "🟢" : "🔴";
+      return `${status} *${s.name}* — ${s.tools} Tools`;
+    });
+
+    const toolLines = tools.length > 0
+      ? "\n\n*Verfügbare Tools:*\n" + tools.map(t => `  🔧 \`${t.server}/${t.name}\` — ${t.description}`).join("\n")
+      : "";
+
+    await ctx.reply(
+      `🔌 *MCP Server (${mcpServers.length}):*\n\n` +
+      serverLines.join("\n") +
+      toolLines +
+      `\n\n_Nutze \`/mcp call <server> <tool> {args}\` zum Ausführen._`,
+      { parse_mode: "Markdown" }
+    );
+  });
+
+  // ── Plugins ───────────────────────────────────────────
+
+  bot.command("plugins", async (ctx) => {
+    const plugins = getLoadedPlugins();
+
+    if (plugins.length === 0) {
+      await ctx.reply(
+        `🔌 Keine Plugins geladen.\n\n` +
+        `Plugins in \`${getPluginsDir()}/\` ablegen.\n` +
+        `Jedes Plugin braucht einen Ordner mit \`index.js\`.`,
+        { parse_mode: "Markdown" }
+      );
+      return;
+    }
+
+    const lines = plugins.map(p => {
+      const cmds = p.commands.length > 0 ? `\n   Commands: ${p.commands.join(", ")}` : "";
+      const tools = p.tools.length > 0 ? `\n   Tools: ${p.tools.join(", ")}` : "";
+      return `🔌 *${p.name}* v${p.version}\n   ${p.description}${cmds}${tools}`;
+    });
+
+    await ctx.reply(`🔌 *Geladene Plugins (${plugins.length}):*\n\n${lines.join("\n\n")}`, { parse_mode: "Markdown" });
+  });
+
+  // ── User Profiles ─────────────────────────────────────
+
+  bot.command("users", async (ctx) => {
+    const profiles = listProfiles();
+    if (profiles.length === 0) {
+      await ctx.reply("Noch keine User-Profile gespeichert.");
+      return;
+    }
+
+    const lines = profiles.map(p => {
+      const lastActive = new Date(p.lastActive).toLocaleDateString("de-DE");
+      const badge = p.isOwner ? "👑" : "👤";
+      return `${badge} *${p.name}*${p.username ? ` (@${p.username})` : ""}\n   ${p.totalMessages} Nachrichten, zuletzt: ${lastActive}`;
+    });
+
+    await ctx.reply(`👥 *User-Profile (${profiles.length}):*\n\n${lines.join("\n\n")}`, { parse_mode: "Markdown" });
+  });
+
+  bot.command("note", async (ctx) => {
+    const arg = ctx.match?.toString().trim();
+    if (!arg) {
+      await ctx.reply("📝 Nutze: `/note @username Notiz-Text`\nSpeichert eine Notiz über einen User.", { parse_mode: "Markdown" });
+      return;
+    }
+
+    // Parse @username or userId + note text
+    const match = arg.match(/^@?(\S+)\s+(.+)$/s);
+    if (!match) {
+      await ctx.reply("Format: `/note @username Text`", { parse_mode: "Markdown" });
+      return;
+    }
+
+    const [, target, noteText] = match;
+    const profiles = listProfiles();
+    const profile = profiles.find(p =>
+      p.username === target || p.userId.toString() === target || p.name.toLowerCase() === target.toLowerCase()
+    );
+
+    if (!profile) {
+      await ctx.reply(`User "${target}" nicht gefunden.`);
+      return;
+    }
+
+    addUserNote(profile.userId, noteText);
+    await ctx.reply(`📝 Notiz für ${profile.name} gespeichert.`);
+  });
+
+  // ── Memory Search Commands ───────────────────────────
+
+  bot.command("recall", async (ctx) => {
+    const query = ctx.match?.toString().trim();
+    if (!query) {
+      await ctx.reply("🔍 Nutze: `/recall <Suchbegriff>`\nSucht semantisch in meinem Gedächtnis.", { parse_mode: "Markdown" });
+      return;
+    }
+
+    try {
+      await ctx.api.sendChatAction(ctx.chat!.id, "typing");
+      const results = await searchMemory(query, 5, 0.25);
+
+      if (results.length === 0) {
+        await ctx.reply(`🔍 Keine Erinnerungen zu "${query}" gefunden.`);
+        return;
+      }
+
+      const lines = results.map((r, i) => {
+        const score = Math.round(r.score * 100);
+        const preview = r.text.length > 200 ? r.text.slice(0, 200) + "..." : r.text;
+        return `**${i + 1}.** (${score}%) _${r.source}_\n${preview}`;
+      });
+
+      await ctx.reply(`🧠 Erinnerungen zu "${query}":\n\n${lines.join("\n\n")}`, { parse_mode: "Markdown" });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      await ctx.reply(`❌ Recall-Fehler: ${msg}`);
+    }
+  });
+
+  bot.command("remember", async (ctx) => {
+    const text = ctx.match?.toString().trim();
+    if (!text) {
+      await ctx.reply("💾 Nutze: `/remember <Text>`\nSpeichert etwas in meinem Gedächtnis.", { parse_mode: "Markdown" });
+      return;
+    }
+
+    try {
+      appendDailyLog(`**Manuell gemerkt:** ${text}`);
+      // Trigger reindex so the new entry is searchable
+      const stats = await reindexMemory();
+      await ctx.reply(`💾 Gemerkt! (${stats.total} Einträge im Index)`);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      await ctx.reply(`❌ Fehler beim Speichern: ${msg}`);
+    }
+  });
+
+  bot.command("reindex", async (ctx) => {
+    try {
+      await ctx.api.sendChatAction(ctx.chat!.id, "typing");
+      const stats = await reindexMemory(true);
+      const indexStats = getIndexStats();
+      const sizeKB = (indexStats.sizeBytes / 1024).toFixed(1);
+      await ctx.reply(
+        `🔄 Gedächtnis neu indexiert!\n\n` +
+        `📊 ${stats.indexed} Chunks verarbeitet\n` +
+        `📁 ${indexStats.files} Dateien indexiert\n` +
+        `🧠 ${stats.total} Einträge gesamt\n` +
+        `💾 Index-Größe: ${sizeKB} KB`
+      );
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      await ctx.reply(`❌ Reindex-Fehler: ${msg}`);
     }
   });
 

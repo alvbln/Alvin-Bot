@@ -6,8 +6,9 @@ import { TelegramStreamer } from "../services/telegram.js";
 import { getRegistry } from "../engine.js";
 import { textToSpeech } from "../services/voice.js";
 import type { QueryOptions } from "../providers/types.js";
-import { buildSystemPrompt } from "../services/personality.js";
+import { buildSystemPrompt, buildSmartSystemPrompt } from "../services/personality.js";
 import { isForwardingAllowed } from "../services/access.js";
+import { touchProfile } from "../services/users.js";
 
 /** React to a message with an emoji. Silently fails if reactions aren't supported. */
 async function react(ctx: Context, emoji: string): Promise<void> {
@@ -48,6 +49,9 @@ export async function handleMessage(ctx: Context): Promise<void> {
   const userId = ctx.from!.id;
   const session = getSession(userId);
 
+  // Track user profile
+  touchProfile(userId, ctx.from?.first_name, ctx.from?.username);
+
   if (session.isProcessing) {
     // Queue the message instead of rejecting it (max 3)
     if (session.messageQueue.length < 3) {
@@ -85,10 +89,14 @@ export async function handleMessage(ctx: Context): Promise<void> {
     const activeProvider = registry.getActive();
     const isSDK = activeProvider.config.type === "claude-sdk";
 
-    // Build query options
+    // Build query options (with semantic memory search for non-SDK)
+    const systemPrompt = isSDK
+      ? buildSystemPrompt(isSDK, session.language)
+      : await buildSmartSystemPrompt(isSDK, session.language, text);
+
     const queryOpts: QueryOptions & { _sessionState?: { messageCount: number; toolUseCount: number } } = {
       prompt: text,
-      systemPrompt: buildSystemPrompt(isSDK, session.language),
+      systemPrompt,
       workingDir: session.workingDir,
       effort: session.effort,
       abortSignal: session.abortController.signal,

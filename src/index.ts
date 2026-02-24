@@ -7,10 +7,36 @@ import { handlePhoto } from "./handlers/photo.js";
 import { handleVoice } from "./handlers/voice.js";
 import { handleDocument } from "./handlers/document.js";
 import { initEngine } from "./engine.js";
+import { loadPlugins, registerPluginCommands, unloadPlugins } from "./services/plugins.js";
+import { initMCP, disconnectMCP, hasMCPConfig } from "./services/mcp.js";
 
 // Initialize multi-model engine
 const registry = initEngine();
 console.log(`Engine initialized. Primary: ${registry.getActiveKey()}`);
+
+// Load plugins
+const pluginResult = await loadPlugins();
+if (pluginResult.loaded.length > 0) {
+  console.log(`Plugins loaded: ${pluginResult.loaded.join(", ")}`);
+}
+if (pluginResult.errors.length > 0) {
+  for (const err of pluginResult.errors) {
+    console.error(`Plugin error (${err.name}): ${err.error}`);
+  }
+}
+
+// Initialize MCP servers (if configured)
+if (hasMCPConfig()) {
+  const mcpResult = await initMCP();
+  if (mcpResult.connected.length > 0) {
+    console.log(`MCP servers: ${mcpResult.connected.join(", ")}`);
+  }
+  if (mcpResult.errors.length > 0) {
+    for (const err of mcpResult.errors) {
+      console.error(`MCP error (${err.name}): ${err.error}`);
+    }
+  }
+}
 
 const bot = new Bot(config.botToken);
 
@@ -19,6 +45,7 @@ bot.use(authMiddleware);
 
 // Commands registrieren
 registerCommands(bot);
+registerPluginCommands(bot);
 
 // Content handlers (Reihenfolge wichtig: spezifisch vor allgemein)
 bot.on("message:voice", handleVoice);
@@ -45,6 +72,10 @@ const shutdown = async () => {
   isShuttingDown = true;
   console.log("Graceful shutdown initiated...");
 
+  // Unload plugins & disconnect MCP
+  await unloadPlugins().catch(err => console.error("Plugin unload error:", err));
+  await disconnectMCP().catch(err => console.error("MCP disconnect error:", err));
+
   // Give pending operations 5 seconds to complete
   setTimeout(() => {
     console.log("Forcing exit.");
@@ -69,7 +100,7 @@ process.on("unhandledRejection", (reason) => {
 // Start
 await bot.start({
   onStart: () => {
-    console.log(`🤖 Mr. Levin v2.2.0 gestartet`);
+    console.log(`🤖 Mr. Levin v2.3.0 gestartet`);
     console.log(`   Provider: ${registry.getActiveKey()}`);
     console.log(`   Users: ${config.allowedUsers.length} authorized`);
   },

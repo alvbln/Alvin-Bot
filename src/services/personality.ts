@@ -9,6 +9,7 @@ import { readFileSync } from "fs";
 import { resolve, dirname } from "path";
 import { fileURLToPath } from "url";
 import { buildMemoryContext } from "./memory.js";
+import { searchMemory } from "./embeddings.js";
 
 const BOT_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 
@@ -62,6 +63,38 @@ export function buildSystemPrompt(isSDK: boolean, language: "de" | "en" = "de"):
   }
 
   return parts.join("\n\n");
+}
+
+/**
+ * Build a system prompt enhanced with semantically relevant memories.
+ * Searches the vector index for context related to the user's message.
+ */
+export async function buildSmartSystemPrompt(
+  isSDK: boolean,
+  language: "de" | "en" = "de",
+  userMessage?: string
+): Promise<string> {
+  const base = buildSystemPrompt(isSDK, language);
+
+  // SDK providers read memory directly via tools — skip
+  if (isSDK || !userMessage) return base;
+
+  // Search for relevant memories
+  try {
+    const results = await searchMemory(userMessage, 3, 0.35);
+    if (results.length > 0) {
+      const memorySnippets = results.map(r => {
+        const preview = r.text.length > 400 ? r.text.slice(0, 400) + "..." : r.text;
+        return `[${r.source}] ${preview}`;
+      }).join("\n\n");
+
+      return base + `\n\n---\n## Relevante Erinnerungen (automatisch abgerufen)\n\n${memorySnippets}`;
+    }
+  } catch {
+    // Embedding search failed — fall back to basic context
+  }
+
+  return base;
 }
 
 /**

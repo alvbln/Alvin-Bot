@@ -1,6 +1,6 @@
 {
   "name": "mr-levin",
-  "version": "2.2.0",
+  "version": "2.3.0",
   "description": "Mr. Levin — Autonomous AI Telegram Agent with multi-model support",
   "type": "module",
   "main": "dist/index.js",
@@ -14,8 +14,18 @@
     "setup": "node bin/cli.js setup"
   },
   "keywords": [
-    "telegram", "bot", "ai", "claude", "agent", "llm", "multi-model",
-    "gpt", "gemini", "nvidia", "self-hosted", "autonomous"
+    "telegram",
+    "bot",
+    "ai",
+    "claude",
+    "agent",
+    "llm",
+    "multi-model",
+    "gpt",
+    "gemini",
+    "nvidia",
+    "self-hosted",
+    "autonomous"
   ],
   "author": "Ali Levin",
   "license": "MIT",
