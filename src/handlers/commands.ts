@@ -18,6 +18,15 @@ const EFFORT_LABELS: Record<EffortLevel, string> = {
 };
 
 export function registerCommands(bot: Bot): void {
+  bot.command("ping", async (ctx) => {
+    const start = Date.now();
+    const registry = getRegistry();
+    const active = registry.getActive();
+    const info = active.getInfo();
+    const latency = Date.now() - start;
+    await ctx.reply(`🏓 Pong! (${latency}ms)\n${info.name} ${info.status}`);
+  });
+
   bot.command("help", async (ctx) => {
     await ctx.reply(
       `🤖 *Mr. Levin — Befehle*\n\n` +

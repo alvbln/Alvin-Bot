@@ -1,5 +1,6 @@
 import type { Api } from "grammy";
 import { config } from "../config.js";
+import { sanitizeTelegramMarkdown } from "./markdown.js";
 
 export class TelegramStreamer {
   private messageId: number | null = null;
@@ -16,7 +17,7 @@ export class TelegramStreamer {
   }
 
   async update(fullText: string): Promise<void> {
-    const displayText = this.truncate(fullText) || "...";
+    const displayText = sanitizeTelegramMarkdown(this.truncate(fullText) || "...");
 
     if (!this.messageId) {
       const msg = await this.api.sendMessage(this.chatId, displayText, {
@@ -71,13 +72,16 @@ export class TelegramStreamer {
       return;
     }
 
+    // Sanitize final text
+    const safeText = sanitizeTelegramMarkdown(fullText);
+
     // If text fits in one message, just update the existing one
-    if (fullText.length <= config.telegramMaxLength && this.messageId) {
-      if (fullText !== this.lastSentText) {
-        await this.api.editMessageText(this.chatId, this.messageId, fullText, {
+    if (safeText.length <= config.telegramMaxLength && this.messageId) {
+      if (safeText !== this.lastSentText) {
+        await this.api.editMessageText(this.chatId, this.messageId, safeText, {
           parse_mode: "Markdown",
         }).catch(() =>
-          this.api.editMessageText(this.chatId, this.messageId!, fullText)
+          this.api.editMessageText(this.chatId, this.messageId!, safeText)
         );
       }
       return;
@@ -88,7 +92,7 @@ export class TelegramStreamer {
       await this.api.deleteMessage(this.chatId, this.messageId).catch(() => {});
     }
 
-    const chunks = this.splitText(fullText);
+    const chunks = this.splitText(safeText);
     for (const chunk of chunks) {
       await this.api.sendMessage(this.chatId, chunk, {
         parse_mode: "Markdown",
