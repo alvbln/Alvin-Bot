@@ -26,6 +26,7 @@ import { listCustomTools, getCustomTools, executeCustomTool } from "../services/
 import { buildSystemPrompt, reloadSoul, getSoulContent } from "../services/personality.js";
 import { config } from "../config.js";
 import type { QueryOptions, StreamChunk } from "../providers/types.js";
+import { handleSetupAPI } from "./setup-api.js";
 
 const BOT_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const ENV_FILE = resolve(BOT_ROOT, ".env");
@@ -96,6 +97,10 @@ async function handleAPI(req: http.IncomingMessage, res: http.ServerResponse, ur
     res.end(JSON.stringify({ error: "Not authenticated" }));
     return;
   }
+
+  // ── Setup APIs (platforms + models) ─────────────────
+  const handled = await handleSetupAPI(req, res, urlPath, body);
+  if (handled) return;
 
   // GET /api/status
   if (urlPath === "/api/status") {

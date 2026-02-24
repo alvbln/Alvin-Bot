@@ -1,0 +1,552 @@
+/**
+ * Setup API — Platform & Model configuration endpoints.
+ *
+ * Handles:
+ * - Platform setup (Discord, WhatsApp, Signal tokens + dependency installation)
+ * - Model/Provider management (API keys, custom models, presets)
+ * - Runtime activation/deactivation
+ */
+
+import fs from "fs";
+import { resolve, dirname } from "path";
+import { fileURLToPath } from "url";
+import { execSync } from "child_process";
+import http from "http";
+import { getRegistry } from "../engine.js";
+import { PROVIDER_PRESETS, type ProviderConfig } from "../providers/types.js";
+
+const BOT_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
+const ENV_FILE = resolve(BOT_ROOT, ".env");
+const CUSTOM_MODELS_FILE = resolve(BOT_ROOT, "docs", "custom-models.json");
+
+// ── Env Helpers ─────────────────────────────────────────
+
+function readEnv(): Record<string, string> {
+  if (!fs.existsSync(ENV_FILE)) return {};
+  const lines = fs.readFileSync(ENV_FILE, "utf-8").split("\n");
+  const env: Record<string, string> = {};
+  for (const line of lines) {
+    if (line.startsWith("#") || !line.includes("=")) continue;
+    const idx = line.indexOf("=");
+    env[line.slice(0, idx).trim()] = line.slice(idx + 1).trim();
+  }
+  return env;
+}
+
+function writeEnvVar(key: string, value: string): void {
+  let content = fs.existsSync(ENV_FILE) ? fs.readFileSync(ENV_FILE, "utf-8") : "";
+  const regex = new RegExp(`^${key}=.*$`, "m");
+  if (regex.test(content)) {
+    content = content.replace(regex, `${key}=${value}`);
+  } else {
+    content = content.trimEnd() + `\n${key}=${value}\n`;
+  }
+  fs.writeFileSync(ENV_FILE, content);
+}
+
+function removeEnvVar(key: string): void {
+  if (!fs.existsSync(ENV_FILE)) return;
+  let content = fs.readFileSync(ENV_FILE, "utf-8");
+  content = content.replace(new RegExp(`^${key}=.*\n?`, "m"), "");
+  fs.writeFileSync(ENV_FILE, content);
+}
+
+// ── Custom Models Storage ───────────────────────────────
+
+interface CustomModelDef {
+  key: string;
+  name: string;
+  model: string;
+  type: "openai-compatible";
+  baseUrl: string;
+  apiKeyEnv: string; // Env var name for the API key
+  supportsVision?: boolean;
+  supportsStreaming?: boolean;
+  maxTokens?: number;
+  temperature?: number;
+}
+
+function loadCustomModels(): CustomModelDef[] {
+  try {
+    return JSON.parse(fs.readFileSync(CUSTOM_MODELS_FILE, "utf-8"));
+  } catch {
+    return [];
+  }
+}
+
+function saveCustomModels(models: CustomModelDef[]): void {
+  fs.writeFileSync(CUSTOM_MODELS_FILE, JSON.stringify(models, null, 2));
+}
+
+// ── Platform Definitions ────────────────────────────────
+
+interface PlatformDef {
+  id: string;
+  name: string;
+  icon: string;
+  description: string;
+  envVars: Array<{ key: string; label: string; placeholder: string; secret?: boolean; type?: string }>;
+  npmPackages?: string[];
+  setupUrl?: string;
+  setupSteps: string[];
+}
+
+const PLATFORMS: PlatformDef[] = [
+  {
+    id: "telegram",
+    name: "Telegram",
+    icon: "📱",
+    description: "Telegram Bot via BotFather. Der Standard-Messaging-Kanal.",
+    envVars: [
+      { key: "BOT_TOKEN", label: "Bot Token", placeholder: "123456:ABC-DEF...", secret: true },
+      { key: "ALLOWED_USERS", label: "Erlaubte User IDs", placeholder: "123456789,987654321" },
+    ],
+    setupUrl: "https://t.me/BotFather",
+    setupSteps: [
+      "Öffne @BotFather auf Telegram",
+      "Sende /newbot und folge den Anweisungen",
+      "Kopiere den Bot Token hierher",
+      "Für deine User-ID: Sende eine Nachricht an @userinfobot",
+    ],
+  },
+  {
+    id: "discord",
+    name: "Discord",
+    icon: "🎮",
+    description: "Discord Bot für Server und DMs. Braucht discord.js.",
+    envVars: [
+      { key: "DISCORD_TOKEN", label: "Bot Token", placeholder: "MTIz...abc", secret: true },
+    ],
+    npmPackages: ["discord.js"],
+    setupUrl: "https://discord.com/developers/applications",
+    setupSteps: [
+      "Erstelle eine Application auf discord.com/developers",
+      "Gehe zu Bot → Reset Token → Token kopieren",
+      "Aktiviere Message Content Intent unter Bot → Privileged Intents",
+      "Lade den Bot auf deinen Server: OAuth2 → URL Generator → bot + messages.read + messages.write",
+    ],
+  },
+  {
+    id: "whatsapp",
+    name: "WhatsApp",
+    icon: "💬",
+    description: "WhatsApp Web Verbindung via Baileys. QR-Code Scan beim ersten Start.",
+    envVars: [
+      { key: "WHATSAPP_ENABLED", label: "Aktivieren", placeholder: "true", type: "toggle" },
+    ],
+    npmPackages: ["@whiskeysockets/baileys", "qrcode-terminal"],
+    setupSteps: [
+      "Aktiviere WhatsApp (Toggle oben)",
+      "Nach dem Neustart erscheint ein QR-Code in den Logs",
+      "Scanne den QR-Code mit WhatsApp → Verknüpfte Geräte",
+      "Die Verbindung bleibt gespeichert (data/whatsapp-auth/)",
+    ],
+  },
+  {
+    id: "signal",
+    name: "Signal",
+    icon: "🔒",
+    description: "Signal Messenger via signal-cli REST API. Braucht einen separaten signal-cli Container.",
+    envVars: [
+      { key: "SIGNAL_API_URL", label: "signal-cli REST API URL", placeholder: "http://localhost:8080" },
+      { key: "SIGNAL_NUMBER", label: "Signal Nummer", placeholder: "+491234567890" },
+    ],
+    setupUrl: "https://github.com/bbernhard/signal-cli-rest-api",
+    setupSteps: [
+      "Starte signal-cli REST API (Docker empfohlen):",
+      "docker run -p 8080:8080 bbernhard/signal-cli-rest-api",
+      "Registriere deine Nummer über die API",
+      "Trage URL und Nummer oben ein",
+    ],
+  },
+];
+
+// ── Provider/Model Definitions ──────────────────────────
+
+interface ProviderDef {
+  id: string;
+  name: string;
+  icon: string;
+  description: string;
+  envKey: string; // Env var for the API key
+  models: Array<{ key: string; name: string; model: string }>;
+  signupUrl?: string;
+  docsUrl?: string;
+  setupSteps: string[];
+  free?: boolean;
+}
+
+const PROVIDERS: ProviderDef[] = [
+  {
+    id: "claude-sdk",
+    name: "Anthropic Claude",
+    icon: "🟣",
+    description: "Claude via Agent SDK. Braucht Claude Max Abo ($20+/Monat) oder API Key.",
+    envKey: "ANTHROPIC_API_KEY",
+    models: [
+      { key: "claude-sdk", name: "Claude (Agent SDK)", model: "claude-opus-4-6" },
+    ],
+    signupUrl: "https://console.anthropic.com",
+    docsUrl: "https://docs.anthropic.com",
+    setupSteps: [
+      "Claude Max Abo → Automatisch via SDK (kein Key nötig)",
+      "Oder: API Key auf console.anthropic.com erstellen",
+      "Claude Agent SDK hat vollen Tool-Use Support",
+    ],
+  },
+  {
+    id: "openai",
+    name: "OpenAI",
+    icon: "🟢",
+    description: "GPT-4o, GPT-4o Mini und andere OpenAI Modelle.",
+    envKey: "OPENAI_API_KEY",
+    models: [
+      { key: "gpt-4o", name: "GPT-4o", model: "gpt-4o" },
+      { key: "gpt-4o-mini", name: "GPT-4o Mini", model: "gpt-4o-mini" },
+    ],
+    signupUrl: "https://platform.openai.com/api-keys",
+    docsUrl: "https://platform.openai.com/docs",
+    setupSteps: [
+      "Account auf platform.openai.com erstellen",
+      "API Key generieren unter API Keys",
+      "Credits aufladen (Pay-as-you-go)",
+    ],
+  },
+  {
+    id: "google",
+    name: "Google Gemini",
+    icon: "🔵",
+    description: "Gemini 2.5 Pro/Flash via Google AI Studio. Kostenloser Tier verfügbar.",
+    envKey: "GOOGLE_API_KEY",
+    models: [
+      { key: "gemini-2.5-pro", name: "Gemini 2.5 Pro", model: "gemini-2.5-pro" },
+      { key: "gemini-2.5-flash", name: "Gemini 2.5 Flash", model: "gemini-2.5-flash" },
+    ],
+    signupUrl: "https://aistudio.google.com/apikey",
+    docsUrl: "https://ai.google.dev/docs",
+    setupSteps: [
+      "Google AI Studio öffnen (aistudio.google.com)",
+      "API Key erstellen → sofort nutzbar",
+      "Kostenloser Tier: 15 RPM, 1M TPM",
+    ],
+    free: true,
+  },
+  {
+    id: "nvidia",
+    name: "NVIDIA NIM",
+    icon: "🟩",
+    description: "150+ Modelle gratis (Llama, Kimi, Mistral, etc.) via NVIDIA API.",
+    envKey: "NVIDIA_API_KEY",
+    models: [
+      { key: "nvidia-llama-3.3-70b", name: "Llama 3.3 70B", model: "meta/llama-3.3-70b-instruct" },
+      { key: "nvidia-kimi-k2.5", name: "Kimi K2.5", model: "moonshotai/kimi-k2.5" },
+    ],
+    signupUrl: "https://build.nvidia.com",
+    docsUrl: "https://docs.api.nvidia.com",
+    setupSteps: [
+      "Account auf build.nvidia.com erstellen",
+      "Kostenlose API Key generieren",
+      "150+ Modelle gratis verfügbar (1000 Credits/Monat)",
+    ],
+    free: true,
+  },
+  {
+    id: "openrouter",
+    name: "OpenRouter",
+    icon: "🌐",
+    description: "Ein API Key, 200+ Modelle. Claude, GPT, Gemini, Llama — alles über eine API.",
+    envKey: "OPENROUTER_API_KEY",
+    models: [
+      { key: "openrouter", name: "OpenRouter (Standard)", model: "anthropic/claude-sonnet-4" },
+    ],
+    signupUrl: "https://openrouter.ai/keys",
+    docsUrl: "https://openrouter.ai/docs",
+    setupSteps: [
+      "Account auf openrouter.ai erstellen",
+      "API Key generieren",
+      "Credits aufladen oder Free-Modelle nutzen",
+    ],
+  },
+  {
+    id: "ollama",
+    name: "Ollama (Lokal)",
+    icon: "🦙",
+    description: "Lokale Modelle auf deinem Rechner. Kein API Key nötig, läuft offline.",
+    envKey: "",
+    models: [
+      { key: "ollama", name: "Ollama (Local)", model: "llama3.2" },
+    ],
+    signupUrl: "https://ollama.com/download",
+    docsUrl: "https://ollama.com/library",
+    setupSteps: [
+      "Ollama installieren: brew install ollama (macOS) oder ollama.com/download",
+      "Model laden: ollama pull llama3.2",
+      "Läuft automatisch auf localhost:11434",
+    ],
+    free: true,
+  },
+];
+
+// ── API Handler ─────────────────────────────────────────
+
+export async function handleSetupAPI(
+  req: http.IncomingMessage,
+  res: http.ServerResponse,
+  urlPath: string,
+  body: string
+): Promise<boolean> {
+  res.setHeader("Content-Type", "application/json");
+
+  // ── Platforms ───────────────────────────────────────
+
+  // GET /api/platforms/setup — full setup info for all platforms
+  if (urlPath === "/api/platforms/setup") {
+    const env = readEnv();
+    const platforms = PLATFORMS.map(p => ({
+      ...p,
+      configured: p.envVars.every(v => {
+        if (v.type === "toggle") return env[v.key] === "true";
+        return !!env[v.key];
+      }),
+      values: Object.fromEntries(
+        p.envVars.map(v => [v.key, v.secret && env[v.key] ? maskSecret(env[v.key]) : (env[v.key] || "")])
+      ),
+      depsInstalled: p.npmPackages ? checkNpmDeps(p.npmPackages) : true,
+    }));
+    res.end(JSON.stringify({ platforms }));
+    return true;
+  }
+
+  // POST /api/platforms/configure — save platform env vars
+  if (urlPath === "/api/platforms/configure" && req.method === "POST") {
+    try {
+      const { platformId, values } = JSON.parse(body);
+      const platform = PLATFORMS.find(p => p.id === platformId);
+      if (!platform) {
+        res.statusCode = 400;
+        res.end(JSON.stringify({ error: "Unknown platform" }));
+        return true;
+      }
+      for (const v of platform.envVars) {
+        if (values[v.key] !== undefined && values[v.key] !== "") {
+          writeEnvVar(v.key, values[v.key]);
+        } else if (values[v.key] === "") {
+          removeEnvVar(v.key);
+        }
+      }
+      res.end(JSON.stringify({ ok: true, note: "Neustart nötig um Änderungen zu aktivieren." }));
+    } catch {
+      res.statusCode = 400;
+      res.end(JSON.stringify({ error: "Invalid request" }));
+    }
+    return true;
+  }
+
+  // POST /api/platforms/install-deps — install npm packages for a platform
+  if (urlPath === "/api/platforms/install-deps" && req.method === "POST") {
+    try {
+      const { platformId } = JSON.parse(body);
+      const platform = PLATFORMS.find(p => p.id === platformId);
+      if (!platform?.npmPackages?.length) {
+        res.end(JSON.stringify({ ok: true, note: "Keine Dependencies nötig." }));
+        return true;
+      }
+      const pkgs = platform.npmPackages.join(" ");
+      const output = execSync(`cd "${BOT_ROOT}" && npm install ${pkgs} --save-optional 2>&1`, {
+        timeout: 120000,
+        env: { ...process.env, PATH: process.env.PATH + ":/opt/homebrew/bin:/usr/local/bin" },
+      }).toString();
+      res.end(JSON.stringify({ ok: true, output: output.slice(0, 5000) }));
+    } catch (err: unknown) {
+      const error = err instanceof Error ? err.message : String(err);
+      res.end(JSON.stringify({ error }));
+    }
+    return true;
+  }
+
+  // ── Models / Providers ─────────────────────────────
+
+  // GET /api/providers/setup — full setup info for all providers
+  if (urlPath === "/api/providers/setup") {
+    const env = readEnv();
+    const registry = getRegistry();
+    const activeKey = registry.getActiveKey();
+    const registeredModels = await registry.listAll();
+
+    const providers = PROVIDERS.map(p => ({
+      ...p,
+      hasKey: p.envKey ? !!env[p.envKey] : true, // Ollama doesn't need key
+      keyPreview: p.envKey && env[p.envKey] ? maskSecret(env[p.envKey]) : "",
+      modelsActive: p.models.map(m => ({
+        ...m,
+        registered: registeredModels.some(rm => rm.key === m.key),
+        active: activeKey === m.key,
+        status: registeredModels.find(rm => rm.key === m.key)?.status || "not configured",
+      })),
+    }));
+
+    const customModels = loadCustomModels();
+
+    res.end(JSON.stringify({ providers, customModels, activeModel: activeKey }));
+    return true;
+  }
+
+  // POST /api/providers/set-key — save an API key
+  if (urlPath === "/api/providers/set-key" && req.method === "POST") {
+    try {
+      const { providerId, apiKey } = JSON.parse(body);
+      const provider = PROVIDERS.find(p => p.id === providerId);
+      if (!provider?.envKey) {
+        res.statusCode = 400;
+        res.end(JSON.stringify({ error: "Provider braucht keinen API Key" }));
+        return true;
+      }
+      writeEnvVar(provider.envKey, apiKey);
+      res.end(JSON.stringify({ ok: true, note: "Neustart nötig um den neuen Key zu aktivieren." }));
+    } catch {
+      res.statusCode = 400;
+      res.end(JSON.stringify({ error: "Invalid request" }));
+    }
+    return true;
+  }
+
+  // POST /api/providers/set-primary — set primary provider
+  if (urlPath === "/api/providers/set-primary" && req.method === "POST") {
+    try {
+      const { key } = JSON.parse(body);
+      writeEnvVar("PRIMARY_PROVIDER", key);
+      // Also switch runtime
+      const registry = getRegistry();
+      registry.switchTo(key);
+      res.end(JSON.stringify({ ok: true }));
+    } catch {
+      res.statusCode = 400;
+      res.end(JSON.stringify({ error: "Invalid request" }));
+    }
+    return true;
+  }
+
+  // POST /api/providers/set-fallbacks — set fallback chain
+  if (urlPath === "/api/providers/set-fallbacks" && req.method === "POST") {
+    try {
+      const { keys } = JSON.parse(body);
+      writeEnvVar("FALLBACK_PROVIDERS", keys.join(","));
+      res.end(JSON.stringify({ ok: true, note: "Neustart nötig." }));
+    } catch {
+      res.statusCode = 400;
+      res.end(JSON.stringify({ error: "Invalid request" }));
+    }
+    return true;
+  }
+
+  // POST /api/providers/add-custom — add a custom model
+  if (urlPath === "/api/providers/add-custom" && req.method === "POST") {
+    try {
+      const model: CustomModelDef = JSON.parse(body);
+      if (!model.key || !model.name || !model.baseUrl || !model.model) {
+        res.statusCode = 400;
+        res.end(JSON.stringify({ error: "key, name, baseUrl und model sind Pflichtfelder" }));
+        return true;
+      }
+      model.type = "openai-compatible";
+      const models = loadCustomModels();
+      // Upsert
+      const idx = models.findIndex(m => m.key === model.key);
+      if (idx >= 0) models[idx] = model;
+      else models.push(model);
+      saveCustomModels(models);
+
+      // Save API key if provided
+      if (model.apiKeyEnv && (model as any).apiKey) {
+        writeEnvVar(model.apiKeyEnv, (model as any).apiKey);
+      }
+
+      res.end(JSON.stringify({ ok: true, note: "Neustart nötig um das Modell zu aktivieren." }));
+    } catch {
+      res.statusCode = 400;
+      res.end(JSON.stringify({ error: "Invalid request" }));
+    }
+    return true;
+  }
+
+  // DELETE /api/providers/remove-custom — remove a custom model
+  if (urlPath === "/api/providers/remove-custom" && req.method === "POST") {
+    try {
+      const { key } = JSON.parse(body);
+      const models = loadCustomModels().filter(m => m.key !== key);
+      saveCustomModels(models);
+      res.end(JSON.stringify({ ok: true }));
+    } catch {
+      res.statusCode = 400;
+      res.end(JSON.stringify({ error: "Invalid request" }));
+    }
+    return true;
+  }
+
+  // POST /api/providers/test-key — quick API key validation
+  if (urlPath === "/api/providers/test-key" && req.method === "POST") {
+    try {
+      const { providerId, apiKey } = JSON.parse(body);
+      const result = await testApiKey(providerId, apiKey);
+      res.end(JSON.stringify(result));
+    } catch (err: unknown) {
+      const error = err instanceof Error ? err.message : String(err);
+      res.end(JSON.stringify({ ok: false, error }));
+    }
+    return true;
+  }
+
+  return false; // Not handled
+}
+
+// ── Helpers ─────────────────────────────────────────────
+
+function maskSecret(value: string): string {
+  if (value.length <= 8) return "****";
+  return value.slice(0, 4) + "..." + value.slice(-4);
+}
+
+function checkNpmDeps(packages: string[]): boolean {
+  const nodeModules = resolve(BOT_ROOT, "node_modules");
+  return packages.every(pkg => {
+    try {
+      return fs.existsSync(resolve(nodeModules, pkg.split("/")[0]));
+    } catch {
+      return false;
+    }
+  });
+}
+
+async function testApiKey(providerId: string, apiKey: string): Promise<{ ok: boolean; error?: string; model?: string }> {
+  try {
+    const provider = PROVIDERS.find(p => p.id === providerId);
+    if (!provider) return { ok: false, error: "Unknown provider" };
+
+    switch (providerId) {
+      case "openai": {
+        const r = await fetch("https://api.openai.com/v1/models", { headers: { Authorization: `Bearer ${apiKey}` } });
+        if (!r.ok) return { ok: false, error: `HTTP ${r.status}: ${await r.text()}` };
+        return { ok: true, model: "gpt-4o" };
+      }
+      case "google": {
+        const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
+        if (!r.ok) return { ok: false, error: `HTTP ${r.status}: ${await r.text()}` };
+        return { ok: true, model: "gemini-2.5-pro" };
+      }
+      case "nvidia": {
+        const r = await fetch("https://integrate.api.nvidia.com/v1/models", { headers: { Authorization: `Bearer ${apiKey}` } });
+        if (!r.ok) return { ok: false, error: `HTTP ${r.status}: ${await r.text()}` };
+        return { ok: true, model: "meta/llama-3.3-70b-instruct" };
+      }
+      case "openrouter": {
+        const r = await fetch("https://openrouter.ai/api/v1/models", { headers: { Authorization: `Bearer ${apiKey}` } });
+        if (!r.ok) return { ok: false, error: `HTTP ${r.status}: ${await r.text()}` };
+        return { ok: true, model: "anthropic/claude-sonnet-4" };
+      }
+      default:
+        return { ok: false, error: "Key-Test für diesen Provider nicht verfügbar" };
+    }
+  } catch (err: unknown) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
+}

@@ -318,28 +318,119 @@ async function loadDashboard() {
   document.getElementById('model-badge').textContent = data.model.name;
 }
 
-// ── Models ──────────────────────────────────────────────
+// ── Models / Providers ──────────────────────────────────
 async function loadModels() {
-  const res = await fetch(API + '/api/models');
-  const data = await res.json();
-  document.getElementById('models-list').innerHTML = data.models.map(m => `
-    <div class="list-item" onclick="switchModel('${m.key}')" style="cursor:pointer">
-      <div class="icon">${m.active ? '✅' : '⬜'}</div>
-      <div class="info">
-        <div class="name">${m.name}</div>
-        <div class="desc">${m.model} — ${m.status}</div>
-      </div>
-      ${m.active ? '<span class="badge badge-green">Active</span>' : ''}
-    </div>
-  `).join('');
+  // Load both the quick model list (for chat selector) and the full setup view
+  const [modelsRes, setupRes] = await Promise.all([
+    fetch(API + '/api/models'),
+    fetch(API + '/api/providers/setup'),
+  ]);
+  const modelsData = await modelsRes.json();
+  const setupData = await setupRes.json();
 
   // Update chat model selector
   const sel = document.getElementById('chat-model');
   if (sel) {
-    sel.innerHTML = data.models.map(m =>
+    sel.innerHTML = modelsData.models.map(m =>
       `<option value="${m.key}" ${m.active ? 'selected' : ''}>${m.name}</option>`
     ).join('');
   }
+
+  // Render full provider setup cards
+  let html = '<div style="margin-bottom:20px"><h3 style="font-size:1em;margin-bottom:4px">🤖 KI-Modelle & Provider</h3><div class="sub">API Keys einrichten, Modelle aktivieren und Custom Models hinzufügen.</div></div>';
+
+  for (const p of setupData.providers) {
+    const statusBadge = p.hasKey
+      ? '<span class="badge badge-green">✅ Key gesetzt</span>'
+      : (p.free ? '<span class="badge badge-yellow">⚡ Gratis verfügbar</span>' : '<span class="badge badge-red">❌ Kein Key</span>');
+
+    html += `<div class="card setup-card" style="margin-bottom:16px">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+        <span style="font-size:1.5em">${p.icon}</span>
+        <div style="flex:1">
+          <h3 style="font-size:0.95em;text-transform:none;letter-spacing:0">${p.name}</h3>
+          <div class="sub">${p.description}</div>
+        </div>
+        ${statusBadge}
+      </div>`;
+
+    // Setup steps (collapsible)
+    html += `<details style="margin-bottom:12px"><summary style="cursor:pointer;color:var(--accent2);font-size:0.82em;font-weight:500">📋 Setup-Anleitung</summary><ol style="margin:8px 0 0 16px;color:var(--fg2);font-size:0.82em;line-height:1.6">`;
+    for (const step of p.setupSteps) {
+      html += `<li>${step}</li>`;
+    }
+    if (p.signupUrl) html += `<li><a href="${p.signupUrl}" target="_blank" style="color:var(--accent2)">${p.signupUrl}</a></li>`;
+    html += `</ol></details>`;
+
+    // API Key input (if applicable)
+    if (p.envKey) {
+      html += `<div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
+        <input type="password" id="key-${p.id}" placeholder="API Key eingeben..." value="${p.keyPreview}" style="flex:1;background:var(--bg3);border:1px solid var(--bg3);border-radius:6px;padding:8px 12px;color:var(--fg);font:inherit;font-size:0.85em;font-family:monospace;outline:none">
+        <button class="btn btn-sm" onclick="saveProviderKey('${p.id}')">💾 Speichern</button>
+        <button class="btn btn-sm btn-outline" onclick="testProviderKey('${p.id}')">🧪 Testen</button>
+      </div>
+      <div id="key-result-${p.id}" style="font-size:0.78em;margin-bottom:8px"></div>`;
+    }
+
+    // Model list with activate buttons
+    html += `<div style="border-top:1px solid var(--bg3);padding-top:8px;margin-top:4px">`;
+    for (const m of p.modelsActive) {
+      const isActive = m.active;
+      html += `<div style="display:flex;align-items:center;gap:8px;padding:6px 0;font-size:0.85em">
+        <span style="width:20px;text-align:center">${isActive ? '✅' : (m.registered ? '⬜' : '⚪')}</span>
+        <span style="flex:1;font-family:monospace">${m.name} <span style="color:var(--fg2)">(${m.model})</span></span>
+        ${isActive ? '<span class="badge badge-green">Aktiv</span>' : `<button class="btn btn-sm btn-outline" onclick="switchModel('${m.key}')">Aktivieren</button>`}
+      </div>`;
+    }
+    html += `</div></div>`;
+  }
+
+  // Custom Models section
+  html += `<div class="card" style="margin-bottom:16px">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+      <span style="font-size:1.5em">🔧</span>
+      <div style="flex:1">
+        <h3 style="font-size:0.95em;text-transform:none;letter-spacing:0">Custom Models</h3>
+        <div class="sub">Eigene OpenAI-kompatible Endpunkte hinzufügen (LM Studio, vLLM, Together AI, etc.)</div>
+      </div>
+    </div>`;
+
+  if (setupData.customModels.length > 0) {
+    for (const cm of setupData.customModels) {
+      html += `<div style="display:flex;align-items:center;gap:8px;padding:6px 0;font-size:0.85em;border-bottom:1px solid var(--bg3)">
+        <span style="font-family:monospace;flex:1">${cm.name} <span style="color:var(--fg2)">(${cm.model})</span></span>
+        <span class="badge">${cm.baseUrl}</span>
+        <button class="btn btn-sm btn-outline" onclick="switchModel('${cm.key}')">Aktivieren</button>
+        <button class="btn btn-sm btn-outline" style="color:var(--red)" onclick="removeCustomModel('${cm.key}')">✕</button>
+      </div>`;
+    }
+  }
+
+  html += `<button class="btn btn-sm" style="margin-top:12px" onclick="showAddCustomModel()">+ Custom Model hinzufügen</button>
+    <div id="custom-model-form" style="display:none;margin-top:12px;padding:12px;background:var(--bg3);border-radius:8px">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+        <input id="cm-key" placeholder="Eindeutiger Key (z.B. my-llama)" style="background:var(--bg);border:1px solid var(--bg4);border-radius:6px;padding:8px;color:var(--fg);font:inherit;font-size:0.82em">
+        <input id="cm-name" placeholder="Anzeigename (z.B. My Llama 3)" style="background:var(--bg);border:1px solid var(--bg4);border-radius:6px;padding:8px;color:var(--fg);font:inherit;font-size:0.82em">
+        <input id="cm-model" placeholder="Model ID (z.B. meta-llama/Llama-3-70b)" style="background:var(--bg);border:1px solid var(--bg4);border-radius:6px;padding:8px;color:var(--fg);font:inherit;font-size:0.82em">
+        <input id="cm-url" placeholder="Base URL (z.B. http://localhost:1234/v1)" style="background:var(--bg);border:1px solid var(--bg4);border-radius:6px;padding:8px;color:var(--fg);font:inherit;font-size:0.82em">
+        <input id="cm-apikey-env" placeholder="API Key Env-Var (optional, z.B. CUSTOM_API_KEY)" style="background:var(--bg);border:1px solid var(--bg4);border-radius:6px;padding:8px;color:var(--fg);font:inherit;font-size:0.82em">
+        <input id="cm-apikey" type="password" placeholder="API Key (optional)" style="background:var(--bg);border:1px solid var(--bg4);border-radius:6px;padding:8px;color:var(--fg);font:inherit;font-size:0.82em">
+      </div>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-sm" onclick="addCustomModel()">💾 Hinzufügen</button>
+        <button class="btn btn-sm btn-outline" onclick="document.getElementById('custom-model-form').style.display='none'">Abbrechen</button>
+      </div>
+    </div>
+  </div>`;
+
+  // Fallback chain
+  html += `<div class="card">
+    <h3 style="font-size:0.85em;text-transform:none;margin-bottom:8px">⛓️ Fallback-Kette</h3>
+    <div class="sub" style="margin-bottom:8px">Wenn das primäre Modell fehlschlägt, werden diese Modelle der Reihe nach probiert.</div>
+    <div style="font-family:monospace;font-size:0.85em;color:var(--accent2);padding:8px;background:var(--bg3);border-radius:6px">${setupData.activeModel} → ${modelsData.models.filter(m => !m.active).map(m => m.key).slice(0, 3).join(' → ') || '(keine Fallbacks)'}</div>
+  </div>`;
+
+  document.getElementById('models-setup').innerHTML = html;
 }
 
 async function switchModel(key) {
@@ -349,6 +440,77 @@ async function switchModel(key) {
   });
   loadModels(); loadDashboard();
   toast('Model gewechselt');
+}
+
+async function saveProviderKey(providerId) {
+  const input = document.getElementById('key-' + providerId);
+  const apiKey = input.value.trim();
+  if (!apiKey || apiKey.includes('...')) { toast('Bitte einen vollständigen Key eingeben', 'error'); return; }
+  const res = await fetch(API + '/api/providers/set-key', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ providerId, apiKey }),
+  });
+  const data = await res.json();
+  toast(data.ok ? '🔑 Key gespeichert! Bot-Neustart nötig.' : data.error, data.ok ? 'success' : 'error');
+}
+
+async function testProviderKey(providerId) {
+  const input = document.getElementById('key-' + providerId);
+  const apiKey = input.value.trim();
+  if (!apiKey || apiKey.includes('...')) { toast('Bitte einen vollständigen Key eingeben', 'error'); return; }
+  const resultDiv = document.getElementById('key-result-' + providerId);
+  resultDiv.innerHTML = '<span style="color:var(--fg2)">⏳ Teste...</span>';
+  const res = await fetch(API + '/api/providers/test-key', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ providerId, apiKey }),
+  });
+  const data = await res.json();
+  resultDiv.innerHTML = data.ok
+    ? `<span style="color:var(--green)">✅ Key funktioniert!</span>`
+    : `<span style="color:var(--red)">❌ ${data.error}</span>`;
+}
+
+function showAddCustomModel() {
+  document.getElementById('custom-model-form').style.display = '';
+}
+
+async function addCustomModel() {
+  const model = {
+    key: document.getElementById('cm-key').value.trim(),
+    name: document.getElementById('cm-name').value.trim(),
+    model: document.getElementById('cm-model').value.trim(),
+    baseUrl: document.getElementById('cm-url').value.trim(),
+    apiKeyEnv: document.getElementById('cm-apikey-env').value.trim(),
+    apiKey: document.getElementById('cm-apikey').value.trim(),
+    type: 'openai-compatible',
+    supportsStreaming: true,
+  };
+  if (!model.key || !model.name || !model.model || !model.baseUrl) {
+    toast('Bitte alle Pflichtfelder ausfüllen', 'error');
+    return;
+  }
+  const res = await fetch(API + '/api/providers/add-custom', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(model),
+  });
+  const data = await res.json();
+  if (data.ok) {
+    toast('Custom Model hinzugefügt! Neustart nötig.');
+    document.getElementById('custom-model-form').style.display = 'none';
+    loadModels();
+  } else {
+    toast(data.error, 'error');
+  }
+}
+
+async function removeCustomModel(key) {
+  if (!confirm(`Custom Model "${key}" entfernen?`)) return;
+  await fetch(API + '/api/providers/remove-custom', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ key }),
+  });
+  toast('Entfernt');
+  loadModels();
 }
 
 // ── Memory ──────────────────────────────────────────────
@@ -424,18 +586,128 @@ async function loadUsers() {
 
 // ── Platforms ────────────────────────────────────────────
 async function loadPlatforms() {
-  const res = await fetch(API + '/api/platforms');
+  const res = await fetch(API + '/api/platforms/setup');
   const data = await res.json();
-  document.getElementById('platforms-list').innerHTML = data.platforms.map(p => `
-    <div class="list-item">
-      <div class="icon">${p.icon}</div>
-      <div class="info">
-        <div class="name">${p.name}</div>
-        <div class="desc">Env: ${p.key}</div>
-      </div>
-      <span class="badge ${p.configured ? 'badge-green' : 'badge-red'}">${p.configured ? 'Active' : 'Not configured'}</span>
-    </div>
-  `).join('');
+
+  let html = '<div style="margin-bottom:20px"><h3 style="font-size:1em;margin-bottom:4px">📱 Messaging-Plattformen</h3><div class="sub">Verbinde Mr. Levin mit verschiedenen Messaging-Diensten. Mehrere gleichzeitig möglich.</div></div>';
+
+  for (const p of data.platforms) {
+    const statusBadge = p.configured
+      ? '<span class="badge badge-green">✅ Konfiguriert</span>'
+      : '<span class="badge badge-red">Nicht eingerichtet</span>';
+    const depsBadge = !p.depsInstalled
+      ? '<span class="badge badge-yellow">📦 Dependencies fehlen</span>'
+      : '';
+
+    html += `<div class="card setup-card" style="margin-bottom:16px">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+        <span style="font-size:1.8em">${p.icon}</span>
+        <div style="flex:1">
+          <h3 style="font-size:0.95em;text-transform:none;letter-spacing:0">${p.name}</h3>
+          <div class="sub">${p.description}</div>
+        </div>
+        ${statusBadge} ${depsBadge}
+      </div>`;
+
+    // Setup steps
+    html += `<details ${p.configured ? '' : 'open'} style="margin-bottom:12px"><summary style="cursor:pointer;color:var(--accent2);font-size:0.82em;font-weight:500">📋 Setup-Anleitung</summary><ol style="margin:8px 0 0 16px;color:var(--fg2);font-size:0.82em;line-height:1.6">`;
+    for (const step of p.setupSteps) {
+      html += `<li>${step}</li>`;
+    }
+    if (p.setupUrl) html += `<li><a href="${p.setupUrl}" target="_blank" style="color:var(--accent2)">${p.setupUrl}</a></li>`;
+    html += `</ol></details>`;
+
+    // Env var inputs
+    html += `<div style="display:flex;flex-direction:column;gap:8px;margin-bottom:8px">`;
+    for (const v of p.envVars) {
+      if (v.type === 'toggle') {
+        const checked = p.values[v.key] === 'true' ? 'checked' : '';
+        html += `<label style="display:flex;align-items:center;gap:8px;font-size:0.85em;cursor:pointer">
+          <input type="checkbox" id="pv-${p.id}-${v.key}" ${checked} style="width:18px;height:18px;accent-color:var(--accent)">
+          <span>${v.label}</span>
+        </label>`;
+      } else {
+        html += `<div style="display:flex;gap:8px;align-items:center">
+          <label style="font-size:0.78em;color:var(--fg2);min-width:120px">${v.label}</label>
+          <input type="${v.secret ? 'password' : 'text'}" id="pv-${p.id}-${v.key}" placeholder="${v.placeholder}" value="${p.values[v.key] || ''}" style="flex:1;background:var(--bg3);border:1px solid var(--bg3);border-radius:6px;padding:8px 12px;color:var(--fg);font:inherit;font-size:0.85em;font-family:monospace;outline:none">
+        </div>`;
+      }
+    }
+    html += `</div>`;
+
+    // Action buttons
+    html += `<div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn btn-sm" onclick="savePlatform('${p.id}')">💾 Speichern</button>`;
+    if (p.npmPackages && !p.depsInstalled) {
+      html += `<button class="btn btn-sm btn-outline" onclick="installPlatformDeps('${p.id}')">📦 Dependencies installieren</button>`;
+    }
+    if (p.configured) {
+      html += `<button class="btn btn-sm btn-outline" style="color:var(--red)" onclick="disablePlatform('${p.id}')">Deaktivieren</button>`;
+    }
+    html += `</div>
+      <div id="platform-result-${p.id}" style="font-size:0.78em;margin-top:6px"></div>
+    </div>`;
+  }
+
+  document.getElementById('platforms-setup').innerHTML = html;
+}
+
+async function savePlatform(platformId) {
+  const platform = document.querySelectorAll(`[id^="pv-${platformId}-"]`);
+  const values = {};
+  platform.forEach(el => {
+    const key = el.id.replace(`pv-${platformId}-`, '');
+    values[key] = el.type === 'checkbox' ? (el.checked ? 'true' : '') : el.value.trim();
+  });
+  const res = await fetch(API + '/api/platforms/configure', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ platformId, values }),
+  });
+  const data = await res.json();
+  const resultDiv = document.getElementById('platform-result-' + platformId);
+  if (data.ok) {
+    toast('✅ Gespeichert! Neustart nötig.');
+    resultDiv.innerHTML = '<span style="color:var(--green)">✅ Gespeichert. Bitte Bot neustarten.</span>';
+  } else {
+    toast(data.error, 'error');
+    resultDiv.innerHTML = `<span style="color:var(--red)">❌ ${data.error}</span>`;
+  }
+}
+
+async function installPlatformDeps(platformId) {
+  toast('📦 Installiere Dependencies...');
+  const resultDiv = document.getElementById('platform-result-' + platformId);
+  resultDiv.innerHTML = '<span style="color:var(--fg2)">⏳ Installiere...</span>';
+  const res = await fetch(API + '/api/platforms/install-deps', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ platformId }),
+  });
+  const data = await res.json();
+  if (data.ok) {
+    toast('✅ Dependencies installiert!');
+    resultDiv.innerHTML = '<span style="color:var(--green)">✅ Installiert!</span>';
+    loadPlatforms(); // Refresh
+  } else {
+    toast('Fehler: ' + data.error, 'error');
+    resultDiv.innerHTML = `<span style="color:var(--red)">❌ ${data.error}</span>`;
+  }
+}
+
+async function disablePlatform(platformId) {
+  if (!confirm(`${platformId} wirklich deaktivieren?`)) return;
+  // Clear all env vars for this platform
+  const inputs = document.querySelectorAll(`[id^="pv-${platformId}-"]`);
+  const values = {};
+  inputs.forEach(el => {
+    const key = el.id.replace(`pv-${platformId}-`, '');
+    values[key] = '';
+  });
+  await fetch(API + '/api/platforms/configure', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ platformId, values }),
+  });
+  toast('Plattform deaktiviert. Neustart nötig.');
+  loadPlatforms();
 }
 
 // ── Personality (SOUL.md) ───────────────────────────────
