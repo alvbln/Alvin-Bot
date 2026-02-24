@@ -23,11 +23,12 @@ import { getLoadedPlugins } from "../services/plugins.js";
 import { getMCPStatus } from "../services/mcp.js";
 import { listProfiles } from "../services/users.js";
 import { listCustomTools } from "../services/custom-tools.js";
-import { buildSystemPrompt } from "../services/personality.js";
+import { buildSystemPrompt, reloadSoul, getSoulContent } from "../services/personality.js";
 import { config } from "../config.js";
 import type { QueryOptions, StreamChunk } from "../providers/types.js";
 
 const BOT_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
+const ENV_FILE = resolve(BOT_ROOT, ".env");
 const PUBLIC_DIR = resolve(BOT_ROOT, "web", "public");
 const DOCS_DIR = resolve(BOT_ROOT, "docs");
 const MEMORY_DIR = resolve(DOCS_DIR, "memory");
@@ -369,6 +370,119 @@ function handleAPI(req: http.IncomingMessage, res: http.ServerResponse, urlPath:
       const error = err as { stderr?: Buffer; message: string };
       const stderr = error.stderr?.toString()?.trim() || "";
       res.end(JSON.stringify({ output: stderr || error.message, exitCode: 1 }));
+    }
+    return;
+  }
+
+  // GET /api/env — read .env keys (names only, values masked)
+  if (urlPath === "/api/env") {
+    try {
+      const envContent = fs.existsSync(ENV_FILE) ? fs.readFileSync(ENV_FILE, "utf-8") : "";
+      const lines = envContent.split("\n").filter(l => l.includes("=") && !l.startsWith("#"));
+      const vars = lines.map(l => {
+        const [key, ...rest] = l.split("=");
+        const value = rest.join("=").trim();
+        // Mask sensitive values
+        const masked = key.includes("KEY") || key.includes("TOKEN") || key.includes("PASSWORD") || key.includes("SECRET")
+          ? (value.length > 4 ? value.slice(0, 4) + "..." + value.slice(-4) : "****")
+          : value;
+        return { key: key.trim(), value: masked, hasValue: value.length > 0 };
+      });
+      res.end(JSON.stringify({ vars }));
+    } catch {
+      res.end(JSON.stringify({ vars: [] }));
+    }
+    return;
+  }
+
+  // POST /api/env/set — update an env var
+  if (urlPath === "/api/env/set" && req.method === "POST") {
+    try {
+      const { key, value } = JSON.parse(body);
+      if (!key || typeof key !== "string" || !key.match(/^[A-Z_][A-Z0-9_]*$/)) {
+        res.statusCode = 400;
+        res.end(JSON.stringify({ error: "Invalid key name" }));
+        return;
+      }
+
+      let envContent = fs.existsSync(ENV_FILE) ? fs.readFileSync(ENV_FILE, "utf-8") : "";
+      const regex = new RegExp(`^${key}=.*$`, "m");
+      if (regex.test(envContent)) {
+        envContent = envContent.replace(regex, `${key}=${value}`);
+      } else {
+        envContent = envContent.trimEnd() + `\n${key}=${value}\n`;
+      }
+      fs.writeFileSync(ENV_FILE, envContent);
+      res.end(JSON.stringify({ ok: true, note: "Restart required for changes to take effect" }));
+    } catch {
+      res.statusCode = 400;
+      res.end(JSON.stringify({ error: "Invalid request" }));
+    }
+    return;
+  }
+
+  // GET /api/soul — read SOUL.md
+  if (urlPath === "/api/soul") {
+    const content = getSoulContent();
+    res.end(JSON.stringify({ content }));
+    return;
+  }
+
+  // POST /api/soul/save — update SOUL.md
+  if (urlPath === "/api/soul/save" && req.method === "POST") {
+    try {
+      const { content } = JSON.parse(body);
+      const soulPath = resolve(BOT_ROOT, "SOUL.md");
+      fs.writeFileSync(soulPath, content);
+      reloadSoul();
+      res.end(JSON.stringify({ ok: true }));
+    } catch {
+      res.statusCode = 400;
+      res.end(JSON.stringify({ error: "Invalid request" }));
+    }
+    return;
+  }
+
+  // GET /api/platforms — platform adapter status
+  if (urlPath === "/api/platforms") {
+    const platforms = [
+      { name: "Telegram", key: "BOT_TOKEN", icon: "📱", configured: !!process.env.BOT_TOKEN },
+      { name: "Discord", key: "DISCORD_TOKEN", icon: "🎮", configured: !!process.env.DISCORD_TOKEN },
+      { name: "WhatsApp", key: "WHATSAPP_ENABLED", icon: "💬", configured: process.env.WHATSAPP_ENABLED === "true" },
+      { name: "Signal", key: "SIGNAL_API_URL", icon: "🔒", configured: !!process.env.SIGNAL_API_URL },
+      { name: "Web UI", key: "WEB_PORT", icon: "🌐", configured: true },
+    ];
+    res.end(JSON.stringify({ platforms }));
+    return;
+  }
+
+  // POST /api/restart — restart the bot process
+  if (urlPath === "/api/restart" && req.method === "POST") {
+    res.end(JSON.stringify({ ok: true, note: "Restarting..." }));
+    setTimeout(() => process.exit(0), 500); // PM2 will auto-restart
+    return;
+  }
+
+  // POST /api/chat/export — export chat history
+  if (urlPath === "/api/chat/export" && req.method === "POST") {
+    try {
+      const { messages, format } = JSON.parse(body);
+      if (format === "json") {
+        res.setHeader("Content-Type", "application/json");
+        res.end(JSON.stringify({ export: messages }, null, 2));
+      } else {
+        // Markdown
+        const md = messages.map((m: { role: string; text: string; time?: string }) => {
+          const prefix = m.role === "user" ? "**Du:**" : m.role === "assistant" ? "**Mr. Levin:**" : "*System:*";
+          const time = m.time ? ` _(${m.time})_` : "";
+          return `${prefix}${time}\n${m.text}\n`;
+        }).join("\n---\n\n");
+        res.setHeader("Content-Type", "text/markdown");
+        res.end(`# Chat Export — Mr. Levin\n_${new Date().toLocaleString("de-DE")}_\n\n---\n\n${md}`);
+      }
+    } catch {
+      res.statusCode = 400;
+      res.end(JSON.stringify({ error: "Invalid request" }));
     }
     return;
   }
