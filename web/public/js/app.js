@@ -8,6 +8,32 @@ let currentAssistantMsg = null;
 let chatMessages = []; // For export
 let isTyping = false;
 let notifySound = true;
+const CHAT_STORAGE_KEY = 'mrlevin_chat_history';
+
+// ── Chat Persistence ────────────────────────────────────
+function saveChatToStorage() {
+  try {
+    localStorage.setItem(CHAT_STORAGE_KEY, JSON.stringify(chatMessages));
+  } catch { /* quota exceeded — ignore */ }
+}
+
+function restoreChatFromStorage() {
+  try {
+    const stored = localStorage.getItem(CHAT_STORAGE_KEY);
+    if (!stored) return;
+    const messages = JSON.parse(stored);
+    if (!Array.isArray(messages) || messages.length === 0) return;
+    chatMessages = messages;
+    // Rebuild DOM
+    for (const msg of messages) {
+      addMessage(msg.role, msg.text, msg.time, true /* skipSave */);
+    }
+  } catch { /* corrupted — ignore */ }
+}
+
+function clearChatStorage() {
+  localStorage.removeItem(CHAT_STORAGE_KEY);
+}
 
 // ── Toast Notifications ─────────────────────────────────
 function toast(message, type = 'success') {
@@ -73,6 +99,7 @@ function handleWSMessage(msg) {
       }
       if (currentAssistantMsg) {
         chatMessages.push({ role: 'assistant', text: currentAssistantMsg.querySelector('.msg-text').textContent, time: timeStr() });
+        saveChatToStorage();
       }
       currentAssistantMsg = null;
       document.getElementById('send-btn').disabled = false;
@@ -92,6 +119,7 @@ function handleWSMessage(msg) {
       document.getElementById('messages').innerHTML = '';
       addMessage('system', 'Session zurückgesetzt.');
       chatMessages = [];
+      clearChatStorage();
       break;
   }
 }
@@ -129,7 +157,7 @@ function timeStr() {
 }
 
 // ── Chat ────────────────────────────────────────────────
-function addMessage(role, text) {
+function addMessage(role, text, customTime, skipSave) {
   const el = document.createElement('div');
   el.className = 'msg ' + role;
   const textEl = document.createElement('span');
@@ -144,13 +172,13 @@ function addMessage(role, text) {
   if (role !== 'system') {
     const time = document.createElement('span');
     time.className = 'time';
-    time.textContent = timeStr();
+    time.textContent = customTime || timeStr();
     el.appendChild(time);
   }
 
   const container = document.getElementById('messages');
   container.insertBefore(el, document.getElementById('typing-indicator'));
-  scrollToBottom();
+  if (!skipSave) scrollToBottom();
   return el;
 }
 
@@ -167,8 +195,10 @@ function sendMessage() {
   const model = document.getElementById('chat-model')?.value;
   const effort = document.getElementById('chat-effort')?.value;
 
-  addMessage('user', text);
-  chatMessages.push({ role: 'user', text, time: timeStr() });
+  const t = timeStr();
+  addMessage('user', text, t);
+  chatMessages.push({ role: 'user', text, time: t });
+  saveChatToStorage();
   ws.send(JSON.stringify({ type: 'chat', text, effort }));
   input.value = '';
   input.style.height = 'auto';
@@ -181,6 +211,8 @@ function resetChat() {
   if (ws && ws.readyState === 1) {
     ws.send(JSON.stringify({ type: 'reset' }));
   }
+  chatMessages = [];
+  clearChatStorage();
 }
 
 function exportChat(format = 'markdown') {
@@ -634,6 +666,8 @@ function toggleTheme() {
 if (localStorage.getItem('theme') === 'light') document.documentElement.setAttribute('data-theme', 'light');
 
 // ── Init ────────────────────────────────────────────────
+restoreChatFromStorage();
+if (chatMessages.length > 0) scrollToBottom();
 connectWS();
 loadDashboard();
 loadModels(); // Populate chat model selector
