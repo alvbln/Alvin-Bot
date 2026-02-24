@@ -29,11 +29,16 @@ export function registerCommands(bot: Bot): void {
       `/effort — Denktiefe einstellen\n` +
       `/voice — Sprachantworten an/aus\n` +
       `/dir <pfad> — Arbeitsverzeichnis\n\n` +
+      `🎨 *Extras*\n` +
+      `/imagine <prompt> — Bild generieren\n` +
+      `/remind <zeit> <text> — Erinnerung setzen\n` +
+      `/export — Gesprächsverlauf exportieren\n\n` +
       `📊 *Session*\n` +
       `/status — Aktueller Status\n` +
       `/new — Neue Session starten\n` +
       `/cancel — Laufende Anfrage abbrechen\n\n` +
-      `_Tipp: Schick mir Dokumente (PDF, Excel, Word) — ich kann sie lesen._`,
+      `_Tipp: Schick mir Dokumente, Fotos oder Sprachnachrichten!_\n` +
+      `_In Gruppen: @mention oder auf meine Nachricht antworten._`,
       { parse_mode: "Markdown" }
     );
   });
@@ -49,6 +54,7 @@ export function registerCommands(bot: Bot): void {
     { command: "dir", description: "Arbeitsverzeichnis wechseln" },
     { command: "imagine", description: "Bild generieren (z.B. /imagine Ein Fuchs)" },
     { command: "remind", description: "Erinnerung setzen (z.B. /remind 30m Text)" },
+    { command: "export", description: "Gesprächsverlauf exportieren" },
     { command: "cancel", description: "Laufende Anfrage abbrechen" },
   ]).catch(err => console.error("Failed to set bot commands:", err));
 
@@ -346,6 +352,42 @@ export function registerCommands(bot: Bot): void {
     const timeStr = triggerDate.toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" });
 
     await ctx.reply(`✅ Erinnerung gesetzt für *${timeStr}*: ${text}`, { parse_mode: "Markdown" });
+  });
+
+  bot.command("export", async (ctx) => {
+    const userId = ctx.from!.id;
+    const session = getSession(userId);
+
+    if (session.history.length === 0 && !session.sessionId) {
+      await ctx.reply("Keine Gesprächsdaten zum Exportieren.");
+      return;
+    }
+
+    // Build export text
+    const lines: string[] = [
+      `# Mr. Levin — Gesprächsexport`,
+      `Datum: ${new Date().toLocaleString("de-DE")}`,
+      `Nachrichten: ${session.messageCount}`,
+      `Kosten: $${session.totalCost.toFixed(4)}`,
+      `---\n`,
+    ];
+
+    for (const msg of session.history) {
+      const role = msg.role === "user" ? "👤 User" : "🤖 Mr. Levin";
+      lines.push(`### ${role}\n${msg.content}\n`);
+    }
+
+    if (session.history.length === 0) {
+      lines.push("(SDK-Session — Verlauf wird intern verwaltet, kein Export möglich)\n");
+    }
+
+    const exportText = lines.join("\n");
+    const buffer = Buffer.from(exportText, "utf-8");
+    const filename = `chat-export-${new Date().toISOString().slice(0, 10)}.md`;
+
+    await ctx.replyWithDocument(new InputFile(buffer, filename), {
+      caption: `📄 Export: ${session.history.length} Nachrichten`,
+    });
   });
 
   bot.command("reload", async (ctx) => {

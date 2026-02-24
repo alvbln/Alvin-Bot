@@ -173,7 +173,7 @@ Mr. Levin aims to become a **fully-featured, human-feeling AI assistant** that a
 - [x] **Inline keyboards** — Interactive buttons for /model and /effort selection
 - [x] **Reactions** — React to messages with emoji (🤔 thinking, 🎧 listening, 👀 looking, 👍 done, 👎 error)
 - [x] **Scheduled messages** — `/remind 30m Text` with list, cancel, auto-fire
-- [ ] **Group chat support** — Participate in group chats intelligently (speak when relevant, stay quiet when not)
+- [x] **Group chat support** — Responds to @mentions and replies in groups, stays quiet otherwise
 
 ### 🔌 Phase 4: Plugin & Tool Ecosystem
 
