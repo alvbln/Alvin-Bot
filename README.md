@@ -171,10 +171,10 @@ Mr. Levin aims to become a **fully-featured, human-feeling AI assistant** that a
 
 **Goal:** Make Mr. Levin truly remember and grow.
 
-- [ ] **Vector-based memory search** — Semantic recall instead of just reading files
+- [x] **Vector-based memory search** — Semantic recall via Google Embeddings (text-embedding-004), cosine similarity, `/recall` + `/remember` + `/reindex`
 - [x] **Automatic memory consolidation** — Session summaries auto-written to daily logs on `/new`
 - [x] **Personality profiles** — Customizable personality via SOUL.md + `/reload` hot-reload
-- [ ] **User profiles** — Multi-user support with separate memory per user
+- [x] **User profiles** — Multi-user support with per-user settings, `/users`, `/note`, auto-tracking
 - [x] **Conversation summaries** — Session stats shown on `/new` reset
 
 ### 🛠️ Phase 3: Rich Interactions
@@ -195,14 +195,15 @@ Mr. Levin aims to become a **fully-featured, human-feeling AI assistant** that a
 
 **Goal:** Extensible capabilities without core changes.
 
-- [ ] **Plugin system** — Drop-in skills (like OpenClaw skills)
-- [ ] **MCP (Model Context Protocol) support** — Connect to any MCP-compatible tool server
-- [ ] **Built-in tools:**
+- [x] **Plugin system** — Drop-in `plugins/` directory, auto-loading, commands + tools + message hooks + lifecycle
+- [x] **MCP (Model Context Protocol) support** — stdio transport, `/mcp` status + tool calling, `docs/mcp.json` config
+- [x] **Built-in plugins:**
+  - 🌤️ Weather (wttr.in, `/weather` command + AI tool)
+- [ ] **More built-in plugins:**
   - 📧 Email (read/send via IMAP/SMTP)
   - 📅 Calendar (Google Calendar, Apple Calendar)
   - 🏠 Smart Home (Hue, Sonos, HomeKit)
   - 💹 Finance (stock prices, portfolio tracking)
-  - 🌤️ Weather
   - 📝 Notes (Apple Notes, Obsidian)
 - [ ] **Custom tool registration** — Users define their own tools via config
 
