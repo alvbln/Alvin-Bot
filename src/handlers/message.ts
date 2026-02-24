@@ -7,6 +7,7 @@ import { getRegistry } from "../engine.js";
 import { textToSpeech } from "../services/voice.js";
 import type { QueryOptions } from "../providers/types.js";
 import { buildSystemPrompt } from "../services/personality.js";
+import { isForwardingAllowed } from "../services/access.js";
 
 /** React to a message with an emoji. Silently fails if reactions aren't supported. */
 async function react(ctx: Context, emoji: string): Promise<void> {
@@ -24,10 +25,14 @@ export async function handleMessage(ctx: Context): Promise<void> {
   // Build prompt with context
   let text = rawText;
 
-  // Forwarded message — add forward context
+  // Forwarded message — add forward context (if allowed)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const msgAny = ctx.message as any;
   if (msgAny?.forward_origin || msgAny?.forward_date) {
+    if (!isForwardingAllowed()) {
+      await ctx.reply("⚠️ Weitergeleitete Nachrichten sind deaktiviert. Aktiviere mit `/security forwards on`", { parse_mode: "Markdown" });
+      return;
+    }
     const forwardFrom = msgAny.forward_sender_name || "unbekannt";
     text = `[Weitergeleitete Nachricht von ${forwardFrom}]\n\n${rawText}`;
   }

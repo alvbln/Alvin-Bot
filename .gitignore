@@ -7,3 +7,6 @@ dist/
 docs/memory/*.md
 docs/MEMORY.md
 !docs/memory/.gitkeep
+
+# Access control data (contains group IDs, approvals)
+data/

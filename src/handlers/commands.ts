@@ -8,6 +8,10 @@ import { getRegistry } from "../engine.js";
 import { reloadSoul } from "../services/personality.js";
 import { parseDuration, createReminder, listReminders, cancelReminder } from "../services/reminders.js";
 import { writeSessionSummary, getMemoryStats } from "../services/memory.js";
+import {
+  approveGroup, blockGroup, removeGroup, listGroups,
+  getSettings, setForwardingAllowed, setAutoApprove,
+} from "../services/access.js";
 import { generateImage } from "../services/imagegen.js";
 import { config } from "../config.js";
 
@@ -600,6 +604,91 @@ export function registerCommands(bot: Bot): void {
   bot.command("reload", async (ctx) => {
     const success = reloadSoul();
     await ctx.reply(success ? "✅ SOUL.md neu geladen." : "❌ SOUL.md nicht gefunden.");
+  });
+
+  // ── Access Control ────────────────────────────────
+
+  // Callback for group approval/block
+  bot.callbackQuery(/^access:(approve|block):(-?\d+)$/, async (ctx) => {
+    const action = ctx.match![1];
+    const chatId = parseInt(ctx.match![2]);
+
+    if (action === "approve") {
+      approveGroup(chatId);
+      await ctx.editMessageText(`✅ Gruppe ${chatId} genehmigt. Mr. Levin antwortet jetzt dort.`);
+      // Notify the group
+      try {
+        await ctx.api.sendMessage(chatId, "👋 Mr. Levin ist jetzt aktiv in dieser Gruppe!\n\nMentioned mich mit @-mention oder antwortet auf meine Nachrichten.");
+      } catch { /* group might not allow bot messages yet */ }
+    } else {
+      blockGroup(chatId);
+      await ctx.editMessageText(`🚫 Gruppe ${chatId} blockiert. Mr. Levin ignoriert diese Gruppe.`);
+    }
+    await ctx.answerCallbackQuery();
+  });
+
+  bot.command("groups", async (ctx) => {
+    const groups = listGroups();
+
+    if (groups.length === 0) {
+      await ctx.reply("Keine Gruppen registriert.");
+      return;
+    }
+
+    const lines = groups.map(g => {
+      const status = g.status === "approved" ? "✅" : g.status === "blocked" ? "🚫" : "⏳";
+      return `${status} *${g.title}* (${g.messageCount} msgs)\n   ID: \`${g.chatId}\``;
+    });
+
+    const keyboard = new InlineKeyboard();
+    for (const g of groups) {
+      if (g.status === "approved") {
+        keyboard.text(`🚫 Block: ${g.title.slice(0, 20)}`, `access:block:${g.chatId}`).row();
+      } else if (g.status === "blocked" || g.status === "pending") {
+        keyboard.text(`✅ Approve: ${g.title.slice(0, 20)}`, `access:approve:${g.chatId}`).row();
+      }
+    }
+
+    const settings = getSettings();
+    await ctx.reply(
+      `🔐 *Gruppen-Verwaltung*\n\n` +
+      `${lines.join("\n\n")}\n\n` +
+      `⚙️ *Settings:*\n` +
+      `Forwards: ${settings.allowForwards ? "✅" : "❌"}\n` +
+      `Auto-Approve: ${settings.autoApproveGroups ? "⚠️ AN" : "✅ AUS"}`,
+      { parse_mode: "Markdown", reply_markup: keyboard }
+    );
+  });
+
+  bot.command("security", async (ctx) => {
+    const arg = ctx.match?.trim().toLowerCase();
+    const settings = getSettings();
+
+    if (!arg) {
+      await ctx.reply(
+        `🔐 *Sicherheitseinstellungen*\n\n` +
+        `*Forwards:* ${settings.allowForwards ? "✅ erlaubt" : "❌ blockiert"}\n` +
+        `*Auto-Approve Gruppen:* ${settings.autoApproveGroups ? "⚠️ AN (gefährlich!)" : "✅ AUS"}\n` +
+        `*Gruppen-Rate-Limit:* ${settings.groupRateLimitPerHour}/h\n\n` +
+        `Ändern:\n` +
+        `\`/security forwards on|off\`\n` +
+        `\`/security autoapprove on|off\``,
+        { parse_mode: "Markdown" }
+      );
+      return;
+    }
+
+    if (arg.startsWith("forwards ")) {
+      const val = arg.slice(9).trim();
+      setForwardingAllowed(val === "on" || val === "true");
+      await ctx.reply(`✅ Forwards: ${val === "on" || val === "true" ? "erlaubt" : "blockiert"}`);
+    } else if (arg.startsWith("autoapprove ")) {
+      const val = arg.slice(12).trim();
+      setAutoApprove(val === "on" || val === "true");
+      await ctx.reply(`${val === "on" || val === "true" ? "⚠️" : "✅"} Auto-Approve: ${val === "on" || val === "true" ? "AN" : "AUS"}`);
+    } else {
+      await ctx.reply("Unbekannt. Nutze `/security` für Optionen.", { parse_mode: "Markdown" });
+    }
   });
 
   bot.command("cancel", async (ctx) => {
