@@ -2,3 +2,8 @@ node_modules/
 dist/
 .env
 *.js.map
+
+# Memory (persönliche Session-Daten)
+docs/memory/*.md
+docs/MEMORY.md
+!docs/memory/.gitkeep

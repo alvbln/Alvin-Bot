@@ -1,6 +1,22 @@
 import { query, type SDKMessage, type SDKAssistantMessage, type SDKResultMessage, type SDKSystemMessage } from "@anthropic-ai/claude-agent-sdk";
+import { readFileSync } from "fs";
+import { resolve, dirname } from "path";
+import { fileURLToPath } from "url";
 
 import type { EffortLevel } from "./services/session.js";
+
+// Bot project root (one level up from src/)
+const BOT_PROJECT_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+
+// Load bot's CLAUDE.md at startup — personality, rules, memory instructions
+let botClaudeMd = "";
+try {
+  botClaudeMd = readFileSync(resolve(BOT_PROJECT_ROOT, "CLAUDE.md"), "utf-8");
+  // Replace relative docs/ paths with absolute paths so memory works from any CWD
+  botClaudeMd = botClaudeMd.replaceAll("docs/", `${BOT_PROJECT_ROOT}/docs/`);
+} catch {
+  // CLAUDE.md not found — continue without bot-specific instructions
+}
 
 export interface ClaudeQueryOptions {
   prompt: string;
@@ -28,6 +44,7 @@ export async function runClaudeAgent(opts: ClaudeQueryOptions): Promise<void> {
       permissionMode: "bypassPermissions",
       allowDangerouslySkipPermissions: true,
       env: cleanEnv,
+      settingSources: ["user", "project"],
       allowedTools: [
         "Read", "Write", "Edit", "Bash", "Glob", "Grep",
         "WebSearch", "WebFetch", "Task",
@@ -36,7 +53,9 @@ export async function runClaudeAgent(opts: ClaudeQueryOptions): Promise<void> {
 Halte Antworten kurz und prägnant, aber gründlich.
 Nutze Markdown-Formatierung kompatibel mit Telegram (fett, kursiv, Code-Blöcke).
 Wenn du Commands ausführst oder Dateien bearbeitest, erkläre kurz was du getan hast.
-Antworte auf Deutsch, es sei denn der User schreibt auf Englisch.`,
+Antworte auf Deutsch, es sei denn der User schreibt auf Englisch.
+
+${botClaudeMd}`,
       effort: opts.effort,
       maxTurns: 50,
     },
