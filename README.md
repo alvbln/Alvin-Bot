@@ -172,7 +172,7 @@ Mr. Levin aims to become a **fully-featured, human-feeling AI assistant** that a
 **Goal:** Make Mr. Levin truly remember and grow.
 
 - [ ] **Vector-based memory search** — Semantic recall instead of just reading files
-- [ ] **Automatic memory consolidation** — Periodically distill daily logs into long-term memory
+- [x] **Automatic memory consolidation** — Session summaries auto-written to daily logs on `/new`
 - [x] **Personality profiles** — Customizable personality via SOUL.md + `/reload` hot-reload
 - [ ] **User profiles** — Multi-user support with separate memory per user
 - [x] **Conversation summaries** — Session stats shown on `/new` reset

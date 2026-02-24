@@ -7,6 +7,7 @@ import { getSession, resetSession, type EffortLevel } from "../services/session.
 import { getRegistry } from "../engine.js";
 import { reloadSoul } from "../services/personality.js";
 import { parseDuration, createReminder, listReminders, cancelReminder } from "../services/reminders.js";
+import { writeSessionSummary, getMemoryStats } from "../services/memory.js";
 import { generateImage } from "../services/imagegen.js";
 import { config } from "../config.js";
 
@@ -102,13 +103,24 @@ export function registerCommands(bot: Bot): void {
     const msgCount = session.messageCount;
     const cost = session.totalCost;
 
+    // Write session summary to daily log before reset
+    if (hadSession && msgCount > 0) {
+      const registry = getRegistry();
+      writeSessionSummary({
+        messageCount: msgCount,
+        toolUseCount: session.toolUseCount,
+        costUsd: cost,
+        provider: registry.getActiveKey(),
+      });
+    }
+
     resetSession(userId);
 
     if (hadSession) {
       await ctx.reply(
         `🔄 *Neue Session gestartet.*\n\n` +
         `Vorherige Session: ${msgCount} Nachrichten, $${cost.toFixed(4)} Kosten.\n` +
-        `Kontext wurde zurückgesetzt.`,
+        `Zusammenfassung in Memory gespeichert.`,
         { parse_mode: "Markdown" }
       );
     } else {
@@ -175,7 +187,8 @@ export function registerCommands(bot: Bot): void {
       `*Tool-Calls:* ${session.toolUseCount}\n` +
       `*Kosten:* $${session.totalCost.toFixed(4)}\n` +
       (costLines ? `\n📈 *Provider-Nutzung:*\n${costLines}\n` : "") +
-      `\n⏱ *Bot-Uptime:* ${uptimeH}h ${uptimeM}m`,
+      `\n🧠 *Memory:* ${(() => { const m = getMemoryStats(); return `${m.dailyLogs} Tage, ${m.todayEntries} Einträge heute, ${formatBytes(m.longTermSize)} LTM`; })()}\n` +
+      `⏱ *Bot-Uptime:* ${uptimeH}h ${uptimeM}m`,
       { parse_mode: "Markdown" }
     );
   });
@@ -490,6 +503,24 @@ export function registerCommands(bot: Bot): void {
     await ctx.replyWithDocument(new InputFile(buffer, filename), {
       caption: `📄 Export: ${session.history.length} Nachrichten`,
     });
+  });
+
+  bot.command("memory", async (ctx) => {
+    const stats = getMemoryStats();
+    const arg = ctx.match?.trim();
+
+    if (!arg) {
+      await ctx.reply(
+        `🧠 *Memory*\n\n` +
+        `*Langzeitgedächtnis:* ${formatBytes(stats.longTermSize)}\n` +
+        `*Tägliche Logs:* ${stats.dailyLogs} Dateien\n` +
+        `*Heute:* ${stats.todayEntries} Einträge\n\n` +
+        `_Memory wird automatisch geschrieben bei /new._\n` +
+        `_Non-SDK Provider laden Memory als Kontext._`,
+        { parse_mode: "Markdown" }
+      );
+      return;
+    }
   });
 
   bot.command("system", async (ctx) => {

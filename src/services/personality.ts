@@ -8,6 +8,7 @@
 import { readFileSync } from "fs";
 import { resolve, dirname } from "path";
 import { fileURLToPath } from "url";
+import { buildMemoryContext } from "./memory.js";
 
 const BOT_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 
@@ -38,6 +39,15 @@ export function buildSystemPrompt(isSDK: boolean): string {
 
   if (isSDK) {
     parts.push(SDK_ADDON);
+  }
+
+  // Non-SDK providers get memory injected into system prompt
+  // (SDK provider reads memory files directly via tools)
+  if (!isSDK) {
+    const memoryCtx = buildMemoryContext();
+    if (memoryCtx) {
+      parts.push(memoryCtx);
+    }
   }
 
   return parts.join("\n\n");
