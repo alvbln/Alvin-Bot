@@ -183,6 +183,39 @@ async function doctor() {
   console.log("");
 }
 
+async function update() {
+  console.log("🔄 Updating Mr. Levin...\n");
+
+  try {
+    // Check if we're in a git repo
+    const isGit = existsSync(resolve(process.cwd(), ".git"));
+
+    if (isGit) {
+      console.log("  📥 Pulling latest changes...");
+      execSync("git pull", { stdio: "inherit" });
+      console.log("\n  📦 Installing dependencies...");
+      execSync("npm install", { stdio: "inherit" });
+      console.log("\n  🔨 Building...");
+      execSync("npm run build", { stdio: "inherit" });
+
+      console.log("\n  ✅ Update complete!");
+      console.log("  Restart with: pm2 restart alvin-bot");
+    } else {
+      // npm global install
+      console.log("  📦 Updating via npm...");
+      execSync("npm update mr-levin", { stdio: "inherit" });
+      console.log("\n  ✅ Update complete!");
+    }
+  } catch (err) {
+    console.error(`\n  ❌ Update failed: ${err.message}`);
+  }
+}
+
+async function version() {
+  const pkg = JSON.parse(readFileSync(resolve(import.meta.dirname || ".", "../package.json"), "utf-8"));
+  console.log(`Mr. Levin v${pkg.version}`);
+}
+
 // CLI routing
 const cmd = process.argv[2];
 switch (cmd) {
@@ -192,8 +225,16 @@ switch (cmd) {
   case "doctor":
     doctor().catch(console.error);
     break;
+  case "update":
+    update().catch(console.error);
+    break;
   case "start":
     import("../dist/index.js");
+    break;
+  case "version":
+  case "--version":
+  case "-v":
+    version();
     break;
   default:
     console.log(`
@@ -202,6 +243,8 @@ switch (cmd) {
 Commands:
   npx mr-levin setup    Interactive setup wizard
   npx mr-levin doctor   Check configuration
+  npx mr-levin update   Pull latest & rebuild
   npx mr-levin start    Start the bot
+  npx mr-levin version  Show version
 `);
 }

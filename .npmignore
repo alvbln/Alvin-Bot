@@ -1,0 +1,14 @@
+# Source (dist/ is included)
+src/
+tsconfig.json
+
+# Dev files
+.env
+.git*
+docs/memory/*.md
+docs/MEMORY.md
+Dockerfile
+docker-compose.yml
+.dockerignore
+ecosystem.config.cjs
+telegram-agent-setup-prompt.md

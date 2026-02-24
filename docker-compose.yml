@@ -1,0 +1,21 @@
+# Mr. Levin — Docker Compose
+#
+# Usage:
+#   cp .env.example .env   # Edit with your tokens
+#   docker compose up -d   # Start in background
+#   docker compose logs -f  # View logs
+
+services:
+  mr-levin:
+    build: .
+    container_name: mr-levin
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      # Persist memory across restarts
+      - ./docs:/app/docs
+      # Custom personality (optional)
+      - ./SOUL.md:/app/SOUL.md:ro
+      - ./CLAUDE.md:/app/CLAUDE.md:ro
+    environment:
+      - NODE_ENV=production

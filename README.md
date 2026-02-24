@@ -81,22 +81,38 @@ alvin-bot/
 - A Telegram bot token (from [@BotFather](https://t.me/BotFather))
 - Your Telegram user ID (from [@userinfobot](https://t.me/userinfobot))
 
-### Install & Run
+### Option A: Quick Setup (Recommended)
 
 ```bash
-git clone https://github.com/alevbln/alvin-bot.git
+git clone https://github.com/alvbln/alvin-bot.git
+cd alvin-bot
+npm install
+node bin/cli.js setup   # Interactive wizard walks you through everything
+npm run dev             # Start in dev mode
+```
+
+### Option B: Docker
+
+```bash
+git clone https://github.com/alvbln/alvin-bot.git
+cd alvin-bot
+cp .env.example .env    # Edit with your tokens
+docker compose up -d    # Start in background
+docker compose logs -f  # View logs
+```
+
+### Option C: Manual
+
+```bash
+git clone https://github.com/alvbln/alvin-bot.git
 cd alvin-bot
 npm install
 cp .env.example .env
 # Edit .env with your tokens
 
-# Development
-npm run dev
-
-# Production
-npm run build
-pm2 start ecosystem.config.cjs
-pm2 save
+npm run dev             # Development (hot reload)
+npm run build && npm start  # Production
+pm2 start ecosystem.config.cjs  # Production with auto-restart
 ```
 
 ### Environment Variables
@@ -194,7 +210,7 @@ Mr. Levin aims to become a **fully-featured, human-feeling AI assistant** that a
 
 **Goal:** Anyone can set up Mr. Levin in 5 minutes.
 
-- [ ] **Interactive setup wizard** (`npx mr-levin setup`)
+- [x] **Interactive setup wizard** (`npx mr-levin setup`)
   - Step-by-step guide through:
     1. Create Telegram bot via BotFather
     2. Install & auth Claude CLI
@@ -204,9 +220,9 @@ Mr. Levin aims to become a **fully-featured, human-feeling AI assistant** that a
     6. Start bot & verify
   - Auto-detect OS (macOS/Linux/Windows WSL)
   - Auto-install dependencies
-- [ ] **Docker support** — `docker run mrlevin/bot` with env vars
-- [ ] **Update mechanism** — `mr-levin update` to pull latest version
-- [ ] **Health check** — `mr-levin doctor` to diagnose issues
+- [x] **Docker support** — `docker compose up -d` with Dockerfile + compose
+- [x] **Update mechanism** — `mr-levin update` pulls latest + rebuilds
+- [x] **Health check** — `mr-levin doctor` validates config, deps, and build
 - [ ] **Config file** — `mr-levin.config.json` for all settings (models, personality, tools, users)
 
 ### 🖥️ Phase 6: Local Web Interface

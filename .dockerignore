@@ -1,0 +1,10 @@
+node_modules
+dist
+.env
+.git
+*.md
+!CLAUDE.md
+!SOUL.md
+!README.md
+docs/memory/*.md
+docs/MEMORY.md
