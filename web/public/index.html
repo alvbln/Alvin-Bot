@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mr. Levin — Dashboard</title>
+<style>
+:root {
+  --bg: #0f0f0f; --bg2: #1a1a1a; --bg3: #242424;
+  --fg: #e0e0e0; --fg2: #888; --accent: #6c5ce7; --accent2: #a29bfe;
+  --green: #00b894; --red: #e17055; --yellow: #fdcb6e; --blue: #74b9ff;
+  --radius: 12px; --gap: 16px;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--bg); color: var(--fg); height: 100vh; display: flex; }
+
+/* Sidebar */
+.sidebar { width: 260px; background: var(--bg2); border-right: 1px solid var(--bg3); display: flex; flex-direction: column; flex-shrink: 0; }
+.sidebar-header { padding: 20px; border-bottom: 1px solid var(--bg3); }
+.sidebar-header h1 { font-size: 1.2em; display: flex; align-items: center; gap: 8px; }
+.sidebar-header h1 span { color: var(--accent2); }
+.sidebar-header .status { font-size: 0.75em; color: var(--fg2); margin-top: 4px; }
+.nav { flex: 1; padding: 12px; overflow-y: auto; }
+.nav-item { padding: 10px 14px; border-radius: 8px; cursor: pointer; display: flex; align-items: center; gap: 10px; color: var(--fg2); transition: all 0.15s; font-size: 0.9em; }
+.nav-item:hover { background: var(--bg3); color: var(--fg); }
+.nav-item.active { background: var(--accent); color: white; }
+
+/* Main */
+.main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+
+/* Top bar */
+.topbar { padding: 12px 20px; border-bottom: 1px solid var(--bg3); display: flex; align-items: center; justify-content: space-between; background: var(--bg2); }
+.topbar h2 { font-size: 1em; font-weight: 500; }
+.topbar .badge { font-size: 0.7em; padding: 3px 8px; border-radius: 20px; background: var(--bg3); color: var(--fg2); }
+
+/* Content area */
+.content { flex: 1; overflow-y: auto; padding: var(--gap); }
+
+/* Chat */
+.chat-container { display: flex; flex-direction: column; height: 100%; }
+.messages { flex: 1; overflow-y: auto; padding: var(--gap); display: flex; flex-direction: column; gap: 12px; }
+.msg { max-width: 80%; padding: 12px 16px; border-radius: var(--radius); line-height: 1.5; white-space: pre-wrap; word-break: break-word; font-size: 0.9em; }
+.msg.user { align-self: flex-end; background: var(--accent); color: white; border-bottom-right-radius: 4px; }
+.msg.assistant { align-self: flex-start; background: var(--bg3); border-bottom-left-radius: 4px; }
+.msg.system { align-self: center; background: transparent; color: var(--fg2); font-size: 0.8em; font-style: italic; }
+.msg.tool { align-self: flex-start; background: var(--bg2); border-left: 3px solid var(--yellow); font-family: monospace; font-size: 0.8em; }
+.msg code { background: rgba(0,0,0,0.3); padding: 2px 5px; border-radius: 4px; font-size: 0.85em; }
+.msg pre { background: rgba(0,0,0,0.3); padding: 10px; border-radius: 6px; overflow-x: auto; margin: 8px 0; }
+
+.input-area { padding: 12px var(--gap); border-top: 1px solid var(--bg3); background: var(--bg2); display: flex; gap: 8px; }
+.input-area textarea { flex: 1; background: var(--bg3); border: 1px solid transparent; border-radius: 8px; padding: 10px 14px; color: var(--fg); font: inherit; resize: none; outline: none; min-height: 44px; max-height: 120px; }
+.input-area textarea:focus { border-color: var(--accent); }
+.input-area button { background: var(--accent); color: white; border: none; border-radius: 8px; padding: 0 20px; cursor: pointer; font-weight: 500; transition: opacity 0.15s; }
+.input-area button:hover { opacity: 0.85; }
+.input-area button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* Cards */
+.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: var(--gap); }
+.card { background: var(--bg2); border-radius: var(--radius); padding: 20px; border: 1px solid var(--bg3); }
+.card h3 { font-size: 0.85em; color: var(--fg2); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 12px; }
+.card .value { font-size: 1.8em; font-weight: 600; }
+.card .sub { color: var(--fg2); font-size: 0.8em; margin-top: 4px; }
+
+/* Lists */
+.list-item { padding: 12px 16px; border-bottom: 1px solid var(--bg3); display: flex; align-items: center; gap: 12px; }
+.list-item:last-child { border-bottom: none; }
+.list-item .icon { font-size: 1.3em; }
+.list-item .info { flex: 1; }
+.list-item .info .name { font-weight: 500; }
+.list-item .info .desc { font-size: 0.8em; color: var(--fg2); }
+.list-item .badge { font-size: 0.7em; padding: 2px 8px; border-radius: 20px; }
+.badge-green { background: rgba(0,184,148,0.2); color: var(--green); }
+.badge-yellow { background: rgba(253,203,110,0.2); color: var(--yellow); }
+
+/* Memory editor */
+.editor { width: 100%; min-height: 400px; background: var(--bg3); border: 1px solid var(--bg3); border-radius: 8px; padding: 16px; color: var(--fg); font-family: 'SF Mono', Monaco, monospace; font-size: 0.85em; resize: vertical; outline: none; }
+.editor:focus { border-color: var(--accent); }
+.editor-toolbar { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+.editor-toolbar select, .editor-toolbar button { background: var(--bg3); color: var(--fg); border: 1px solid var(--bg3); border-radius: 6px; padding: 6px 12px; cursor: pointer; font-size: 0.85em; }
+.editor-toolbar button:hover { border-color: var(--accent); }
+.editor-toolbar .save-btn { background: var(--accent); border-color: var(--accent); color: white; }
+
+/* Responsive */
+@media (max-width: 768px) {
+  .sidebar { width: 60px; }
+  .sidebar .nav-item span, .sidebar-header h1 span, .sidebar-header .status { display: none; }
+  .sidebar-header h1 { justify-content: center; }
+  .cards { grid-template-columns: 1fr; }
+  .msg { max-width: 95%; }
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--bg3); border-radius: 3px; }
+</style>
+</head>
+<body>
+
+<div class="sidebar">
+  <div class="sidebar-header">
+    <h1>🤖 <span>Mr. Levin</span></h1>
+    <div class="status" id="bot-status">Connecting...</div>
+  </div>
+  <div class="nav">
+    <div class="nav-item active" data-page="chat">💬 <span>Chat</span></div>
+    <div class="nav-item" data-page="dashboard">📊 <span>Dashboard</span></div>
+    <div class="nav-item" data-page="memory">🧠 <span>Memory</span></div>
+    <div class="nav-item" data-page="models">🤖 <span>Models</span></div>
+    <div class="nav-item" data-page="plugins">🔌 <span>Plugins</span></div>
+    <div class="nav-item" data-page="users">👥 <span>Users</span></div>
+    <div class="nav-item" data-page="settings">⚙️ <span>Settings</span></div>
+  </div>
+</div>
+
+<div class="main">
+  <div class="topbar">
+    <h2 id="page-title">💬 Chat</h2>
+    <span class="badge" id="model-badge">loading...</span>
+  </div>
+
+  <!-- Chat Page -->
+  <div class="page chat-container" id="page-chat">
+    <div class="messages" id="messages">
+      <div class="msg system">Willkommen! Schreib etwas um zu beginnen.</div>
+    </div>
+    <div class="input-area">
+      <textarea id="chat-input" placeholder="Nachricht eingeben..." rows="1"></textarea>
+      <button id="send-btn" onclick="sendMessage()">Senden</button>
+    </div>
+  </div>
+
+  <!-- Dashboard Page -->
+  <div class="page content" id="page-dashboard" style="display:none">
+    <div class="cards" id="dashboard-cards"></div>
+  </div>
+
+  <!-- Memory Page -->
+  <div class="page content" id="page-memory" style="display:none">
+    <div class="editor-toolbar">
+      <select id="memory-file"></select>
+      <button onclick="loadMemoryFile()">Laden</button>
+      <button class="save-btn" onclick="saveMemoryFile()">💾 Speichern</button>
+    </div>
+    <textarea class="editor" id="memory-editor" placeholder="Datei auswählen..."></textarea>
+  </div>
+
+  <!-- Models Page -->
+  <div class="page content" id="page-models" style="display:none">
+    <div id="models-list"></div>
+  </div>
+
+  <!-- Plugins Page -->
+  <div class="page content" id="page-plugins" style="display:none">
+    <div id="plugins-list"></div>
+  </div>
+
+  <!-- Users Page -->
+  <div class="page content" id="page-users" style="display:none">
+    <div id="users-list"></div>
+  </div>
+
+  <!-- Settings Page -->
+  <div class="page content" id="page-settings" style="display:none">
+    <div class="card" style="max-width:500px">
+      <h3>Bot Configuration</h3>
+      <div id="settings-content"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const API = '';
+let ws = null;
+let currentAssistantMsg = null;
+
+// ── Navigation ──────────────────────────────────────────
+document.querySelectorAll('.nav-item').forEach(item => {
+  item.addEventListener('click', () => {
+    document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
+    item.classList.add('active');
+    const page = item.dataset.page;
+    document.querySelectorAll('.page').forEach(p => p.style.display = 'none');
+    document.getElementById('page-' + page).style.display = '';
+    document.getElementById('page-title').textContent = item.textContent.trim();
+    if (page === 'dashboard') loadDashboard();
+    if (page === 'memory') loadMemory();
+    if (page === 'models') loadModels();
+    if (page === 'plugins') loadPlugins();
+    if (page === 'users') loadUsers();
+    if (page === 'settings') loadSettings();
+  });
+});
+
+// ── WebSocket ───────────────────────────────────────────
+function connectWS() {
+  const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  ws = new WebSocket(`${proto}//${location.host}`);
+  ws.onopen = () => {
+    document.getElementById('bot-status').textContent = '🟢 Connected';
+  };
+  ws.onclose = () => {
+    document.getElementById('bot-status').textContent = '🔴 Disconnected';
+    setTimeout(connectWS, 3000);
+  };
+  ws.onmessage = (e) => {
+    const msg = JSON.parse(e.data);
+    handleWSMessage(msg);
+  };
+}
+
+function handleWSMessage(msg) {
+  switch (msg.type) {
+    case 'text':
+      if (!currentAssistantMsg) {
+        currentAssistantMsg = addMessage('assistant', '');
+      }
+      currentAssistantMsg.textContent = msg.text || '';
+      scrollToBottom();
+      break;
+    case 'tool':
+      addMessage('tool', `🔧 ${msg.name}`);
+      break;
+    case 'done':
+      if (msg.cost) {
+        const costEl = document.createElement('span');
+        costEl.style.cssText = 'font-size:0.7em;color:var(--fg2);display:block;margin-top:4px;';
+        costEl.textContent = `$${msg.cost.toFixed(4)}`;
+        if (currentAssistantMsg) currentAssistantMsg.appendChild(costEl);
+      }
+      currentAssistantMsg = null;
+      document.getElementById('send-btn').disabled = false;
+      break;
+    case 'error':
+      addMessage('system', `❌ ${msg.error}`);
+      currentAssistantMsg = null;
+      document.getElementById('send-btn').disabled = false;
+      break;
+    case 'fallback':
+      addMessage('system', `⚡ ${msg.from} → ${msg.to}`);
+      break;
+    case 'reset':
+      document.getElementById('messages').innerHTML = '<div class="msg system">Session zurückgesetzt.</div>';
+      break;
+  }
+}
+
+// ── Chat ────────────────────────────────────────────────
+function addMessage(role, text) {
+  const el = document.createElement('div');
+  el.className = 'msg ' + role;
+  el.textContent = text;
+  document.getElementById('messages').appendChild(el);
+  scrollToBottom();
+  return el;
+}
+
+function scrollToBottom() {
+  const msgs = document.getElementById('messages');
+  msgs.scrollTop = msgs.scrollHeight;
+}
+
+function sendMessage() {
+  const input = document.getElementById('chat-input');
+  const text = input.value.trim();
+  if (!text || !ws || ws.readyState !== 1) return;
+  addMessage('user', text);
+  ws.send(JSON.stringify({ type: 'chat', text }));
+  input.value = '';
+  input.style.height = 'auto';
+  document.getElementById('send-btn').disabled = true;
+}
+
+document.getElementById('chat-input').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    sendMessage();
+  }
+});
+
+// Auto-resize textarea
+document.getElementById('chat-input').addEventListener('input', function() {
+  this.style.height = 'auto';
+  this.style.height = Math.min(this.scrollHeight, 120) + 'px';
+});
+
+// ── Dashboard ───────────────────────────────────────────
+async function loadDashboard() {
+  const res = await fetch(API + '/api/status');
+  const data = await res.json();
+  const cards = document.getElementById('dashboard-cards');
+  cards.innerHTML = `
+    <div class="card"><h3>Model</h3><div class="value">${data.model.name}</div><div class="sub">${data.model.model}</div></div>
+    <div class="card"><h3>Uptime</h3><div class="value">${Math.floor(data.bot.uptime / 3600)}h ${Math.floor(data.bot.uptime % 3600 / 60)}m</div><div class="sub">v${data.bot.version}</div></div>
+    <div class="card"><h3>Memory</h3><div class="value">${data.memory.dailyLogs} Tage</div><div class="sub">${data.memory.vectors} Vektoren, ${data.memory.todayEntries} Einträge heute</div></div>
+    <div class="card"><h3>Plugins</h3><div class="value">${data.plugins}</div><div class="sub">geladen</div></div>
+    <div class="card"><h3>MCP Server</h3><div class="value">${data.mcp}</div><div class="sub">verbunden</div></div>
+    <div class="card"><h3>Users</h3><div class="value">${data.users}</div><div class="sub">Profile</div></div>
+  `;
+  document.getElementById('model-badge').textContent = data.model.name;
+}
+
+// ── Memory Editor ───────────────────────────────────────
+async function loadMemory() {
+  const res = await fetch(API + '/api/memory');
+  const data = await res.json();
+  const select = document.getElementById('memory-file');
+  select.innerHTML = '<option value="MEMORY.md">MEMORY.md (Langzeit)</option>';
+  data.dailyFiles.forEach(f => {
+    select.innerHTML += `<option value="${f}">${f}</option>`;
+  });
+  document.getElementById('memory-editor').value = data.longTermMemory;
+}
+
+async function loadMemoryFile() {
+  const file = document.getElementById('memory-file').value;
+  let content;
+  if (file === 'MEMORY.md') {
+    const res = await fetch(API + '/api/memory');
+    const data = await res.json();
+    content = data.longTermMemory;
+  } else {
+    const res = await fetch(API + '/api/memory/' + file);
+    const data = await res.json();
+    content = data.content;
+  }
+  document.getElementById('memory-editor').value = content || '';
+}
+
+async function saveMemoryFile() {
+  const file = document.getElementById('memory-file').value;
+  const content = document.getElementById('memory-editor').value;
+  const res = await fetch(API + '/api/memory/save', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ file, content }),
+  });
+  const data = await res.json();
+  alert(data.ok ? '✅ Gespeichert!' : '❌ ' + data.error);
+}
+
+// ── Models ──────────────────────────────────────────────
+async function loadModels() {
+  const res = await fetch(API + '/api/models');
+  const data = await res.json();
+  const list = document.getElementById('models-list');
+  list.innerHTML = data.models.map(m => `
+    <div class="list-item" onclick="switchModel('${m.key}')" style="cursor:pointer">
+      <div class="icon">${m.active ? '✅' : '⬜'}</div>
+      <div class="info">
+        <div class="name">${m.name}</div>
+        <div class="desc">${m.model} — ${m.status}</div>
+      </div>
+      ${m.active ? '<span class="badge badge-green">Active</span>' : ''}
+    </div>
+  `).join('');
+}
+
+async function switchModel(key) {
+  await fetch(API + '/api/models/switch', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ key }),
+  });
+  loadModels();
+  loadDashboard();
+}
+
+// ── Plugins ─────────────────────────────────────────────
+async function loadPlugins() {
+  const res = await fetch(API + '/api/plugins');
+  const data = await res.json();
+  const list = document.getElementById('plugins-list');
+  if (data.plugins.length === 0) {
+    list.innerHTML = '<div class="card"><h3>Keine Plugins</h3><p>Plugins in plugins/ ablegen.</p></div>';
+    return;
+  }
+  list.innerHTML = data.plugins.map(p => `
+    <div class="list-item">
+      <div class="icon">🔌</div>
+      <div class="info">
+        <div class="name">${p.name} v${p.version}</div>
+        <div class="desc">${p.description}${p.commands.length ? ' | ' + p.commands.join(', ') : ''}</div>
+      </div>
+    </div>
+  `).join('');
+}
+
+// ── Users ───────────────────────────────────────────────
+async function loadUsers() {
+  const res = await fetch(API + '/api/users');
+  const data = await res.json();
+  const list = document.getElementById('users-list');
+  if (data.users.length === 0) {
+    list.innerHTML = '<div class="card"><h3>Keine User</h3><p>User werden automatisch erfasst.</p></div>';
+    return;
+  }
+  list.innerHTML = data.users.map(u => `
+    <div class="list-item">
+      <div class="icon">${u.isOwner ? '👑' : '👤'}</div>
+      <div class="info">
+        <div class="name">${u.name}${u.username ? ' (@' + u.username + ')' : ''}</div>
+        <div class="desc">${u.totalMessages} Nachrichten | Zuletzt: ${new Date(u.lastActive).toLocaleDateString('de-DE')}</div>
+      </div>
+    </div>
+  `).join('');
+}
+
+// ── Settings ────────────────────────────────────────────
+async function loadSettings() {
+  const res = await fetch(API + '/api/config');
+  const data = await res.json();
+  const el = document.getElementById('settings-content');
+  const keys = Object.entries(data.hasKeys).map(([k, v]) => `<div>${v ? '✅' : '❌'} ${k.toUpperCase()}</div>`).join('');
+  el.innerHTML = `
+    <p style="margin-bottom:12px"><strong>Primary:</strong> ${data.primaryProvider}</p>
+    <p style="margin-bottom:12px"><strong>Fallbacks:</strong> ${data.providers.join(', ') || 'none'}</p>
+    <p style="margin-bottom:12px"><strong>Users:</strong> ${data.allowedUsers.join(', ')}</p>
+    <h3 style="margin:16px 0 8px">API Keys</h3>
+    ${keys}
+  `;
+}
+
+// ── Init ────────────────────────────────────────────────
+connectWS();
+loadDashboard();
+</script>
+</body>
+</html>

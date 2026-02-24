@@ -229,17 +229,17 @@ Mr. Levin aims to become a **fully-featured, human-feeling AI assistant** that a
 
 **Goal:** A beautiful, self-hosted dashboard to manage and chat with Mr. Levin.
 
-- [ ] **Real-time chat UI** — WebSocket-based, streaming responses just like Telegram
+- [x] **Real-time chat UI** — WebSocket-based, streaming responses, dark theme
 - [ ] **Session browser** — View, search, and continue past conversations
-- [ ] **Memory viewer/editor** — Browse and edit MEMORY.md + daily logs with a nice UI
-- [ ] **Settings panel** — Configure models, personality, tools, users — no config files needed
+- [x] **Memory viewer/editor** — Browse and edit MEMORY.md + daily logs, save from UI
+- [x] **Settings panel** — View config, API key status, provider setup
 - [ ] **File manager** — Upload, browse, and manage files the agent works with
-- [ ] **Activity feed** — Live view of what the agent is doing (tool calls, web browsing, file edits)
-- [ ] **Cost dashboard** — Track spending per model, per day, per session
+- [x] **Activity feed** — Tool use indicators, fallback notifications in chat
+- [x] **Cost dashboard** — Per-query cost tracking in chat, dashboard overview
 - [ ] **Terminal** — Embedded terminal to see agent's shell commands live
-- [ ] **Mobile-responsive** — Works on phone browsers too
-- [ ] **Auth** — Local login with password (no cloud auth needed)
-- [ ] **Tech:** React/Next.js or Svelte + WebSocket server + SQLite for history
+- [x] **Mobile-responsive** — Collapsible sidebar, touch-friendly on phones
+- [x] **Auth** — Password-protected login page (WEB_PASSWORD env var)
+- [x] **Tech:** Vanilla HTML/CSS/JS (zero build step) + Node.js http + WebSocket (ws)
 
 ### 🌐 Phase 7: Multi-Platform
 

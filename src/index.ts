@@ -10,6 +10,7 @@ import { handleVideo } from "./handlers/video.js";
 import { initEngine } from "./engine.js";
 import { loadPlugins, registerPluginCommands, unloadPlugins } from "./services/plugins.js";
 import { initMCP, disconnectMCP, hasMCPConfig } from "./services/mcp.js";
+import { startWebServer } from "./web/server.js";
 
 // Initialize multi-model engine
 const registry = initEngine();
@@ -99,6 +100,9 @@ process.on("uncaughtException", (err) => {
 process.on("unhandledRejection", (reason) => {
   console.error("Unhandled rejection:", reason);
 });
+
+// Start Web UI
+const webServer = startWebServer();
 
 // Start
 await bot.start({
