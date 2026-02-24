@@ -545,28 +545,46 @@ function handleWebSocket(wss: WebSocketServer): void {
             history: !isSDK ? session.history : undefined,
           };
 
-          // Stream response
-          for await (const chunk of registry.queryWithFallback(queryOpts)) {
-            if (ws.readyState !== WebSocket.OPEN) break;
+          let gotDone = false;
+          try {
+            // Stream response
+            for await (const chunk of registry.queryWithFallback(queryOpts)) {
+              if (ws.readyState !== WebSocket.OPEN) break;
 
-            switch (chunk.type) {
-              case "text":
-                ws.send(JSON.stringify({ type: "text", text: chunk.text, delta: chunk.delta }));
-                break;
-              case "tool_use":
-                ws.send(JSON.stringify({ type: "tool", name: chunk.toolName, input: chunk.toolInput }));
-                break;
-              case "done":
-                if (chunk.sessionId) session.sessionId = chunk.sessionId;
-                if (chunk.costUsd) session.totalCost += chunk.costUsd;
-                ws.send(JSON.stringify({ type: "done", cost: chunk.costUsd, sessionId: chunk.sessionId }));
-                break;
-              case "error":
-                ws.send(JSON.stringify({ type: "error", error: chunk.error }));
-                break;
-              case "fallback":
-                ws.send(JSON.stringify({ type: "fallback", from: chunk.failedProvider, to: chunk.providerName }));
-                break;
+              switch (chunk.type) {
+                case "text":
+                  ws.send(JSON.stringify({ type: "text", text: chunk.text, delta: chunk.delta }));
+                  break;
+                case "tool_use":
+                  ws.send(JSON.stringify({ type: "tool", name: chunk.toolName, input: chunk.toolInput }));
+                  break;
+                case "done":
+                  gotDone = true;
+                  if (chunk.sessionId) session.sessionId = chunk.sessionId;
+                  if (chunk.costUsd) session.totalCost += chunk.costUsd;
+                  ws.send(JSON.stringify({ type: "done", cost: chunk.costUsd, sessionId: chunk.sessionId }));
+                  break;
+                case "error":
+                  ws.send(JSON.stringify({ type: "error", error: chunk.error }));
+                  gotDone = true; // error counts as done
+                  break;
+                case "fallback":
+                  ws.send(JSON.stringify({ type: "fallback", from: chunk.failedProvider, to: chunk.providerName }));
+                  break;
+              }
+            }
+            // Ensure we always send done (in case stream ended without done/error chunk)
+            if (!gotDone && ws.readyState === WebSocket.OPEN) {
+              ws.send(JSON.stringify({ type: "done", cost: 0 }));
+            }
+          } catch (streamErr) {
+            const errMsg = streamErr instanceof Error ? streamErr.message : String(streamErr);
+            console.error("WebUI stream error:", errMsg);
+            if (ws.readyState === WebSocket.OPEN) {
+              ws.send(JSON.stringify({ type: "error", error: errMsg }));
+              if (!gotDone) {
+                ws.send(JSON.stringify({ type: "done", cost: 0 }));
+              }
             }
           }
         }

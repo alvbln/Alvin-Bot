@@ -75,12 +75,17 @@ function connectWS() {
   ws.onmessage = (e) => handleWSMessage(JSON.parse(e.data));
 }
 
+let pendingTools = []; // Collect tool calls before assistant text
+let currentToolGroup = null; // DOM element for grouped tools
+
 function handleWSMessage(msg) {
   const typing = document.getElementById('typing-indicator');
 
   switch (msg.type) {
     case 'text':
       typing.classList.remove('visible');
+      // Flush any pending tools BEFORE the assistant text
+      flushToolGroup();
       if (!currentAssistantMsg) {
         currentAssistantMsg = addMessage('assistant', '');
       }
@@ -88,9 +93,14 @@ function handleWSMessage(msg) {
       scrollToBottom();
       break;
     case 'tool':
-      addMessage('tool', `🔧 ${msg.name}`);
+      typing.classList.add('visible');
+      // Collect tools — they'll be flushed before the next text
+      pendingTools.push({ name: msg.name, input: msg.input });
+      // Show live tool indicator
+      updateToolIndicator();
       break;
     case 'done':
+      flushToolGroup();
       if (msg.cost && currentAssistantMsg) {
         const costEl = document.createElement('span');
         costEl.className = 'time';
@@ -107,6 +117,7 @@ function handleWSMessage(msg) {
       if (notifySound) playNotifySound();
       break;
     case 'error':
+      flushToolGroup();
       addMessage('system', `❌ ${msg.error}`);
       currentAssistantMsg = null;
       document.getElementById('send-btn').disabled = false;
@@ -116,12 +127,54 @@ function handleWSMessage(msg) {
       addMessage('system', `⚡ ${msg.from} → ${msg.to}`);
       break;
     case 'reset':
-      document.getElementById('messages').innerHTML = '';
+      document.getElementById('messages').innerHTML = '<div class="typing-indicator" id="typing-indicator"><div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div></div>';
       addMessage('system', 'Session zurückgesetzt.');
       chatMessages = [];
+      pendingTools = [];
+      currentToolGroup = null;
       clearChatStorage();
       break;
   }
+}
+
+function updateToolIndicator() {
+  // Show a live "working..." indicator while tools run
+  const typing = document.getElementById('typing-indicator');
+  if (pendingTools.length > 0) {
+    typing.classList.add('visible');
+    typing.innerHTML = `<span style="font-size:0.75em;color:var(--fg2)">🔧 ${pendingTools[pendingTools.length - 1].name}...</span>`;
+  }
+}
+
+function flushToolGroup() {
+  if (pendingTools.length === 0) return;
+  // Reset typing indicator to dots
+  const typing = document.getElementById('typing-indicator');
+  typing.innerHTML = '<div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div>';
+
+  // Create a grouped, collapsible tool block
+  const group = document.createElement('div');
+  group.className = 'msg tool-group';
+  const count = pendingTools.length;
+  const names = [...new Set(pendingTools.map(t => t.name))];
+  const summary = names.length <= 3 ? names.join(', ') : names.slice(0, 3).join(', ') + ` +${names.length - 3}`;
+
+  group.innerHTML = `
+    <div class="tool-group-header" onclick="this.parentElement.classList.toggle('expanded')">
+      <span class="tool-group-icon">🔧</span>
+      <span class="tool-group-label">${count} Tool${count > 1 ? 's' : ''} verwendet</span>
+      <span class="tool-group-names">${summary}</span>
+      <span class="tool-group-chevron">▸</span>
+    </div>
+    <div class="tool-group-details">
+      ${pendingTools.map(t => `<div class="tool-group-item"><span class="tool-item-name">${escapeHtml(t.name)}</span>${t.input ? `<pre class="tool-item-input">${escapeHtml(typeof t.input === 'string' ? t.input : JSON.stringify(t.input, null, 2))}</pre>` : ''}</div>`).join('')}
+    </div>
+  `;
+
+  const container = document.getElementById('messages');
+  container.insertBefore(group, typing);
+  pendingTools = [];
+  scrollToBottom();
 }
 
 // ── Sound ───────────────────────────────────────────────
