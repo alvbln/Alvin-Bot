@@ -1,9 +1,9 @@
 {
   "name": "alvin-bot",
   "version": "3.0.0",
-  "description": "Alvin Bot — Your personal AI agent on Telegram, WhatsApp, Discord, Signal, and Web.",
+  "description": "Alvin Bot \u2014 Your personal AI agent on Telegram, WhatsApp, Discord, Signal, and Web.",
   "type": "module",
-  "main": "electron/dist/main.js",
+  "main": "electron/dist/main.cjs",
   "bin": {
     "alvin-bot": "./bin/cli.js"
   },
@@ -27,7 +27,7 @@
       "electron/dist/**/*",
       "!node_modules",
       "!src",
-      "!electron/*.ts"
+      "!electron/*.cts"
     ],
     "extraResources": [
       {

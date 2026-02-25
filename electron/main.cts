@@ -15,7 +15,7 @@ const projectRoot = isDev
 const WEB_PORT = process.env.WEB_PORT || '3100';
 const distIndexPath = path.join(projectRoot, 'dist', 'index.js');
 const envPath = path.join(projectRoot, '.env');
-const preloadPath = path.join(__dirname, 'preload.js');
+const preloadPath = path.join(__dirname, 'preload.cjs');
 
 let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;

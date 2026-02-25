@@ -13,6 +13,6 @@
     "declaration": false,
     "sourceMap": true
   },
-  "include": ["main.ts", "preload.ts"],
+  "include": ["main.cts", "preload.cts"],
   "exclude": ["dist"]
 }
