@@ -657,9 +657,14 @@ export class WhatsAppAdapter implements PlatformAdapter {
       const chat = await this.client.getChatById(groupId);
       if (!chat?.isGroup) return [];
 
+      const myWid = this.client?.info?.wid?._serialized || "";
+      const myLid = this.client?.info?.me?._serialized || "";
       const participants: Array<{ id: string; name: string; isAdmin: boolean; number: string }> = [];
       for (const p of chat.participants || []) {
         const pid = p.id?._serialized || "";
+        // Skip own account — owner's messages are never processed (fromMe filter)
+        if (pid === myWid || pid === myLid) continue;
+
         let name = pid;
         let number = pid.replace(/@.*$/, "");
         try {
