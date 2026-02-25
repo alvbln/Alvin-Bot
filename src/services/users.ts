@@ -14,6 +14,7 @@ import fs from "fs";
 import { resolve, dirname } from "path";
 import { fileURLToPath } from "url";
 import { config } from "../config.js";
+import { killSession } from "./session.js";
 
 const BOT_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const DOCS_DIR = resolve(BOT_ROOT, "docs");
@@ -43,6 +44,12 @@ export interface UserProfile {
   isOwner: boolean;
   /** Custom notes about this user (for AI context) */
   notes: string;
+  /** Last platform the user communicated from */
+  lastPlatform?: "telegram" | "whatsapp" | "discord" | "signal" | "webui";
+  /** Last message text (truncated) */
+  lastMessage?: string;
+  /** Last message timestamp */
+  lastMessageAt?: number;
 }
 
 // ── Profile Management ──────────────────────────────────
@@ -110,12 +117,23 @@ export function getOrCreateProfile(userId: number, name?: string, username?: str
 /**
  * Update a user's activity (call on each message).
  */
-export function touchProfile(userId: number, name?: string, username?: string): UserProfile {
+export function touchProfile(
+  userId: number,
+  name?: string,
+  username?: string,
+  platform?: UserProfile["lastPlatform"],
+  messageText?: string,
+): UserProfile {
   const profile = getOrCreateProfile(userId, name, username);
   profile.lastActive = Date.now();
   profile.totalMessages++;
   if (name) profile.name = name;
   if (username) profile.username = username;
+  if (platform) profile.lastPlatform = platform;
+  if (messageText) {
+    profile.lastMessage = messageText.length > 120 ? messageText.slice(0, 120) + "…" : messageText;
+    profile.lastMessageAt = Date.now();
+  }
   saveProfile(profile);
   return profile;
 }
@@ -162,6 +180,46 @@ export function addUserNote(userId: number, note: string): void {
   profile.notes += `\n[${timestamp}] ${note}`;
   profile.notes = profile.notes.trim();
   saveProfile(profile);
+}
+
+/**
+ * Delete a user and all their data: profile, session, memory, conversation history.
+ * Returns a summary of what was deleted.
+ */
+export function deleteUser(userId: number): { deleted: string[]; errors: string[] } {
+  const deleted: string[] = [];
+  const errors: string[] = [];
+
+  // 1. Delete profile JSON
+  const pPath = profilePath(userId);
+  try {
+    if (fs.existsSync(pPath)) {
+      fs.unlinkSync(pPath);
+      deleted.push("Profile");
+    }
+  } catch (e) { errors.push(`Profile: ${e}`); }
+
+  // 2. Delete user memory directory (non-owner only)
+  const memDir = userMemoryDir(userId);
+  try {
+    if (fs.existsSync(memDir) && fs.statSync(memDir).isDirectory()) {
+      fs.rmSync(memDir, { recursive: true, force: true });
+      deleted.push("Memory-Verzeichnis");
+    }
+  } catch (e) { errors.push(`Memory: ${e}`); }
+
+  // 3. Kill active session
+  try {
+    const result = killSession(userId);
+    if (result.hadSession) {
+      deleted.push("Session gelöscht");
+      if (result.aborted) {
+        deleted.push("Laufende Anfrage abgebrochen");
+      }
+    }
+  } catch (e) { errors.push(`Session: ${e}`); }
+
+  return { deleted, errors };
 }
 
 /**

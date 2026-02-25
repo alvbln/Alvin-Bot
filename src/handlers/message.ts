@@ -50,7 +50,7 @@ export async function handleMessage(ctx: Context): Promise<void> {
   const session = getSession(userId);
 
   // Track user profile
-  touchProfile(userId, ctx.from?.first_name, ctx.from?.username);
+  touchProfile(userId, ctx.from?.first_name, ctx.from?.username, "telegram", text);
 
   if (session.isProcessing) {
     // Queue the message instead of rejecting it (max 3)

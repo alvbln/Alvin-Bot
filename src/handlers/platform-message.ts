@@ -30,7 +30,7 @@ export async function handlePlatformMessage(
   const session = getSession(userId);
 
   // Track user profile
-  touchProfile(userId, msg.userName, msg.userHandle);
+  touchProfile(userId, msg.userName, msg.userHandle, msg.platform as any, text);
 
   // Skip if already processing
   if (session.isProcessing) {

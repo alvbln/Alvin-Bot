@@ -107,3 +107,18 @@ export function getAllSessions(): Array<{ userId: number; session: UserSession }
   }
   return result;
 }
+
+/** Kill a user session completely — abort running query, clear history, remove from map. */
+export function killSession(userId: number): { aborted: boolean; hadSession: boolean } {
+  const session = sessions.get(userId);
+  if (!session) return { aborted: false, hadSession: false };
+
+  let aborted = false;
+  if (session.abortController) {
+    session.abortController.abort();
+    aborted = true;
+  }
+
+  sessions.delete(userId);
+  return { aborted, hadSession: true };
+}

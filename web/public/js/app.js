@@ -574,15 +574,87 @@ async function loadPlugins() {
 }
 
 // ── Users ───────────────────────────────────────────────
+const PLATFORM_ICONS = { telegram: '✈️', whatsapp: '💬', discord: '🎮', signal: '🔒', webui: '🌐', web: '🌐' };
+
+function timeAgo(ts) {
+  if (!ts) return '—';
+  const diff = Date.now() - ts;
+  if (diff < 60000) return 'gerade eben';
+  if (diff < 3600000) return `vor ${Math.floor(diff/60000)} Min`;
+  if (diff < 86400000) return `vor ${Math.floor(diff/3600000)} Std`;
+  return new Date(ts).toLocaleDateString('de-DE', { day:'numeric', month:'short', year:'numeric' });
+}
+
 async function loadUsers() {
   const res = await fetch(API + '/api/users');
   const data = await res.json();
-  document.getElementById('users-list').innerHTML = data.users.length === 0
-    ? '<div class="card"><h3>Keine User</h3><div class="sub">Werden automatisch erfasst.</div></div>'
-    : data.users.map(u => `<div class="list-item"><div class="icon">${u.isOwner ? '👑' : '👤'}</div><div class="info">
-        <div class="name">${u.name}${u.username ? ' @'+u.username : ''}</div>
-        <div class="desc">${u.totalMessages} msgs · Zuletzt: ${new Date(u.lastActive).toLocaleDateString('de-DE')}</div>
-      </div></div>`).join('');
+  const el = document.getElementById('users-list');
+
+  if (data.users.length === 0) {
+    el.innerHTML = '<div class="card"><h3>Keine User</h3><div class="sub">Werden automatisch erfasst sobald jemand schreibt.</div></div>';
+    return;
+  }
+
+  el.innerHTML = data.users.map(u => {
+    const platformIcon = PLATFORM_ICONS[u.lastPlatform] || '❓';
+    const platformName = u.lastPlatform ? u.lastPlatform.charAt(0).toUpperCase() + u.lastPlatform.slice(1) : 'Unbekannt';
+    const lastMsg = u.lastMessage ? `<div class="user-last-msg">"${escapeHtml(u.lastMessage)}"</div>` : '';
+    const sessionInfo = u.session ? `
+      <div class="user-session-info">
+        ${u.session.isProcessing ? '<span class="badge badge-yellow">⏳ Verarbeitet...</span>' : ''}
+        ${u.session.hasActiveQuery ? '<span class="badge badge-yellow">🔄 Query aktiv</span>' : ''}
+        ${u.session.queuedMessages > 0 ? `<span class="badge badge-blue">📨 ${u.session.queuedMessages} in Queue</span>` : ''}
+        <span title="Kosten">💰 $${u.session.totalCost.toFixed(4)}</span>
+        <span title="Nachrichten in Session">💬 ${u.session.messageCount}</span>
+        <span title="Tool-Aufrufe">🔧 ${u.session.toolUseCount}</span>
+        <span title="History-Länge">📜 ${u.session.historyLength}</span>
+        <span title="Effort-Level">🧠 ${u.session.effort}</span>
+      </div>` : '<div class="user-session-info"><span class="sub">Keine aktive Session</span></div>';
+
+    const killBtn = u.isOwner ? '' : `<button class="btn btn-danger btn-sm" onclick="killUser(${u.userId}, '${escapeHtml(u.name)}')" title="Session & Daten löschen">🗑️</button>`;
+
+    return `<div class="card user-card" style="margin-bottom:12px">
+      <div style="display:flex;align-items:flex-start;gap:12px">
+        <div class="icon" style="font-size:1.6em;min-width:36px;text-align:center">${u.isOwner ? '👑' : '👤'}</div>
+        <div style="flex:1;min-width:0">
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+            <strong>${escapeHtml(u.name)}</strong>
+            ${u.username ? `<span class="sub">@${escapeHtml(u.username)}</span>` : ''}
+            <span class="badge badge-${u.session ? 'green' : 'gray'}" style="font-size:0.7em">${u.session ? 'Online' : 'Offline'}</span>
+            ${killBtn}
+          </div>
+          <div class="sub" style="margin-top:4px">
+            ${platformIcon} ${platformName} · ${u.totalMessages} Nachrichten · Zuletzt aktiv: ${timeAgo(u.lastActive)}
+          </div>
+          ${lastMsg}
+          ${sessionInfo}
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function escapeHtml(str) {
+  if (!str) return '';
+  return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+async function killUser(userId, name) {
+  if (!confirm(`User "${name}" wirklich löschen?\n\nDas löscht:\n• Aktive Session (+ laufende Anfrage)\n• Profil-Daten\n• Chat-History\n• Memory-Verzeichnis\n\nDiese Aktion kann nicht rückgängig gemacht werden!`)) return;
+
+  try {
+    const res = await fetch(API + `/api/users/${userId}`, { method: 'DELETE' });
+    const data = await res.json();
+    if (data.ok) {
+      const summary = data.deleted.length > 0 ? `Gelöscht: ${data.deleted.join(', ')}` : 'Nichts zu löschen';
+      alert(`✅ User gelöscht.\n\n${summary}`);
+      loadUsers(); // Refresh
+    } else {
+      alert(`❌ Fehler: ${data.error || 'Unbekannt'}`);
+    }
+  } catch (e) {
+    alert(`❌ Fehler: ${e.message}`);
+  }
 }
 
 // ── Platforms ────────────────────────────────────────────

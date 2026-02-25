@@ -287,9 +287,49 @@ async function handleAPI(req: http.IncomingMessage, res: http.ServerResponse, ur
     return;
   }
 
-  // GET /api/users
-  if (urlPath === "/api/users") {
-    res.end(JSON.stringify({ users: listProfiles() }));
+  // GET /api/users — Enhanced with session data
+  if (urlPath === "/api/users" && req.method === "GET") {
+    const { getAllSessions } = await import("../services/session.js");
+    const profiles = listProfiles();
+    const sessions = getAllSessions();
+    const sessionMap = new Map(sessions.map(s => [s.userId, s.session]));
+
+    const enriched = profiles.map(p => {
+      const session = sessionMap.get(p.userId);
+      return {
+        ...p,
+        session: session ? {
+          isProcessing: session.isProcessing,
+          totalCost: session.totalCost,
+          historyLength: session.history.length,
+          effort: session.effort,
+          voiceReply: session.voiceReply,
+          startedAt: session.startedAt,
+          messageCount: session.messageCount,
+          toolUseCount: session.toolUseCount,
+          workingDir: session.workingDir,
+          hasActiveQuery: !!session.abortController,
+          queuedMessages: session.messageQueue.length,
+        } : null,
+      };
+    });
+
+    res.end(JSON.stringify({ users: enriched }));
+    return;
+  }
+
+  // DELETE /api/users/:id — Kill session + delete user data
+  if (urlPath.startsWith("/api/users/") && req.method === "DELETE") {
+    const userId = parseInt(urlPath.split("/").pop() || "0");
+    if (!userId) {
+      res.statusCode = 400;
+      res.end(JSON.stringify({ error: "Invalid user ID" }));
+      return;
+    }
+
+    const { deleteUser } = await import("../services/users.js");
+    const result = deleteUser(userId);
+    res.end(JSON.stringify({ ok: true, ...result }));
     return;
   }
 
