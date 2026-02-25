@@ -208,35 +208,7 @@
 
   <!-- Maintenance -->
   <div class="page content" id="page-maintenance">
-    <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px">
-      <div style="flex:1">
-        <h3 style="font-size:1em;margin-bottom:4px">🩺 Wartung & Diagnose</h3>
-        <div class="sub">Health-Check, Backups und Bot-Steuerung.</div>
-      </div>
-      <button class="btn btn-sm" onclick="restartBot()" style="background:var(--danger,#e74c3c)">🔄 Bot neustarten</button>
-    </div>
-
-    <!-- Doctor -->
-    <div class="card" style="margin-bottom:16px">
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
-        <h3 style="font-size:0.95em;margin:0">🔍 Health-Check</h3>
-        <div style="flex:1"></div>
-        <button class="btn btn-sm btn-outline" onclick="runDoctor()">Scan starten</button>
-        <button class="btn btn-sm" onclick="repairAll()">🔧 Alle reparieren</button>
-      </div>
-      <div id="doctor-results" style="font-size:0.85em;color:var(--fg2)">Klicke "Scan starten" für eine Diagnose.</div>
-    </div>
-
-    <!-- Backups -->
-    <div class="card">
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
-        <h3 style="font-size:0.95em;margin:0">💾 Backups</h3>
-        <div style="flex:1"></div>
-        <input type="text" id="backup-name" placeholder="Name (optional)" style="width:180px;background:var(--bg3);border:1px solid var(--bg4);border-radius:6px;padding:6px 10px;color:var(--fg);font:inherit;font-size:0.82em">
-        <button class="btn btn-sm" onclick="createBackup()">+ Backup erstellen</button>
-      </div>
-      <div id="backup-list" style="font-size:0.85em;color:var(--fg2)">Lade Backups...</div>
-    </div>
+    <div id="maintenance-content"><div style="color:var(--fg2)">Lade...</div></div>
   </div>
 
   <!-- Settings -->
