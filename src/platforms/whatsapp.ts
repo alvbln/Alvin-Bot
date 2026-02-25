@@ -1,20 +1,19 @@
 /**
  * WhatsApp Platform Adapter
  *
- * Uses Baileys (WhiskeySockets) for WhatsApp Web connection.
+ * Uses whatsapp-web.js (Puppeteer-based) for WhatsApp Web connection.
  * Optional dependency — only loaded if WHATSAPP_ENABLED=true.
  *
  * Setup:
- * 1. npm install @whiskeysockets/baileys
+ * 1. npm install whatsapp-web.js (with PUPPETEER_SKIP_DOWNLOAD=true)
  * 2. Set WHATSAPP_ENABLED=true in .env
- * 3. Scan QR code on first run (shown in Web UI + Terminal logs)
+ * 3. Scan QR code shown in Web UI or terminal logs
  *
  * Auth data saved to data/whatsapp-auth/
  */
 
 import type { PlatformAdapter, IncomingMessage, MessageHandler, SendOptions } from "./types.js";
 import fs from "fs";
-import path from "path";
 import { resolve, dirname } from "path";
 import { fileURLToPath } from "url";
 
@@ -24,10 +23,11 @@ const AUTH_DIR = resolve(BOT_ROOT, "data", "whatsapp-auth");
 // ── Global WhatsApp State (accessible from Web API) ─────
 export interface WhatsAppState {
   status: "disconnected" | "qr" | "connecting" | "connected" | "logged_out" | "error";
-  qrString: string | null; // Raw QR string for rendering
-  qrTimestamp: number | null; // When QR was generated
+  qrString: string | null;
+  qrTimestamp: number | null;
   connectedAt: number | null;
   error: string | null;
+  info: string | null; // e.g. phone number or name
 }
 
 let _whatsappState: WhatsAppState = {
@@ -36,6 +36,7 @@ let _whatsappState: WhatsAppState = {
   qrTimestamp: null,
   connectedAt: null,
   error: null,
+  info: null,
 };
 
 export function getWhatsAppState(): WhatsAppState {
@@ -45,147 +46,188 @@ export function getWhatsAppState(): WhatsAppState {
 export class WhatsAppAdapter implements PlatformAdapter {
   readonly platform = "whatsapp";
   private handler: MessageHandler | null = null;
-  private sock: any = null;
-  private reconnectAttempts = 0;
-  private maxReconnects = 10;
+  private client: any = null;
 
   async start(): Promise<void> {
-    if (this.reconnectAttempts === 0) {
-      _whatsappState = { status: "connecting", qrString: null, qrTimestamp: null, connectedAt: null, error: null };
-    }
+    _whatsappState = { status: "connecting", qrString: null, qrTimestamp: null, connectedAt: null, error: null, info: null };
 
     try {
-      // Dynamic import — baileys is optional
-      // @ts-ignore — @whiskeysockets/baileys is an optional dependency
-      const { default: makeWASocket, useMultiFileAuthState, DisconnectReason } = await import("@whiskeysockets/baileys");
+      // Dynamic import — whatsapp-web.js is optional
+      // @ts-ignore — whatsapp-web.js is an optional dependency
+      const wwjs = await import("whatsapp-web.js");
+      const Client = wwjs.Client || wwjs.default?.Client;
+      const LocalAuth = wwjs.default?.LocalAuth;
 
       // Ensure auth directory exists
       if (!fs.existsSync(AUTH_DIR)) fs.mkdirSync(AUTH_DIR, { recursive: true });
 
-      const { state, saveCreds } = await useMultiFileAuthState(AUTH_DIR);
+      // Find Chrome/Chromium executable
+      const chromePaths = [
+        "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+        "/usr/bin/google-chrome",
+        "/usr/bin/google-chrome-stable",
+        "/usr/bin/chromium",
+        "/usr/bin/chromium-browser",
+        "/snap/bin/chromium",
+      ];
+      const execPath = chromePaths.find(p => fs.existsSync(p));
 
-      this.sock = makeWASocket({
-        auth: state,
-        // printQRInTerminal is deprecated in newer Baileys — we handle QR via connection.update event
-        browser: ["Mr. Levin", "Chrome", "1.0.0"],
+      this.client = new Client({
+        authStrategy: new LocalAuth({
+          dataPath: AUTH_DIR,
+        }),
+        puppeteer: {
+          headless: true,
+          args: [
+            "--no-sandbox",
+            "--disable-setuid-sandbox",
+            "--disable-dev-shm-usage",
+            "--disable-gpu",
+            "--single-process",
+          ],
+          ...(execPath ? { executablePath: execPath } : {}),
+        },
       });
 
-      this.sock.ev.on("creds.update", saveCreds);
-
-      this.sock.ev.on("connection.update", (update: any) => {
-        const { connection, lastDisconnect, qr } = update;
-        if (qr) {
-          _whatsappState.status = "qr";
-          _whatsappState.qrString = qr;
-          _whatsappState.qrTimestamp = Date.now();
-          _whatsappState.error = null;
-          this.reconnectAttempts = 0; // Reset on valid QR
-          console.log("📱 WhatsApp: QR code ready — scan via Web UI → Platforms");
-        }
-        if (connection === "close") {
-          const statusCode = lastDisconnect?.error?.output?.statusCode;
-          if (statusCode === DisconnectReason.loggedOut) {
-            _whatsappState.status = "logged_out";
-            _whatsappState.qrString = null;
-            console.log("WhatsApp logged out. Delete data/whatsapp-auth/ and restart to re-link.");
-          } else if (this.reconnectAttempts < this.maxReconnects) {
-            this.reconnectAttempts++;
-            _whatsappState.status = "connecting";
-            const delay = Math.min(this.reconnectAttempts * 2000, 10000);
-            console.log(`WhatsApp reconnecting (${this.reconnectAttempts}/${this.maxReconnects}) in ${delay/1000}s...`);
-            setTimeout(() => this.start(), delay);
-          } else {
-            _whatsappState.status = "error";
-            _whatsappState.error = "Max reconnect attempts reached. Restart bot to try again.";
-            console.log("WhatsApp: max reconnect attempts reached.");
-          }
-        }
-        if (connection === "open") {
-          _whatsappState.status = "connected";
-          _whatsappState.qrString = null;
-          _whatsappState.connectedAt = Date.now();
-          _whatsappState.error = null;
-          this.reconnectAttempts = 0;
-          console.log("📱 WhatsApp adapter connected");
-        }
+      // QR Code event
+      this.client.on("qr", (qr: string) => {
+        _whatsappState.status = "qr";
+        _whatsappState.qrString = qr;
+        _whatsappState.qrTimestamp = Date.now();
+        _whatsappState.error = null;
+        console.log("📱 WhatsApp: QR code ready — scan via Web UI → Platforms");
       });
 
-      this.sock.ev.on("messages.upsert", async ({ messages }: any) => {
+      // Authenticated
+      this.client.on("authenticated", () => {
+        _whatsappState.status = "connecting";
+        _whatsappState.qrString = null;
+        console.log("📱 WhatsApp: Authenticated, loading session...");
+      });
+
+      // Ready
+      this.client.on("ready", () => {
+        _whatsappState.status = "connected";
+        _whatsappState.qrString = null;
+        _whatsappState.connectedAt = Date.now();
+        _whatsappState.error = null;
+        const info = this.client.info;
+        _whatsappState.info = info?.pushname || info?.wid?.user || null;
+        console.log(`📱 WhatsApp adapter connected (${_whatsappState.info || "unknown"})`);
+      });
+
+      // Auth failure
+      this.client.on("auth_failure", (msg: string) => {
+        _whatsappState.status = "error";
+        _whatsappState.error = `Auth failed: ${msg}`;
+        _whatsappState.qrString = null;
+        console.error("WhatsApp auth failure:", msg);
+      });
+
+      // Disconnected
+      this.client.on("disconnected", (reason: string) => {
+        _whatsappState.status = "disconnected";
+        _whatsappState.qrString = null;
+        _whatsappState.error = reason;
+        console.log("WhatsApp disconnected:", reason);
+      });
+
+      // Messages
+      this.client.on("message", async (msg: any) => {
         if (!this.handler) return;
+        if (msg.fromMe) return;
 
-        for (const msg of messages) {
-          if (!msg.message || msg.key.fromMe) continue;
+        const text = msg.body;
+        if (!text) return;
 
-          const text = msg.message.conversation
-            || msg.message.extendedTextMessage?.text
-            || "";
+        const chat = await msg.getChat();
+        const contact = await msg.getContact();
+        const isGroup = chat.isGroup;
 
-          if (!text) continue;
+        const incoming: IncomingMessage = {
+          platform: "whatsapp",
+          messageId: msg.id._serialized || "",
+          chatId: chat.id._serialized || "",
+          userId: contact.id._serialized || "",
+          userName: contact.pushname || contact.name || contact.number || "Unknown",
+          text,
+          isGroup,
+          isMention: text.includes("@Mr.Levin") || text.includes("@bot"),
+          isReplyToBot: false,
+          replyToText: msg.hasQuotedMsg ? (await msg.getQuotedMessage())?.body : undefined,
+        };
 
-          const isGroup = msg.key.remoteJid?.endsWith("@g.us") || false;
-          const senderId = isGroup ? msg.key.participant : msg.key.remoteJid;
+        // In groups: only respond to mentions
+        if (isGroup && !incoming.isMention) return;
 
-          const incoming: IncomingMessage = {
-            platform: "whatsapp",
-            messageId: msg.key.id || "",
-            chatId: msg.key.remoteJid || "",
-            userId: senderId || "",
-            userName: msg.pushName || senderId || "Unknown",
-            text,
-            isGroup,
-            isMention: text.includes("@Mr.Levin") || text.includes("@bot"),
-            isReplyToBot: false,
-            replyToText: msg.message.extendedTextMessage?.contextInfo?.quotedMessage?.conversation,
-          };
-
-          // In groups: only respond to mentions
-          if (isGroup && !incoming.isMention) continue;
-
-          await this.handler(incoming);
-        }
+        await this.handler(incoming);
       });
+
+      // Initialize
+      await this.client.initialize();
     } catch (err) {
-      console.error("WhatsApp adapter failed:", err);
+      _whatsappState.status = "error";
+      _whatsappState.error = err instanceof Error ? err.message : String(err);
+      console.error("WhatsApp adapter failed:", err instanceof Error ? err.message : err);
       throw err;
     }
   }
 
   async stop(): Promise<void> {
-    if (this.sock) {
-      this.sock.end(undefined);
+    if (this.client) {
+      try {
+        await this.client.destroy();
+      } catch { /* ignore */ }
     }
   }
 
   async sendText(chatId: string, text: string): Promise<void> {
-    if (!this.sock) return;
-    await this.sock.sendMessage(chatId, { text });
+    if (!this.client) return;
+    await this.client.sendMessage(chatId, text);
   }
 
   async sendPhoto(chatId: string, photo: Buffer | string, caption?: string): Promise<void> {
-    if (!this.sock) return;
-    const image = typeof photo === "string" ? fs.readFileSync(photo) : photo;
-    await this.sock.sendMessage(chatId, { image, caption });
+    if (!this.client) return;
+    // @ts-ignore
+    const _ww = await import("whatsapp-web.js"); const MessageMedia = _ww.default?.MessageMedia || _ww.MessageMedia;
+    let media: any;
+    if (typeof photo === "string") {
+      media = MessageMedia.fromFilePath(photo);
+    } else {
+      media = new MessageMedia("image/png", photo.toString("base64"));
+    }
+    await this.client.sendMessage(chatId, media, { caption });
   }
 
   async sendDocument(chatId: string, doc: Buffer | string, fileName: string, caption?: string): Promise<void> {
-    if (!this.sock) return;
-    const document = typeof doc === "string" ? fs.readFileSync(doc) : doc;
-    await this.sock.sendMessage(chatId, { document, fileName, caption });
+    if (!this.client) return;
+    // @ts-ignore
+    const _ww = await import("whatsapp-web.js"); const MessageMedia = _ww.default?.MessageMedia || _ww.MessageMedia;
+    let media: any;
+    if (typeof doc === "string") {
+      media = MessageMedia.fromFilePath(doc);
+    } else {
+      media = new MessageMedia("application/octet-stream", doc.toString("base64"), fileName);
+    }
+    await this.client.sendMessage(chatId, media, { caption });
   }
 
   async sendVoice(chatId: string, audio: Buffer | string): Promise<void> {
-    if (!this.sock) return;
-    const audioBuffer = typeof audio === "string" ? fs.readFileSync(audio) : audio;
-    await this.sock.sendMessage(chatId, { audio: audioBuffer, mimetype: "audio/ogg; codecs=opus", ptt: true });
+    if (!this.client) return;
+    // @ts-ignore
+    const _ww = await import("whatsapp-web.js"); const MessageMedia = _ww.default?.MessageMedia || _ww.MessageMedia;
+    let media: any;
+    if (typeof audio === "string") {
+      media = MessageMedia.fromFilePath(audio);
+    } else {
+      media = new MessageMedia("audio/ogg", audio.toString("base64"));
+    }
+    await this.client.sendMessage(chatId, media, { sendAudioAsVoice: true });
   }
 
   async react(chatId: string, messageId: string, emoji: string): Promise<void> {
-    if (!this.sock) return;
-    try {
-      await this.sock.sendMessage(chatId, {
-        react: { text: emoji, key: { remoteJid: chatId, id: messageId } },
-      });
-    } catch { /* ignore */ }
+    // whatsapp-web.js supports reactions via message.react()
+    // but needs the message object — skip for now
   }
 
   onMessage(handler: MessageHandler): void {

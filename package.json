@@ -38,6 +38,7 @@
     "dotenv": "^16.4.0",
     "grammy": "^1.30.0",
     "node-edge-tts": "^1.2.10",
+    "whatsapp-web.js": "^1.34.6",
     "ws": "^8.19.0"
   },
   "devDependencies": {
@@ -45,9 +46,5 @@
     "@types/ws": "^8.18.1",
     "tsx": "^4.19.0",
     "typescript": "^5.9.3"
-  },
-  "optionalDependencies": {
-    "@whiskeysockets/baileys": "^6.7.21",
-    "qrcode-terminal": "^0.12.0"
   }
 }

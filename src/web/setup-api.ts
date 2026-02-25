@@ -136,7 +136,7 @@ const PLATFORMS: PlatformDef[] = [
     envVars: [
       { key: "WHATSAPP_ENABLED", label: "Aktivieren", placeholder: "true", type: "toggle" },
     ],
-    npmPackages: ["@whiskeysockets/baileys", "qrcode-terminal"],
+    npmPackages: ["whatsapp-web.js"],
     setupSteps: [
       "Klicke 'Dependencies installieren' (falls nötig)",
       "Aktiviere WhatsApp (Toggle oben) und klicke 'Speichern'",
