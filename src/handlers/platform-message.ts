@@ -264,7 +264,7 @@ async function handlePlatformCommand(
     }
     case "/help": {
       await adapter.sendText(msg.chatId,
-        "🤖 Mr. Levin — Befehle\n\n" +
+        "🤖 Alvin Bot — Befehle\n\n" +
         "/new — Neuer Chat\n" +
         "/status — Session-Info\n" +
         "/effort <low|medium|high|max> — Denktiefe\n" +

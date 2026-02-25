@@ -1,7 +1,7 @@
 /**
  * Sudo / Elevated Access Service
  *
- * Manages superadmin privileges for Mr. Levin on the host system.
+ * Manages superadmin privileges for Alvin Bot on the host system.
  * Password is stored securely in the macOS Keychain (or encrypted file on Linux).
  *
  * Features:
@@ -21,8 +21,8 @@ import { fileURLToPath } from "url";
 
 const BOT_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const PLATFORM = os.platform();
-const KEYCHAIN_SERVICE = "mr-levin-sudo";
-const KEYCHAIN_ACCOUNT = "mr-levin";
+const KEYCHAIN_SERVICE = "alvin-bot-sudo";
+const KEYCHAIN_ACCOUNT = "alvin-bot";
 const ENCRYPTED_PASS_FILE = resolve(BOT_ROOT, "data", ".sudo-enc");
 const ENCRYPTION_KEY_FILE = resolve(BOT_ROOT, "data", ".sudo-key");
 

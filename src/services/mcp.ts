@@ -183,7 +183,7 @@ async function connectStdio(name: string, config: MCPServerConfig): Promise<MCPS
         await sendMessage(server, "initialize", {
           protocolVersion: "2024-11-05",
           capabilities: {},
-          clientInfo: { name: "mr-levin", version: "2.2.0" },
+          clientInfo: { name: "alvin-bot", version: "2.2.0" },
         });
 
         // Send initialized notification

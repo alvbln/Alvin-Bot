@@ -421,7 +421,7 @@ function executeListDirectory(dirPath: string, recursive?: boolean, cwd?: string
 function executePython(code: string, cwd?: string): ToolResult {
   try {
     // Write code to temp file to avoid shell escaping issues
-    const tmpFile = `/tmp/mr-levin-py-${Date.now()}.py`;
+    const tmpFile = `/tmp/alvin-bot-py-${Date.now()}.py`;
     fs.writeFileSync(tmpFile, code);
 
     try {

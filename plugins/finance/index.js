@@ -97,7 +97,7 @@ export default {
   name: "finance",
   description: "Aktienkurse, Krypto-Preise und Währungsumrechnung",
   version: "1.0.0",
-  author: "Mr. Levin",
+  author: "Alvin Bot",
 
   commands: [
     {

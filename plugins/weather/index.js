@@ -2,14 +2,14 @@
  * Weather Plugin — Get current weather and forecasts.
  *
  * Uses wttr.in (no API key needed).
- * Example plugin for Mr. Levin's plugin system.
+ * Example plugin for Alvin Bot's plugin system.
  */
 
 export default {
   name: "weather",
   description: "Wetter-Abfragen über wttr.in (kein API Key nötig)",
   version: "1.0.0",
-  author: "Mr. Levin",
+  author: "Alvin Bot",
 
   commands: [
     {

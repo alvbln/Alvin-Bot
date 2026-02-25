@@ -309,7 +309,7 @@ await bot.start({
   onStart: () => {
     const me = bot.botInfo;
     setTelegramConnected(me.first_name, me.username);
-    console.log(`🤖 Mr. Levin v3.0.0 gestartet (@${me.username})`);
+    console.log(`🤖 Alvin Bot v3.0.0 gestartet (@${me.username})`);
     console.log(`   Provider: ${registry.getActiveKey()}`);
     console.log(`   Users: ${config.allowedUsers.length} authorized`);
 

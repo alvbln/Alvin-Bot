@@ -1,7 +1,7 @@
 /**
  * Personality Service — Loads SOUL.md and builds system prompts.
  *
- * SOUL.md defines Mr. Levin's personality and is injected into every system prompt.
+ * SOUL.md defines Alvin Bot's personality and is injected into every system prompt.
  * This ensures consistent personality across ALL providers (SDK + non-SDK).
  */
 
@@ -44,8 +44,8 @@ try {
 /** Base system prompt — adapts to user language */
 function getBasePrompt(lang: "de" | "en"): string {
   return lang === "de"
-    ? `Du bist Mr. Levin, ein autonomer AI-Agent auf Telegram.\nNutze Markdown-Formatierung kompatibel mit Telegram (fett, kursiv, Code-Blöcke).`
-    : `You are Mr. Levin, an autonomous AI agent on Telegram.\nUse Markdown formatting compatible with Telegram (bold, italic, code blocks).`;
+    ? `Du bist Alvin Bot, ein autonomer AI-Agent auf Telegram.\nNutze Markdown-Formatierung kompatibel mit Telegram (fett, kursiv, Code-Blöcke).`
+    : `You are Alvin Bot, an autonomous AI agent on Telegram.\nUse Markdown formatting compatible with Telegram (bold, italic, code blocks).`;
 }
 
 /** Additional instructions for SDK providers (tool use) */

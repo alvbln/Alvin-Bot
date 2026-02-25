@@ -1,5 +1,5 @@
 /**
- * Web Server — Local dashboard for Mr. Levin.
+ * Web Server — Local dashboard for Alvin Bot.
  *
  * Provides:
  * - Static file serving (web/public/)
@@ -677,12 +677,12 @@ async function handleAPI(req: http.IncomingMessage, res: http.ServerResponse, ur
       } else {
         // Markdown
         const md = messages.map((m: { role: string; text: string; time?: string }) => {
-          const prefix = m.role === "user" ? "**Du:**" : m.role === "assistant" ? "**Mr. Levin:**" : "*System:*";
+          const prefix = m.role === "user" ? "**Du:**" : m.role === "assistant" ? "**Alvin Bot:**" : "*System:*";
           const time = m.time ? ` _(${m.time})_` : "";
           return `${prefix}${time}\n${m.text}\n`;
         }).join("\n---\n\n");
         res.setHeader("Content-Type", "text/markdown");
-        res.end(`# Chat Export — Mr. Levin\n_${new Date().toLocaleString("de-DE")}_\n\n---\n\n${md}`);
+        res.end(`# Chat Export — Alvin Bot\n_${new Date().toLocaleString("de-DE")}_\n\n---\n\n${md}`);
       }
     } catch {
       res.statusCode = 400;

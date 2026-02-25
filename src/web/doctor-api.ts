@@ -260,7 +260,7 @@ function autoRepair(action: string): { ok: boolean; message: string } {
 
       case "create-soul": {
         fs.writeFileSync(resolve(BOT_ROOT, "SOUL.md"),
-          "# Mr. Levin — Persönlichkeit\n\n" +
+          "# Alvin Bot — Persönlichkeit\n\n" +
           "Du bist ein hilfreicher, direkter und kompetenter AI-Assistent.\n" +
           "Antworte klar und präzise. Hab Meinungen. Sei echt hilfreich.\n"
         );
@@ -521,9 +521,8 @@ export async function handleDoctorAPI(
       // Find our process (by name or script)
       const botProcess = processes.find((p: any) =>
         p.name === "alvin-bot" ||
-        p.name === "mr-levin" ||
-        p.pm2_env?.pm_exec_path?.includes("alvin-bot") ||
-        p.pm2_env?.pm_exec_path?.includes("mr-levin")
+        p.name === "alvin-bot" || // legacy name
+        p.pm2_env?.pm_exec_path?.includes("alvin-bot")
       ) || processes[0]; // fallback to first process
 
       if (!botProcess) {
@@ -570,7 +569,7 @@ export async function handleDoctorAPI(
         const jlist = execSync("pm2 jlist", { encoding: "utf-8", timeout: 5000, stdio: "pipe" });
         const procs = JSON.parse(jlist);
         const found = procs.find((p: any) =>
-          p.name === "alvin-bot" || p.name === "mr-levin"
+          p.name === "alvin-bot" || p.name === "alvin-bot"
         );
         if (found) processName = found.name;
       } catch { /* use default */ }
@@ -623,7 +622,7 @@ export async function handleDoctorAPI(
         const jlist = execSync("pm2 jlist", { encoding: "utf-8", timeout: 5000, stdio: "pipe" });
         const procs = JSON.parse(jlist);
         const found = procs.find((p: any) =>
-          p.name === "alvin-bot" || p.name === "mr-levin"
+          p.name === "alvin-bot" || p.name === "alvin-bot"
         );
         if (found) processName = found.name;
       } catch { /* use default */ }

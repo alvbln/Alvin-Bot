@@ -90,7 +90,7 @@ export default {
   name: "calendar",
   description: "Kalender-Events erstellen, anzeigen und verwalten",
   version: "1.0.0",
-  author: "Mr. Levin",
+  author: "Alvin Bot",
 
   commands: [
     {

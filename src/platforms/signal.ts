@@ -125,7 +125,7 @@ export class SignalAdapter implements PlatformAdapter {
             userName: msg.envelope.sourceName || msg.envelope.sourceNumber || "Unknown",
             text: data.message || "",
             isGroup,
-            isMention: !!(data.message && (data.message.includes("@bot") || data.message.includes("Mr. Levin"))),
+            isMention: !!(data.message && (data.message.includes("@bot") || data.message.includes("Alvin Bot"))),
             isReplyToBot: false,
             replyToText: data.quote?.text,
             media: mediaInfo,

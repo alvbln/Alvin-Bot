@@ -1,8 +1,8 @@
-# 🤖 Mr. Levin — Autonomous AI Agent
+# 🤖 Alvin Bot — Autonomous AI Agent
 
 > Your personal AI assistant — on Telegram, WhatsApp, Discord, Signal, Terminal, and Web.
 
-Mr. Levin is an open-source, self-hosted AI agent that lives where you chat. Built on a multi-model engine with full system access, memory, plugins, and a rich web dashboard. Not just a chatbot — an autonomous agent that remembers, acts, and learns.
+Alvin Bot is an open-source, self-hosted AI agent that lives where you chat. Built on a multi-model engine with full system access, memory, plugins, and a rich web dashboard. Not just a chatbot — an autonomous agent that remembers, acts, and learns.
 
 ---
 
@@ -26,7 +26,7 @@ Mr. Levin is an open-source, self-hosted AI agent that lives where you chat. Bui
 - **WhatsApp Group Approval** — Owner gets approval requests via Telegram (or WhatsApp DM fallback) before the bot responds to group messages. Silent — group members see nothing.
 - **Discord** — Server bot with mention/reply detection, slash commands
 - **Signal** — Via signal-cli REST API with voice transcription
-- **Terminal** — Rich TUI with ANSI colors and streaming (`mr-levin tui`)
+- **Terminal** — Rich TUI with ANSI colors and streaming (`alvin-bot tui`)
 - **Web UI** — Full dashboard with chat, settings, file manager, terminal
 
 ### 🔧 Capabilities
@@ -158,7 +158,7 @@ pm2 start ecosystem.config.cjs
 | OpenRouter | ✅ Full (Shell, Files, Python, Web) | ✅ | ✅ | API Key |
 | Other OpenAI-compatible | ⚡ Auto-detect | ✅ | Varies | API Key |
 
-> **Universal Tool Use:** Mr. Levin gives full agent capabilities to *any* provider that supports function calling — not just Claude. Shell commands, file operations, Python execution, web search, and more work across all major providers. If a provider doesn't support tool calls, Mr. Levin automatically falls back to text-only chat mode.
+> **Universal Tool Use:** Alvin Bot gives full agent capabilities to *any* provider that supports function calling — not just Claude. Shell commands, file operations, Python execution, web search, and more work across all major providers. If a provider doesn't support tool calls, Alvin Bot automatically falls back to text-only chat mode.
 
 ### Project Structure
 
@@ -329,13 +329,13 @@ Skills activate automatically when your message matches their trigger keywords. 
 ## 🛠️ CLI
 
 ```bash
-mr-levin setup     # Interactive setup wizard
-mr-levin tui       # Terminal chat UI ✨
-mr-levin chat      # Alias for tui
-mr-levin doctor    # Health check
-mr-levin update    # Pull latest & rebuild
-mr-levin start     # Start the bot
-mr-levin version   # Show version
+alvin-bot setup     # Interactive setup wizard
+alvin-bot tui       # Terminal chat UI ✨
+alvin-bot chat      # Alias for tui
+alvin-bot doctor    # Health check
+alvin-bot update    # Pull latest & rebuild
+alvin-bot start     # Start the bot
+alvin-bot version   # Show version
 ```
 
 ---

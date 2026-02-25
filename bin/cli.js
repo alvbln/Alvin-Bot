@@ -1,14 +1,14 @@
 #!/usr/bin/env node
 
 /**
- * Mr. Levin CLI — Setup, manage, and chat with your AI agent.
+ * Alvin Bot CLI — Setup, manage, and chat with your AI agent.
  *
  * Usage:
- *   npx mr-levin setup    — Interactive setup wizard
- *   npx mr-levin tui      — Terminal chat UI
- *   npx mr-levin doctor   — Check configuration
- *   npx mr-levin update   — Pull latest & rebuild
- *   npx mr-levin start    — Start the bot
+ *   npx alvin-bot setup    — Interactive setup wizard
+ *   npx alvin-bot tui      — Terminal chat UI
+ *   npx alvin-bot doctor   — Check configuration
+ *   npx alvin-bot update   — Pull latest & rebuild
+ *   npx alvin-bot start    — Start the bot
  */
 
 import { createInterface } from "readline";
@@ -21,7 +21,7 @@ const ask = (q) => new Promise((r) => rl.question(q, r));
 
 const LOGO = `
   ╔══════════════════════════════════════╗
-  ║  🤖 Mr. Levin — Setup Wizard v3.0  ║
+  ║  🤖 Alvin Bot — Setup Wizard v3.0  ║
   ║  Your Personal AI Agent             ║
   ╚══════════════════════════════════════╝
 `;
@@ -418,7 +418,7 @@ Viel Spaß! 🤖
 // ── Doctor ──────────────────────────────────────────────────────────────────
 
 async function doctor() {
-  console.log("🩺 Mr. Levin — Health Check\n");
+  console.log("🩺 Alvin Bot — Health Check\n");
 
   // Node
   try {
@@ -506,7 +506,7 @@ async function doctor() {
 // ── Update ──────────────────────────────────────────────────────────────────
 
 async function update() {
-  console.log("🔄 Mr. Levin aktualisieren...\n");
+  console.log("🔄 Alvin Bot aktualisieren...\n");
 
   try {
     const isGit = existsSync(resolve(process.cwd(), ".git"));
@@ -522,7 +522,7 @@ async function update() {
       console.log("  Neustarten mit: pm2 restart alvin-bot");
     } else {
       console.log("  📦 Update via npm...");
-      execSync("npm update mr-levin", { stdio: "inherit" });
+      execSync("npm update alvin-bot", { stdio: "inherit" });
       console.log("\n  ✅ Update abgeschlossen!");
     }
   } catch (err) {
@@ -535,9 +535,9 @@ async function update() {
 async function version() {
   try {
     const pkg = JSON.parse(readFileSync(resolve(import.meta.dirname || ".", "../package.json"), "utf-8"));
-    console.log(`Mr. Levin v${pkg.version}`);
+    console.log(`Alvin Bot v${pkg.version}`);
   } catch {
-    console.log("Mr. Levin (version unknown)");
+    console.log("Alvin Bot (version unknown)");
   }
 }
 
@@ -568,7 +568,7 @@ switch (cmd) {
     break;
   default:
     console.log(`
-🤖 Mr. Levin CLI
+🤖 Alvin Bot CLI
 
 Befehle:
   setup     Interaktiver Setup-Wizard

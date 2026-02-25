@@ -1,11 +1,11 @@
 {
-  "name": "mr-levin",
+  "name": "alvin-bot",
   "version": "3.0.0",
-  "description": "Mr. Levin — Autonomous AI Telegram Agent with multi-model support",
+  "description": "Alvin Bot \u2014 Your personal AI agent on Telegram, WhatsApp, Discord, Signal, and Web.",
   "type": "module",
   "main": "dist/index.js",
   "bin": {
-    "mr-levin": "./bin/cli.js"
+    "alvin-bot": "./bin/cli.js"
   },
   "scripts": {
     "dev": "tsx src/index.ts",

@@ -50,7 +50,7 @@ export default {
   name: "notes",
   description: "Markdown-Notizen erstellen, lesen und durchsuchen",
   version: "1.0.0",
-  author: "Mr. Levin",
+  author: "Alvin Bot",
 
   commands: [
     {

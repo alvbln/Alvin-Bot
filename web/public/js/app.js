@@ -1,5 +1,5 @@
 /**
- * Mr. Levin Web UI — Client-side application
+ * Alvin Bot Web UI — Client-side application
  */
 
 const API = '';
@@ -217,7 +217,7 @@ function setReply(msgIndex, text, role) {
   _replyTo = { msgIndex, text, role };
   const preview = document.getElementById('reply-preview');
   const previewText = document.getElementById('reply-preview-text');
-  previewText.textContent = `↩️ ${role === 'user' ? 'Du' : 'Mr. Levin'}: ${text.substring(0, 120)}${text.length > 120 ? '…' : ''}`;
+  previewText.textContent = `↩️ ${role === 'user' ? 'Du' : 'Alvin Bot'}: ${text.substring(0, 120)}${text.length > 120 ? '…' : ''}`;
   preview.style.display = 'flex';
   document.getElementById('chat-input').focus();
 }
@@ -277,7 +277,7 @@ function addMessage(role, text, customTime, skipSave) {
   if (role === 'user' && _replyTo && !skipSave) {
     const quote = document.createElement('div');
     quote.className = 'reply-quote';
-    quote.textContent = `${_replyTo.role === 'user' ? 'Du' : 'Mr. Levin'}: ${_replyTo.text.substring(0, 100)}`;
+    quote.textContent = `${_replyTo.role === 'user' ? 'Du' : 'Alvin Bot'}: ${_replyTo.text.substring(0, 100)}`;
     el.appendChild(quote);
   }
 
@@ -387,7 +387,7 @@ function exportChat(format = 'markdown') {
     const blob = new Blob([text], { type: 'text/plain' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    a.download = `mr-levin-chat-${new Date().toISOString().slice(0,10)}.${ext}`;
+    a.download = `alvin-bot-chat-${new Date().toISOString().slice(0,10)}.${ext}`;
     a.click();
     toast('Chat exportiert!');
   });
@@ -956,7 +956,7 @@ async function loadPlatforms() {
   const res = await fetch(API + '/api/platforms/setup');
   const data = await res.json();
 
-  let html = '<div style="margin-bottom:20px"><h3 style="font-size:1em;margin-bottom:4px">📱 Messaging-Plattformen</h3><div class="sub">Verbinde Mr. Levin mit verschiedenen Messaging-Diensten. Mehrere gleichzeitig möglich.</div></div>';
+  let html = '<div style="margin-bottom:20px"><h3 style="font-size:1em;margin-bottom:4px">📱 Messaging-Plattformen</h3><div class="sub">Verbinde Alvin Bot mit verschiedenen Messaging-Diensten. Mehrere gleichzeitig möglich.</div></div>';
 
   for (const p of data.platforms) {
     let statusBadge;
@@ -1385,7 +1385,7 @@ async function loadSettings() {
       <span style="font-size:1.5em">🔐</span>
       <div style="flex:1">
         <h3 style="font-size:0.95em;text-transform:none;letter-spacing:0">Sudo / Admin-Rechte</h3>
-        <div class="sub">Erlaube Mr. Levin, Befehle mit Administratorrechten auszuführen</div>
+        <div class="sub">Erlaube Alvin Bot, Befehle mit Administratorrechten auszuführen</div>
       </div>
       <span style="font-size:1.2em">${sudoIcon}</span>
     </div>
@@ -1568,7 +1568,7 @@ async function revokeSudo() {
 }
 
 async function showAdminDialog() {
-  const reason = prompt('Grund für Admin-Rechte:', 'Mr. Levin benötigt Administrator-Rechte');
+  const reason = prompt('Grund für Admin-Rechte:', 'Alvin Bot benötigt Administrator-Rechte');
   if (!reason) return;
   toast('🖥️ macOS Admin-Dialog wird angezeigt...');
   const res = await fetch(API + '/api/sudo/admin-dialog', {

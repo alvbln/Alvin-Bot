@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to Mr. Levin are documented here.
+All notable changes to Alvin Bot are documented here.
 
 ## [2.2.0] — 2026-02-24
 
@@ -46,11 +46,11 @@ All notable changes to Mr. Levin are documented here.
 
 ### 🛠 Infrastructure
 - **Dockerfile** + `docker-compose.yml` for containerized deployment
-- **CLI**: `npx mr-levin setup` (wizard), `doctor`, `update`, `version`
+- **CLI**: `npx alvin-bot setup` (wizard), `doctor`, `update`, `version`
 - **Markdown sanitizer** — Fixes unbalanced markers for Telegram
 - **Graceful shutdown** with 5s grace period
 - **Error resilience** — Uncaught exceptions logged, not crashed
-- `mr-levin.config.example.json` for all configurable options
+- `alvin-bot.config.example.json` for all configurable options
 
 ## [2.0.0] — 2026-02-24
 

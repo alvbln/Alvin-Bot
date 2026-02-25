@@ -61,7 +61,7 @@ export default {
   name: "email",
   description: "E-Mails lesen und senden (via himalaya CLI oder IMAP/SMTP)",
   version: "1.0.0",
-  author: "Mr. Levin",
+  author: "Alvin Bot",
 
   onInit: () => {
     if (!hasHimalaya()) {

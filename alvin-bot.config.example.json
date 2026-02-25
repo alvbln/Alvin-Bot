@@ -1,7 +1,7 @@
 {
   "$schema": "https://github.com/alvbln/alvin-bot#config",
   "bot": {
-    "name": "Mr. Levin",
+    "name": "Alvin Bot",
     "language": "de",
     "streamThrottleMs": 1500
   },

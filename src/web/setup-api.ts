@@ -645,7 +645,7 @@ export async function handleSetupAPI(
   if (urlPath === "/api/sudo/admin-dialog" && req.method === "POST") {
     try {
       const { reason } = JSON.parse(body);
-      const result = await requestAdminViaDialog(reason || "Mr. Levin benötigt Administrator-Rechte");
+      const result = await requestAdminViaDialog(reason || "Alvin Bot benötigt Administrator-Rechte");
       res.end(JSON.stringify(result));
     } catch {
       res.statusCode = 400;

@@ -313,8 +313,8 @@ export class OpenAICompatibleProvider implements Provider {
       headers["Authorization"] = `Bearer ${this.config.apiKey}`;
     }
     if (this.config.baseUrl?.includes("openrouter.ai")) {
-      headers["HTTP-Referer"] = "https://github.com/alevbln/mr-levin";
-      headers["X-Title"] = "Mr. Levin";
+      headers["HTTP-Referer"] = "https://github.com/alevbln/alvin-bot";
+      headers["X-Title"] = "Alvin Bot";
     }
     return headers;
   }

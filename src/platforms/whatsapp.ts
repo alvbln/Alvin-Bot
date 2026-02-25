@@ -364,7 +364,7 @@ export class WhatsAppAdapter implements PlatformAdapter {
         const myId = info?.wid?._serialized;
         if (myId) {
           await this.sendText(myId,
-            "🤖 *Mr. Levin ist jetzt auf WhatsApp verbunden!*\n\n" +
+            "🤖 *Alvin Bot ist jetzt auf WhatsApp verbunden!*\n\n" +
             "Schreib hier (Eigene Nachrichten) um mit mir zu chatten.\n" +
             "In Gruppenchats: aktiviere Gruppen im Web UI."
           );
@@ -485,12 +485,12 @@ export class WhatsAppAdapter implements PlatformAdapter {
 
       // Check mention requirement
       if (rule.requireMention) {
-        const botName = this.client?.info?.pushname || "Mr. Levin";
+        const botName = this.client?.info?.pushname || "Alvin Bot";
         const myWid = this.client?.info?.wid?._serialized || "";
         const myLid = this.client?.info?.me?._serialized || "";
         // Check text-based mentions
         const textMention = text && (
-          text.includes("@Mr.Levin") ||
+          text.includes("@alvin") ||
           text.includes("@bot") ||
           text.includes("@mr.levin") ||
           text.toLowerCase().includes(botName.toLowerCase()) ||
@@ -569,7 +569,7 @@ export class WhatsAppAdapter implements PlatformAdapter {
       userName,
       text: text || "",
       isGroup,
-      isMention: isGroup && !!text && (text.includes("@Mr.Levin") || text.includes("@bot")),
+      isMention: isGroup && !!text && (text.includes("@alvin") || text.includes("@bot")),
       isReplyToBot: false,
       replyToText: msg.hasQuotedMsg
         ? await msg.getQuotedMessage().then((q: any) => q?.body).catch(() => undefined)

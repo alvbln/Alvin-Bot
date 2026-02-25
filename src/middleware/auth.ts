@@ -66,7 +66,7 @@ export async function authMiddleware(
             `*Gruppe:* ${chatTitle}\n` +
             `*Chat-ID:* \`${chatId}\`\n` +
             `*Hinzugefügt von:* ${userId}\n\n` +
-            `Soll Mr. Levin in dieser Gruppe antworten?`,
+            `Soll Alvin Bot in dieser Gruppe antworten?`,
             { parse_mode: "Markdown", reply_markup: keyboard }
           );
         } catch (err) {

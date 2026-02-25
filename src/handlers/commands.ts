@@ -53,7 +53,7 @@ export function registerCommands(bot: Bot): void {
 
   bot.command("help", async (ctx) => {
     await ctx.reply(
-      `🤖 *Mr. Levin — Befehle*\n\n` +
+      `🤖 *Alvin Bot — Befehle*\n\n` +
       `💬 *Chat*\n` +
       `Einfach schreiben — ich antworte.\n` +
       `Sprachnachrichten & Fotos verstehe ich auch.\n\n` +
@@ -114,7 +114,7 @@ export function registerCommands(bot: Bot): void {
     const activeInfo = registry.getActive().getInfo();
 
     await ctx.reply(
-      `👋 *Hey! Ich bin Mr. Levin.*\n\n` +
+      `👋 *Hey! Ich bin Alvin Bot.*\n\n` +
       `Dein autonomer KI-Assistent auf Telegram. Schreib mir einfach — ` +
       `ich verstehe Text, Sprachnachrichten, Fotos und Dokumente.\n\n` +
       `🤖 Modell: *${activeInfo.name}*\n` +
@@ -206,7 +206,7 @@ export function registerCommands(bot: Bot): void {
     }
 
     await ctx.reply(
-      `🤖 *Mr. Levin Status*\n\n` +
+      `🤖 *Alvin Bot Status*\n\n` +
       `*Modell:* ${info.name}\n` +
       `*Effort:* ${EFFORT_LABELS[session.effort]}\n` +
       `*Voice:* ${session.voiceReply ? "an" : "aus"}\n` +
@@ -656,7 +656,7 @@ export function registerCommands(bot: Bot): void {
 
     // Build export text
     const lines: string[] = [
-      `# Mr. Levin — Gesprächsexport`,
+      `# Alvin Bot — Gesprächsexport`,
       `Datum: ${new Date().toLocaleString("de-DE")}`,
       `Nachrichten: ${session.messageCount}`,
       `Kosten: $${session.totalCost.toFixed(4)}`,
@@ -664,7 +664,7 @@ export function registerCommands(bot: Bot): void {
     ];
 
     for (const msg of session.history) {
-      const role = msg.role === "user" ? "👤 User" : "🤖 Mr. Levin";
+      const role = msg.role === "user" ? "👤 User" : "🤖 Alvin Bot";
       lines.push(`### ${role}\n${msg.content}\n`);
     }
 
@@ -807,14 +807,14 @@ export function registerCommands(bot: Bot): void {
 
     if (action === "approve") {
       approveGroup(chatId);
-      await ctx.editMessageText(`✅ Gruppe ${chatId} genehmigt. Mr. Levin antwortet jetzt dort.`);
+      await ctx.editMessageText(`✅ Gruppe ${chatId} genehmigt. Alvin Bot antwortet jetzt dort.`);
       // Notify the group
       try {
-        await ctx.api.sendMessage(chatId, "👋 Mr. Levin ist jetzt aktiv in dieser Gruppe!\n\nMentioned mich mit @-mention oder antwortet auf meine Nachrichten.");
+        await ctx.api.sendMessage(chatId, "👋 Alvin Bot ist jetzt aktiv in dieser Gruppe!\n\nMentioned mich mit @-mention oder antwortet auf meine Nachrichten.");
       } catch { /* group might not allow bot messages yet */ }
     } else {
       blockGroup(chatId);
-      await ctx.editMessageText(`🚫 Gruppe ${chatId} blockiert. Mr. Levin ignoriert diese Gruppe.`);
+      await ctx.editMessageText(`🚫 Gruppe ${chatId} blockiert. Alvin Bot ignoriert diese Gruppe.`);
     }
     await ctx.answerCallbackQuery();
   });
@@ -1482,7 +1482,7 @@ export function registerCommands(bot: Bot): void {
         .text("🔧 Web Dashboard öffnen", "setup:web").row();
 
       await ctx.reply(
-        `⚙️ *Mr. Levin Setup*\n\n` +
+        `⚙️ *Alvin Bot Setup*\n\n` +
         `*Aktives Modell:* ${activeInfo.name}\n` +
         `*Provider:* ${providers.length} konfiguriert\n` +
         `*Web UI:* http://localhost:${process.env.WEB_PORT || 3100}\n\n` +
@@ -1516,7 +1516,7 @@ export function registerCommands(bot: Bot): void {
           (status.permissions.fullDiskAccess !== null ? `*Full Disk Access:* ${status.permissions.fullDiskAccess ? "✅" : "❌"}\n` : "") +
           `\n*Einrichten:*\n\`/setup sudo <dein-system-passwort>\`\n\n` +
           `_Das Passwort wird sicher im ${status.storageMethod} gespeichert. ` +
-          `Damit kann Mr. Levin Befehle mit Admin-Rechten ausführen (Software installieren, Systemeinstellungen ändern, etc.)._\n\n` +
+          `Damit kann Alvin Bot Befehle mit Admin-Rechten ausführen (Software installieren, Systemeinstellungen ändern, etc.)._\n\n` +
           `⚠️ _Lösche diese Nachricht nach dem Einrichten! Das Passwort ist im Chatverlauf sichtbar._`,
           { parse_mode: "Markdown", reply_markup: keyboard }
         );
@@ -1539,7 +1539,7 @@ export function registerCommands(bot: Bot): void {
           `✅ *Sudo-Zugriff eingerichtet!*\n\n` +
           `Passwort gespeichert in: ${result.method}\n` +
           `Verifizierung: ✅ erfolgreich\n\n` +
-          `Mr. Levin kann jetzt Admin-Befehle ausführen.\n\n` +
+          `Alvin Bot kann jetzt Admin-Befehle ausführen.\n\n` +
           `⚠️ _Bitte lösche die Nachricht mit dem Passwort aus dem Chat!_`,
           { parse_mode: "Markdown" }
         );

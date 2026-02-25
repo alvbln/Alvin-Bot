@@ -225,7 +225,7 @@ async function executeJob(job: CronJob): Promise<{ output: string; error?: strin
           const registry = getRegistry();
           const queryOpts: QueryOptions = {
             prompt,
-            systemPrompt: `Du bist Mr. Levin, ein autonomer KI-Assistent. Du führst gerade einen geplanten Cron-Job aus ("${job.name}"). Antworte auf Deutsch, kurz und prägnant. Nutze Telegram-kompatibles Markdown. Du hast Zugriff auf Tools (Bash, Dateien, etc.) — nutze sie wenn nötig.`,
+            systemPrompt: `Du bist Alvin Bot, ein autonomer KI-Assistent. Du führst gerade einen geplanten Cron-Job aus ("${job.name}"). Antworte auf Deutsch, kurz und prägnant. Nutze Telegram-kompatibles Markdown. Du hast Zugriff auf Tools (Bash, Dateien, etc.) — nutze sie wenn nötig.`,
             effort: "high",
             workingDir: BOT_ROOT,
           };

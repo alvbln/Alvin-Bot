@@ -1,5 +1,5 @@
 /**
- * Mr. Levin — Multi-Model Provider Abstraction
+ * Alvin Bot — Multi-Model Provider Abstraction
  *
  * Unified interfaces for different LLM backends.
  * Every provider implements the same interface, making model switching seamless.

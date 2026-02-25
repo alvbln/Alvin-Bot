@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 /**
- * Mr. Levin TUI — Terminal Chat Interface
+ * Alvin Bot TUI — Terminal Chat Interface
  *
- * A full-screen terminal UI that connects to the running Mr. Levin instance
+ * A full-screen terminal UI that connects to the running Alvin Bot instance
  * via WebSocket (same as Web UI). Features:
  *
  * - Streaming chat with AI responses
@@ -13,7 +13,7 @@
  * - Input history (↑/↓)
  * - Multi-line input (Shift+Enter)
  *
- * Usage: mr-levin tui [--port 3100] [--host localhost]
+ * Usage: alvin-bot tui [--port 3100] [--host localhost]
  */
 
 import { createInterface, Interface } from "readline";
@@ -99,7 +99,7 @@ function drawHeader(): void {
   const modelStr = `${C.brightMagenta}${currentModel}${C.reset}`;
   const costStr = totalCost > 0 ? ` ${C.gray}· $${totalCost.toFixed(4)}${C.reset}` : "";
 
-  const title = `${C.bold}${C.brightCyan}🤖 Mr. Levin TUI${C.reset}`;
+  const title = `${C.bold}${C.brightCyan}🤖 Alvin Bot TUI${C.reset}`;
   const right = `${statusDot} ${status} ${C.gray}│${C.reset} ${modelStr}${costStr}`;
 
   // Top border
@@ -130,7 +130,7 @@ function printUser(text: string): void {
 }
 
 function printAssistantStart(): void {
-  process.stdout.write(`\n${C.bold}${C.brightBlue}Mr. Levin:${C.reset} `);
+  process.stdout.write(`\n${C.bold}${C.brightBlue}Alvin Bot:${C.reset} `);
 }
 
 function printAssistantDelta(text: string): void {
@@ -181,7 +181,7 @@ function connectWebSocket(): void {
 
   ws.on("open", () => {
     connected = true;
-    printInfo("Verbunden mit Mr. Levin");
+    printInfo("Verbunden mit Alvin Bot");
     showPrompt();
   });
 
