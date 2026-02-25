@@ -910,11 +910,16 @@ async function testApiKey(providerId: string, apiKey: string): Promise<{ ok: boo
     if (!provider) return { ok: false, error: "Unknown provider" };
 
     // Use stored key if requested (input was empty but key already configured)
+    // Skip for providers that don't use API keys (e.g. claude-sdk uses CLI auth)
     if (apiKey === "__USE_STORED__") {
-      const envKey = provider.envKey;
-      const storedKey = envKey ? process.env[envKey] : undefined;
-      if (!storedKey) return { ok: false, error: "Kein gespeicherter Key vorhanden" };
-      apiKey = storedKey;
+      if (providerId === "claude-sdk" || providerId === "ollama") {
+        apiKey = ""; // These don't need keys — test will check CLI/service availability
+      } else {
+        const envKey = provider.envKey;
+        const storedKey = envKey ? process.env[envKey] : undefined;
+        if (!storedKey) return { ok: false, error: "Kein gespeicherter Key vorhanden" };
+        apiKey = storedKey;
+      }
     }
 
     switch (providerId) {
