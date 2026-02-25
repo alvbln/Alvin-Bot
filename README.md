@@ -423,12 +423,12 @@ alvin-bot version   # Show version
   - [ ] Windows `.exe` (NSIS) via electron-builder
   - [ ] Linux `.AppImage` + `.deb` via electron-builder
   - [x] Auto-update mechanism (electron-updater)
-  - [ ] GUI Setup Wizard (provider selection, Telegram token, first-run experience)
+  - [x] GUI Setup Wizard (provider selection, Telegram token, first-run experience)
   - [x] Homebrew formula (`brew install alvin-bot`)
   - [x] Scoop manifest for Windows
   - [x] One-line install script (`curl -fsSL https://install.alvin-bot.dev | sh`)
   - [x] Docker Compose polish (production-ready `docker-compose.yml`)
-- [ ] **Phase 13** — npm publish (security audit)
+- [x] **Phase 13** — npm publish (security audit)
 
 ---
 
