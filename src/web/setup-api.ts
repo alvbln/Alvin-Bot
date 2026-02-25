@@ -132,7 +132,7 @@ const PLATFORMS: PlatformDef[] = [
     id: "whatsapp",
     name: "WhatsApp",
     icon: "💬",
-    description: "WhatsApp Web Verbindung via Baileys. QR-Code Scan beim ersten Start.",
+    description: "WhatsApp Web Verbindung via Baileys. ⚠️ Experimentell — Baileys wird gelegentlich von WhatsApp blockiert.",
     envVars: [
       { key: "WHATSAPP_ENABLED", label: "Aktivieren", placeholder: "true", type: "toggle" },
     ],
@@ -143,6 +143,7 @@ const PLATFORMS: PlatformDef[] = [
       "Starte den Bot neu (Maintenance → Bot neustarten)",
       "Der QR-Code erscheint hier unten — scanne ihn mit WhatsApp → Verknüpfte Geräte → Gerät hinzufügen",
       "Die Verbindung bleibt gespeichert (data/whatsapp-auth/)",
+      "⚠️ Hinweis: Baileys (inoffizielle WA-API) wird gelegentlich von WhatsApp blockiert. Falls 'Connection Failure' auftritt, später erneut versuchen.",
     ],
   },
   {
