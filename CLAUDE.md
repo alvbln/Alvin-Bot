@@ -171,3 +171,55 @@ Dieses Projekt ist der Bot selbst. Source Code liegt in `src/`.
 **Ändere NIEMALS den Bot-Code (src/, package.json, .env, ecosystem.config.cjs) ohne explizite Anweisung.**
 
 Das Arbeitsverzeichnis (`cwd`) wechselt je nach `/dir`-Befehl des Users — es ist nicht immer dieses Projekt.
+
+## Projekt-Status (Stand: 25.07.2025)
+
+### Versionen & Distribution
+- **Version:** 3.0.1
+- **npm:** `alvin-bot@3.0.1` auf npmjs.com (User: `alvbln`)
+- **GitHub:** https://github.com/alvbln/alvin-bot (PUBLIC)
+- **Release:** v3.0.1 mit macOS DMG (Apple Silicon arm64, 151 MB)
+- **Bot:** `@Mr_Levin_bot` auf Telegram
+
+### Installationswege
+1. **npm:** `npm install -g alvin-bot && alvin-bot setup && alvin-bot start`
+2. **From source:** `git clone` → `npm install` → `node bin/cli.js setup`
+3. **Desktop App:** DMG von GitHub Releases
+4. **Docker:** `Dockerfile` + `docker-compose.yml` vorhanden
+
+### Architektur
+- **Runtime:** Node.js ≥ 18, TypeScript, `"type": "module"` (ESM)
+- **Telegram:** grammy
+- **AI:** Multi-Provider (Claude SDK, Groq, Gemini, GPT-4o, NVIDIA NIM, Ollama, OpenRouter)
+- **Web UI:** Express auf Port 3100 (auth via `WEB_PASSWORD` env var)
+- **TUI:** `alvin-bot tui` — Terminal-Chat via WebSocket
+- **Electron:** `electron/main.cts` + `electron/preload.cts` (CJS wegen ESM-Package)
+- **Cron:** In-App Scheduler (30s Loop), Jobs in `docs/cron-jobs.json`
+- **PM2:** `alvin-bot` Prozess, Config in `ecosystem.config.cjs`
+
+### Electron-Besonderheiten
+- **`.cts` Extension:** Pflicht weil `"type": "module"` → `.js` = ESM, Electron braucht CJS
+- **`asar: false`:** electron-builder 26.x Bug excludiert root `package.json` aus asar
+- **`afterPack.cjs` Hook:** Entfernt persönliche Daten aus Builds (`docs/memory/`, `docs/users/`, etc.)
+- **Build:** `bash scripts/electron-build.sh` (setzt temporär `main` auf Electron Entry)
+- **Auto-Update:** `electron-updater`, GitHub Releases als Quelle
+
+### Security-Regeln (KRITISCH)
+- **KEINE persönlichen Daten im Code:** Telegram-IDs, Pfade, Tokens → nur in `.env`
+- **`.gitignore` schützt:** `.env`, `docs/users/`, `docs/cron-jobs.json`, `docs/memory/`, `backups/`, `scripts/`, `data/`
+- **`.npmignore` schützt:** Alles oben + `src/`, `electron/`, `Dockerfile`, etc.
+- **Git History wurde bereinigt** (25.07.2025): `alvin_de`, Telegram-ID, `Co-Authored-By`, alter Projektname entfernt
+- **GitHub Repo wurde neu erstellt** um dangling commits zu eliminieren
+- **npm Token:** in `~/.npmrc` (expires May 2026) — NIEMALS in Code/Docs
+
+### Build & Deploy Checkliste
+1. `npm run build` (TypeScript kompilieren)
+2. `npm run electron:compile` (Electron CTS → CJS)
+3. Keine sensiblen Daten in tracked files (`git diff --cached | grep -E "token|password|secret"`)
+4. `npm publish` für npm, `bash scripts/electron-build.sh` für DMG
+5. `gh release create` für GitHub Release mit DMG Asset
+
+### Noch offen
+- Windows `.exe` Build (braucht Windows-Umgebung)
+- Linux `.AppImage` Build (braucht Linux-Umgebung)
+- Homebrew/Scoop SHA-Hashes aktualisieren wenn die als Installationsweg angeboten werden
