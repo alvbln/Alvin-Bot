@@ -76,6 +76,32 @@ The setup wizard walks you through:
 2. **AI provider choice** — Groq (free), NVIDIA NIM (free), Google Gemini (free), OpenAI, OpenRouter, or Claude SDK
 3. Optional extras (voice, web password, WhatsApp)
 
+### Desktop App (Electron)
+
+Download the pre-built installer for your platform:
+
+| Platform | File | Architecture |
+|----------|------|-------------|
+| macOS | `Alvin Bot-3.0.0-arm64.dmg` | Apple Silicon (M1+) |
+| Windows | Coming soon | x64 |
+| Linux | Coming soon | x64 |
+
+**Build from source:**
+
+```bash
+git clone https://github.com/alvbln/alvin-bot.git
+cd alvin-bot
+npm install
+npm run electron:build:full   # Builds DMG/EXE/AppImage
+# Output: release/
+```
+
+The desktop app includes:
+- **System tray icon** — Bot runs in background, Start/Stop/Dashboard controls
+- **Auto-start bot** — If `.env` exists, bot starts automatically
+- **First-run wizard** — No `.env`? Opens setup page on first launch
+- **Close to tray** — Closing the window minimizes to tray, not quit
+
 ### Docker
 
 ```bash
@@ -385,7 +411,7 @@ alvin-bot version   # Show version
   - [x] Command Palette (Cmd+K / Ctrl+K) with fuzzy search
 - [ ] **Phase 12** — Native Installers (Non-Techie Friendly)
   - [x] Electron wrapper (embedded Node.js + WebUI + tray icon)
-  - [ ] macOS `.dmg` via electron-builder
+  - [x] macOS `.dmg` build via electron-builder (arm64, 151 MB)
   - [ ] Windows `.exe` (NSIS) via electron-builder
   - [ ] Linux `.AppImage` + `.deb` via electron-builder
   - [ ] Auto-update mechanism (electron-updater)
