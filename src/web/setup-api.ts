@@ -185,19 +185,38 @@ interface ProviderDef {
 const PROVIDERS: ProviderDef[] = [
   {
     id: "claude-sdk",
-    name: "Anthropic Claude",
+    name: "Claude Agent SDK",
     icon: "🟣",
-    description: "Claude via Agent SDK. Braucht Claude Max Abo ($20+/Monat) oder API Key.",
-    envKey: "ANTHROPIC_API_KEY",
+    description: "Voller Tool-Use via Agent SDK. Braucht Claude CLI Login (Max Abo oder API Key).",
+    envKey: "",
     models: [
       { key: "claude-sdk", name: "Claude (Agent SDK)", model: "claude-opus-4-6" },
     ],
     signupUrl: "https://console.anthropic.com",
-    docsUrl: "https://docs.anthropic.com",
+    docsUrl: "https://docs.anthropic.com/en/docs/claude-code",
     setupSteps: [
-      "Claude Max Abo → Automatisch via SDK (kein Key nötig)",
-      "Oder: API Key auf console.anthropic.com erstellen",
-      "Claude Agent SDK hat vollen Tool-Use Support",
+      "npm install -g @anthropic-ai/claude-code",
+      "claude login (Browser-Auth oder API Key)",
+      "Voller Tool-Use: Dateien lesen/schreiben, Shell-Befehle, Browser",
+    ],
+  },
+  {
+    id: "anthropic",
+    name: "Anthropic API",
+    icon: "🟣",
+    description: "Claude Opus, Sonnet, Haiku direkt via API Key. OpenAI-kompatibel.",
+    envKey: "ANTHROPIC_API_KEY",
+    models: [
+      { key: "claude-opus", name: "Claude Opus 4", model: "claude-opus-4-6" },
+      { key: "claude-sonnet", name: "Claude Sonnet 4", model: "claude-sonnet-4-20250514" },
+      { key: "claude-haiku", name: "Claude 3.5 Haiku", model: "claude-3-5-haiku-20241022" },
+    ],
+    signupUrl: "https://console.anthropic.com/settings/keys",
+    docsUrl: "https://docs.anthropic.com/en/api",
+    setupSteps: [
+      "Account auf console.anthropic.com erstellen",
+      "API Key unter Settings → API Keys generieren",
+      "Credits aufladen (Pay-as-you-go) oder Abo nutzen",
     ],
   },
   {
@@ -957,6 +976,14 @@ async function testApiKey(providerId: string, apiKey: string): Promise<{ ok: boo
         } catch {
           return { ok: false, error: "Claude CLI nicht installiert oder nicht eingeloggt" };
         }
+      }
+      case "anthropic": {
+        // Anthropic API via OpenAI-compatible endpoint
+        const r = await fetch("https://api.anthropic.com/v1/models", {
+          headers: { "x-api-key": apiKey, "anthropic-version": "2023-06-01" },
+        });
+        if (!r.ok) return { ok: false, error: `HTTP ${r.status}: ${(await r.text()).substring(0, 200)}` };
+        return { ok: true, model: "claude-sonnet-4" };
       }
       default:
         return { ok: false, error: "Key-Test für diesen Provider nicht verfügbar" };

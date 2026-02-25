@@ -188,6 +188,7 @@ export interface SimpleConfig {
   primary: string;
   fallbacks?: string[];
   apiKeys?: {
+    anthropic?: string;
     openai?: string;
     google?: string;
     nvidia?: string;
@@ -211,6 +212,22 @@ export function createRegistry(config: SimpleConfig): ProviderRegistry {
       type: "claude-sdk",
       name: "Claude (Agent SDK)",
       model: "claude-opus-4-6",
+    } as ProviderConfig;
+  }
+
+  // Auto-register Anthropic API models if key is available (separate from Agent SDK)
+  if (config.apiKeys?.anthropic) {
+    providers["claude-opus"] = {
+      ...PROVIDER_PRESETS["claude-opus"],
+      apiKey: config.apiKeys.anthropic,
+    } as ProviderConfig;
+    providers["claude-sonnet"] = {
+      ...PROVIDER_PRESETS["claude-sonnet"],
+      apiKey: config.apiKeys.anthropic,
+    } as ProviderConfig;
+    providers["claude-haiku"] = {
+      ...PROVIDER_PRESETS["claude-haiku"],
+      apiKey: config.apiKeys.anthropic,
     } as ProviderConfig;
   }
 

@@ -124,6 +124,35 @@ export const PROVIDER_PRESETS: Record<string, Partial<ProviderConfig>> = {
     supportsStreaming: true,
   },
 
+  // Anthropic API (via OpenAI-compatible endpoint — no Agent SDK needed)
+  "claude-opus": {
+    type: "openai-compatible",
+    name: "Claude Opus 4",
+    model: "claude-opus-4-6",
+    baseUrl: "https://api.anthropic.com/v1/",
+    supportsVision: true,
+    supportsStreaming: true,
+    supportsTools: true,
+  },
+  "claude-sonnet": {
+    type: "openai-compatible",
+    name: "Claude Sonnet 4",
+    model: "claude-sonnet-4-20250514",
+    baseUrl: "https://api.anthropic.com/v1/",
+    supportsVision: true,
+    supportsStreaming: true,
+    supportsTools: true,
+  },
+  "claude-haiku": {
+    type: "openai-compatible",
+    name: "Claude 3.5 Haiku",
+    model: "claude-3-5-haiku-20241022",
+    baseUrl: "https://api.anthropic.com/v1/",
+    supportsVision: true,
+    supportsStreaming: true,
+    supportsTools: true,
+  },
+
   // Groq (fast inference, free tier, supports function calling)
   "groq": {
     type: "openai-compatible",
