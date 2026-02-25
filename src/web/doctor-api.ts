@@ -521,7 +521,6 @@ export async function handleDoctorAPI(
       // Find our process (by name or script)
       const botProcess = processes.find((p: any) =>
         p.name === "alvin-bot" ||
-        p.name === "alvin-bot" || // legacy name
         p.pm2_env?.pm_exec_path?.includes("alvin-bot")
       ) || processes[0]; // fallback to first process
 
