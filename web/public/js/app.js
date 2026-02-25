@@ -1283,6 +1283,107 @@ async function reconnectBot() {
   setTimeout(connectWS, 500);
 }
 
+// ── PM2 Process Control ──
+async function pm2Action(action) {
+  const labels = { restart: 'neustarten', reload: 'neu laden', stop: 'stoppen', start: 'starten', flush: 'Logs leeren' };
+  const dangerous = ['stop'];
+  if (dangerous.includes(action) && !confirm(`Bot wirklich ${labels[action]}? ⚠️ Der Bot wird offline gehen!`)) return;
+  if (action === 'restart' && !confirm('Bot neustarten? Laufende Anfragen werden abgebrochen.')) return;
+
+  toast(`⏳ PM2 ${action}...`);
+  try {
+    const res = await fetch(API + '/api/pm2/action', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action }),
+    });
+    const data = await res.json();
+    if (data.ok) {
+      toast(`✅ PM2 ${action} erfolgreich`);
+      if (action === 'stop') {
+        document.getElementById('pm2-status').innerHTML = '<span class="badge badge-red">⏹️ Gestoppt</span>';
+      } else {
+        setTimeout(refreshPM2Status, 2000);
+        if (action === 'restart' || action === 'reload' || action === 'start') {
+          setTimeout(connectWS, 3000);
+        }
+      }
+    } else {
+      toast(`❌ PM2 ${action} fehlgeschlagen: ${data.error || 'Unbekannt'}`, 5000);
+    }
+  } catch (e) {
+    toast(`❌ Verbindung verloren (Bot gestoppt?)`, 5000);
+    document.getElementById('pm2-status').innerHTML = '<span class="badge badge-red">❌ Nicht erreichbar</span>';
+  }
+}
+
+async function refreshPM2Status() {
+  try {
+    const res = await fetch(API + '/api/pm2/status');
+    const data = await res.json();
+    const el = document.getElementById('pm2-status');
+    if (!el) return;
+
+    if (data.error) {
+      el.innerHTML = `<span class="badge badge-yellow">⚠️ ${data.error}</span>`;
+      return;
+    }
+
+    const p = data.process;
+    const statusColors = { online: 'green', stopping: 'yellow', stopped: 'red', errored: 'red', launching: 'yellow' };
+    const statusIcons = { online: '🟢', stopping: '🟡', stopped: '🔴', errored: '❌', launching: '🚀' };
+    const color = statusColors[p.status] || 'gray';
+    const icon = statusIcons[p.status] || '❓';
+
+    const uptime = p.uptime > 0 ? formatDuration(p.uptime) : '—';
+    const mem = p.memory ? (p.memory / 1024 / 1024).toFixed(1) + ' MB' : '—';
+    const cpu = p.cpu !== undefined ? p.cpu + '%' : '—';
+
+    el.innerHTML = `
+      <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:center">
+        <span class="badge badge-${color}">${icon} ${p.status}</span>
+        <span title="Uptime">⏱️ ${uptime}</span>
+        <span title="Memory">💾 ${mem}</span>
+        <span title="CPU">🖥️ ${cpu}</span>
+        <span title="Restarts">🔄 ${p.restarts}x</span>
+        <span title="PID">PID: ${p.pid || '—'}</span>
+        <span title="PM2 Name" style="font-family:monospace;color:var(--accent2)">${p.name}</span>
+      </div>`;
+  } catch (e) {
+    const el = document.getElementById('pm2-status');
+    if (el) el.innerHTML = '<span class="badge badge-red">❌ Nicht erreichbar</span>';
+  }
+}
+
+function formatDuration(ms) {
+  const s = Math.floor(ms / 1000);
+  if (s < 60) return s + 's';
+  const m = Math.floor(s / 60);
+  if (m < 60) return m + 'm ' + (s % 60) + 's';
+  const h = Math.floor(m / 60);
+  if (h < 24) return h + 'h ' + (m % 60) + 'm';
+  const d = Math.floor(h / 24);
+  return d + 'd ' + (h % 24) + 'h';
+}
+
+async function loadPM2Logs() {
+  const el = document.getElementById('pm2-log-output');
+  if (!el) return;
+  el.textContent = 'Lade Logs...';
+  try {
+    const res = await fetch(API + '/api/pm2/logs');
+    const data = await res.json();
+    if (data.error) {
+      el.textContent = '❌ ' + data.error;
+    } else {
+      el.textContent = data.logs || '(keine Logs)';
+      el.scrollTop = el.scrollHeight;
+    }
+  } catch (e) {
+    el.textContent = '❌ Verbindung fehlgeschlagen';
+  }
+}
+
 function editEnvVar(key) {
   const value = prompt(`Neuer Wert für ${key}:`, '');
   if (value === null) return;
@@ -1672,16 +1773,44 @@ async function loadMaintenance() {
   }
   html += `<div id="backup-files-area" style="display:none;margin-top:8px;padding:8px;background:var(--bg3);border-radius:6px;font-size:0.82em"></div></div>`;
 
-  // ── Bot Controls ──
+  // ── PM2 Process Control ──
   html += `<div class="card" style="margin-bottom:16px">
-    <h3 style="font-size:0.95em;text-transform:none;letter-spacing:0;margin-bottom:12px">🔧 Bot-Steuerung</h3>
-    <div style="display:flex;gap:8px;flex-wrap:wrap">
-      <button class="btn btn-sm" onclick="restartBot()">🔄 Bot neustarten</button>
-      <button class="btn btn-sm btn-outline" onclick="reconnectBot()">🔌 Reconnect</button>
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+      <span style="font-size:1.5em">⚙️</span>
+      <div style="flex:1">
+        <h3 style="font-size:0.95em;text-transform:none;letter-spacing:0">Prozess-Steuerung (PM2)</h3>
+        <div class="sub">Bot-Prozess starten, stoppen und überwachen</div>
+      </div>
+      <button class="btn btn-sm btn-outline" onclick="refreshPM2Status()">🔄 Status</button>
     </div>
+    <div id="pm2-status" style="margin-bottom:12px;font-size:0.85em;color:var(--fg2)">Lade PM2-Status...</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn btn-sm" onclick="pm2Action('restart')" title="Neustart (kein Datenverlust)">🔄 Restart</button>
+      <button class="btn btn-sm btn-outline" onclick="pm2Action('reload')" title="Zero-Downtime Reload">♻️ Reload</button>
+      <button class="btn btn-sm btn-danger" onclick="pm2Action('stop')" title="Bot stoppen">⏹️ Stop</button>
+      <button class="btn btn-sm" style="background:var(--green)" onclick="pm2Action('start')" title="Bot starten">▶️ Start</button>
+      <button class="btn btn-sm btn-outline" onclick="pm2Action('flush')" title="Logs leeren">🧹 Logs leeren</button>
+    </div>
+    <div id="pm2-logs" style="display:none;margin-top:12px"></div>
+  </div>`;
+
+  // ── Bot Logs ──
+  html += `<div class="card" style="margin-bottom:16px">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+      <span style="font-size:1.5em">📋</span>
+      <div style="flex:1">
+        <h3 style="font-size:0.95em;text-transform:none;letter-spacing:0">Letzte Logs</h3>
+        <div class="sub">Die letzten 30 Zeilen der Bot-Ausgabe</div>
+      </div>
+      <button class="btn btn-sm btn-outline" onclick="loadPM2Logs()">🔄 Aktualisieren</button>
+    </div>
+    <div id="pm2-log-output" style="background:var(--bg1);border-radius:6px;padding:10px;font-family:monospace;font-size:0.75em;max-height:300px;overflow-y:auto;white-space:pre-wrap;color:var(--fg2)">Klicke "Aktualisieren" um Logs zu laden.</div>
   </div>`;
 
   document.getElementById('maintenance-content').innerHTML = html;
+
+  // Auto-load PM2 status
+  refreshPM2Status();
 }
 
 // ── Theme Toggle ────────────────────────────────────────

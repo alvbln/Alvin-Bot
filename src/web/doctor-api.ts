@@ -503,10 +503,143 @@ export async function handleDoctorAPI(
     return true;
   }
 
-  // POST /api/restart — restart the bot
+  // POST /api/restart — restart the bot (legacy)
   if (urlPath === "/api/bot/restart" && req.method === "POST") {
     res.end(JSON.stringify({ ok: true, note: "Bot wird neugestartet..." }));
     setTimeout(() => process.exit(0), 500); // PM2 auto-restarts
+    return true;
+  }
+
+  // ── PM2 Process Control ────────────────────────────────
+
+  // GET /api/pm2/status — Get PM2 process info
+  if (urlPath === "/api/pm2/status") {
+    try {
+      const output = execSync("pm2 jlist", { encoding: "utf-8", timeout: 5000, stdio: "pipe" });
+      const processes = JSON.parse(output);
+
+      // Find our process (by name or script)
+      const botProcess = processes.find((p: any) =>
+        p.name === "alvin-bot" ||
+        p.name === "mr-levin" ||
+        p.pm2_env?.pm_exec_path?.includes("alvin-bot") ||
+        p.pm2_env?.pm_exec_path?.includes("mr-levin")
+      ) || processes[0]; // fallback to first process
+
+      if (!botProcess) {
+        res.end(JSON.stringify({ error: "Kein PM2-Prozess gefunden" }));
+        return true;
+      }
+
+      const env = botProcess.pm2_env || {};
+      res.end(JSON.stringify({
+        process: {
+          name: botProcess.name,
+          pid: botProcess.pid,
+          status: env.status || "unknown",
+          uptime: env.pm_uptime ? Date.now() - env.pm_uptime : 0,
+          memory: botProcess.monit?.memory || 0,
+          cpu: botProcess.monit?.cpu || 0,
+          restarts: env.restart_time || 0,
+          version: env.version || "?",
+          nodeVersion: env.node_version || process.version,
+          execPath: env.pm_exec_path || "?",
+          cwd: env.pm_cwd || "?",
+        },
+      }));
+    } catch (err) {
+      res.end(JSON.stringify({ error: "PM2 nicht verfügbar" }));
+    }
+    return true;
+  }
+
+  // POST /api/pm2/action — Execute PM2 action (restart, stop, start, reload, flush)
+  if (urlPath === "/api/pm2/action" && req.method === "POST") {
+    try {
+      const { action } = JSON.parse(body);
+      const allowed = ["restart", "stop", "start", "reload", "flush"];
+      if (!allowed.includes(action)) {
+        res.statusCode = 400;
+        res.end(JSON.stringify({ ok: false, error: `Ungültige Aktion: ${action}` }));
+        return true;
+      }
+
+      // Find our process name
+      let processName = "alvin-bot";
+      try {
+        const jlist = execSync("pm2 jlist", { encoding: "utf-8", timeout: 5000, stdio: "pipe" });
+        const procs = JSON.parse(jlist);
+        const found = procs.find((p: any) =>
+          p.name === "alvin-bot" || p.name === "mr-levin"
+        );
+        if (found) processName = found.name;
+      } catch { /* use default */ }
+
+      if (action === "flush") {
+        execSync(`pm2 flush ${processName}`, { encoding: "utf-8", timeout: 10000, stdio: "pipe" });
+        res.end(JSON.stringify({ ok: true, message: "Logs geleert" }));
+        return true;
+      }
+
+      if (action === "stop") {
+        // Stop is special — we can't respond after stopping ourselves
+        res.end(JSON.stringify({ ok: true, message: "Bot wird gestoppt..." }));
+        setTimeout(() => {
+          try {
+            execSync(`pm2 stop ${processName}`, { timeout: 10000, stdio: "pipe" });
+          } catch { /* process might already be dead */ }
+        }, 300);
+        return true;
+      }
+
+      if (action === "start") {
+        // Start the process if stopped
+        execSync(`pm2 start ${processName}`, { encoding: "utf-8", timeout: 10000, stdio: "pipe" });
+        res.end(JSON.stringify({ ok: true, message: "Bot gestartet" }));
+        return true;
+      }
+
+      if (action === "restart" || action === "reload") {
+        res.end(JSON.stringify({ ok: true, message: `Bot wird ${action === "restart" ? "neugestartet" : "neu geladen"}...` }));
+        setTimeout(() => {
+          try {
+            execSync(`pm2 ${action} ${processName} --update-env`, { timeout: 15000, stdio: "pipe" });
+          } catch { /* PM2 might kill us during restart */ }
+        }, 300);
+        return true;
+      }
+    } catch (err) {
+      res.end(JSON.stringify({ ok: false, error: err instanceof Error ? err.message : String(err) }));
+    }
+    return true;
+  }
+
+  // GET /api/pm2/logs — Get recent PM2 logs
+  if (urlPath === "/api/pm2/logs") {
+    try {
+      // Find process name
+      let processName = "alvin-bot";
+      try {
+        const jlist = execSync("pm2 jlist", { encoding: "utf-8", timeout: 5000, stdio: "pipe" });
+        const procs = JSON.parse(jlist);
+        const found = procs.find((p: any) =>
+          p.name === "alvin-bot" || p.name === "mr-levin"
+        );
+        if (found) processName = found.name;
+      } catch { /* use default */ }
+
+      let logs = execSync(`pm2 logs ${processName} --nostream --lines 30 2>&1`, {
+        encoding: "utf-8",
+        timeout: 5000,
+        stdio: "pipe",
+        env: { ...process.env, FORCE_COLOR: "0", NO_COLOR: "1" },
+      });
+      // Strip ANSI escape codes
+      logs = logs.replace(/\x1b\[[0-9;]*m/g, "");
+      res.end(JSON.stringify({ logs }));
+    } catch (err) {
+      res.end(JSON.stringify({ error: "Logs nicht verfügbar", logs: "" }));
+    }
     return true;
   }
 
