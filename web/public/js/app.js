@@ -457,13 +457,14 @@ async function saveProviderKey(providerId) {
 
 async function testProviderKey(providerId) {
   const input = document.getElementById('key-' + providerId);
-  const apiKey = input.value.trim();
-  if (!apiKey || apiKey.includes('...')) { toast('Bitte einen vollständigen Key eingeben', 'error'); return; }
+  const apiKey = input?.value?.trim() || '';
+  // Allow testing with stored key (empty input but key already configured)
+  const useStored = !apiKey || apiKey.includes('...');
   const resultDiv = document.getElementById('key-result-' + providerId);
   resultDiv.innerHTML = '<span style="color:var(--fg2)">⏳ Teste...</span>';
   const res = await fetch(API + '/api/providers/test-key', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ providerId, apiKey }),
+    body: JSON.stringify({ providerId, apiKey: useStored ? '__USE_STORED__' : apiKey }),
   });
   const data = await res.json();
   resultDiv.innerHTML = data.ok

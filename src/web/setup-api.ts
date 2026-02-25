@@ -884,6 +884,14 @@ async function testApiKey(providerId: string, apiKey: string): Promise<{ ok: boo
     const provider = PROVIDERS.find(p => p.id === providerId);
     if (!provider) return { ok: false, error: "Unknown provider" };
 
+    // Use stored key if requested (input was empty but key already configured)
+    if (apiKey === "__USE_STORED__") {
+      const envKey = provider.envKey;
+      const storedKey = envKey ? process.env[envKey] : undefined;
+      if (!storedKey) return { ok: false, error: "Kein gespeicherter Key vorhanden" };
+      apiKey = storedKey;
+    }
+
     switch (providerId) {
       case "openai": {
         const r = await fetch("https://api.openai.com/v1/models", { headers: { Authorization: `Bearer ${apiKey}` } });
@@ -904,6 +912,21 @@ async function testApiKey(providerId: string, apiKey: string): Promise<{ ok: boo
         const r = await fetch("https://openrouter.ai/api/v1/models", { headers: { Authorization: `Bearer ${apiKey}` } });
         if (!r.ok) return { ok: false, error: `HTTP ${r.status}: ${await r.text()}` };
         return { ok: true, model: "anthropic/claude-sonnet-4" };
+      }
+      case "groq": {
+        const r = await fetch("https://api.groq.com/openai/v1/models", { headers: { Authorization: `Bearer ${apiKey}` } });
+        if (!r.ok) return { ok: false, error: `HTTP ${r.status}: ${await r.text()}` };
+        return { ok: true, model: "llama-3.3-70b-versatile" };
+      }
+      case "claude-sdk": {
+        // Claude SDK uses CLI auth, not an API key — check if CLI is available
+        const { execSync } = await import("child_process");
+        try {
+          execSync("claude --version", { timeout: 5000, stdio: "pipe" });
+          return { ok: true, model: "claude-opus-4-6" };
+        } catch {
+          return { ok: false, error: "Claude CLI nicht installiert oder nicht eingeloggt" };
+        }
       }
       default:
         return { ok: false, error: "Key-Test für diesen Provider nicht verfügbar" };
