@@ -1232,18 +1232,66 @@ export function registerCommands(bot: Bot): void {
     if (arg.startsWith("add ")) {
       const rest = arg.slice(4).trim();
 
-      // Parse: schedule can be "5m" or "0 9 * * 1" (quoted)
+      // Natural language schedule shortcuts (German + English)
+      const naturalSchedules: Record<string, string> = {
+        "täglich": "0 8 * * *", "daily": "0 8 * * *",
+        "stündlich": "0 * * * *", "hourly": "0 * * * *",
+        "wöchentlich": "0 8 * * 1", "weekly": "0 8 * * 1",
+        "monatlich": "0 8 1 * *", "monthly": "0 8 1 * *",
+        "werktags": "0 8 * * 1-5", "weekdays": "0 8 * * 1-5",
+        "wochenende": "0 10 * * 0,6", "weekend": "0 10 * * 0,6",
+        "montags": "0 8 * * 1", "dienstags": "0 8 * * 2", "mittwochs": "0 8 * * 3",
+        "donnerstags": "0 8 * * 4", "freitags": "0 8 * * 5", "samstags": "0 10 * * 6", "sonntags": "0 10 * * 0",
+        "morgens": "0 8 * * *", "mittags": "0 12 * * *", "abends": "0 18 * * *", "nachts": "0 0 * * *",
+      };
+
+      // Time-prefixed natural: "8:30 täglich" or "täglich 8:30"
+      function resolveNatural(input: string): { schedule: string; rest: string } | null {
+        // Try "HH:MM keyword rest" or "keyword HH:MM rest"
+        const timeKeyword = input.match(/^(\d{1,2}):(\d{2})\s+(\S+)\s*(.*)/);
+        if (timeKeyword) {
+          const key = timeKeyword[3].toLowerCase();
+          if (naturalSchedules[key]) {
+            const base = naturalSchedules[key].split(" ");
+            base[0] = String(parseInt(timeKeyword[2]));
+            base[1] = String(parseInt(timeKeyword[1]));
+            return { schedule: base.join(" "), rest: timeKeyword[4] };
+          }
+        }
+        const keywordTime = input.match(/^(\S+)\s+(\d{1,2}):(\d{2})\s*(.*)/);
+        if (keywordTime) {
+          const key = keywordTime[1].toLowerCase();
+          if (naturalSchedules[key]) {
+            const base = naturalSchedules[key].split(" ");
+            base[0] = String(parseInt(keywordTime[3]));
+            base[1] = String(parseInt(keywordTime[2]));
+            return { schedule: base.join(" "), rest: keywordTime[4] };
+          }
+        }
+        // Simple keyword
+        const firstWord = input.split(" ")[0].toLowerCase();
+        if (naturalSchedules[firstWord]) {
+          return { schedule: naturalSchedules[firstWord], rest: input.slice(firstWord.length).trim() };
+        }
+        return null;
+      }
+
+      // Parse: schedule can be "5m", natural keyword, or "0 9 * * 1" (quoted)
       let schedule: string;
       let remainder: string;
 
-      if (rest.startsWith('"')) {
+      const natural = resolveNatural(rest);
+      if (natural) {
+        schedule = natural.schedule;
+        remainder = natural.rest;
+      } else if (rest.startsWith('"')) {
         const endQuote = rest.indexOf('"', 1);
         if (endQuote < 0) { await ctx.reply("❌ Fehlende schließende Anführungszeichen für Cron-Ausdruck."); return; }
         schedule = rest.slice(1, endQuote);
         remainder = rest.slice(endQuote + 1).trim();
       } else {
         const sp = rest.indexOf(" ");
-        if (sp < 0) { await ctx.reply("Format: `/cron add <schedule> <type> <payload>`", { parse_mode: "Markdown" }); return; }
+        if (sp < 0) { await ctx.reply("Format: <code>/cron add &lt;schedule&gt; &lt;type&gt; &lt;payload&gt;</code>\n\nSchedule-Optionen:\n• <b>Intervalle:</b> 5m, 1h, 30s, 2d\n• <b>Natürlich:</b> täglich, wöchentlich, monatlich, werktags, morgens, abends\n• <b>Mit Uhrzeit:</b> 8:30 täglich, werktags 9:00\n• <b>Wochentage:</b> montags, dienstags, freitags\n• <b>Cron:</b> \"0 9 * * 1-5\"", { parse_mode: "HTML" }); return; }
         schedule = rest.slice(0, sp);
         remainder = rest.slice(sp + 1).trim();
       }
@@ -1278,14 +1326,15 @@ export function registerCommands(bot: Bot): void {
         createdBy: `telegram:${userId}`,
       });
 
+      const readableSched = humanReadableSchedule(job.schedule);
       await ctx.reply(
-        `✅ *Cron Job erstellt*\n\n` +
-        `*Name:* ${job.name}\n` +
-        `*Schedule:* ${job.schedule}\n` +
-        `*Typ:* ${job.type}\n` +
-        `*Nächster Lauf:* ${formatNextRun(job.nextRunAt)}\n` +
-        `*ID:* \`${job.id}\``,
-        { parse_mode: "Markdown" }
+        `✅ <b>Cron Job erstellt</b>\n\n` +
+        `<b>Name:</b> ${job.name}\n` +
+        `📅 <b>${readableSched}</b>\n` +
+        `<b>Typ:</b> ${job.type}\n` +
+        `<b>Nächster Lauf:</b> ${formatNextRun(job.nextRunAt)}\n` +
+        `<b>ID:</b> <code>${job.id}</code>`,
+        { parse_mode: "HTML" }
       );
       return;
     }

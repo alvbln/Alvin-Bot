@@ -1488,30 +1488,17 @@ async function loadCron() {
     const payload = j.payload.text || j.payload.command || j.payload.url || j.payload.prompt || '';
     const schedLabel = j.scheduleReadable || j.schedule;
     const recBadge = j.oneShot
-      ? '<span class="badge badge-yellow" title="Wird einmalig ausgeführt und dann deaktiviert">⚡ Einmalig</span>'
-      : `<span class="badge" style="background:var(--accent);color:#fff" title="${escapeHtml(j.schedule)}">🔄 ${escapeHtml(schedLabel)}</span>`;
+      ? '<span class="badge badge-yellow">⚡ Einmalig</span>'
+      : `<span class="badge" style="background:var(--accent);color:#fff">🔄 ${escapeHtml(schedLabel)}</span>`;
 
     return `<div class="card" style="margin-bottom:12px">
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
         <span style="font-size:1.2em">${statusIcon}</span>
         <span style="font-weight:500;flex:1">${icon} ${escapeHtml(j.name)}${errIcon}</span>
         ${recBadge}
-        <span class="badge" style="cursor:pointer;border:1px dashed var(--fg3);font-family:monospace;font-size:0.75em" onclick="editCronSchedule('${j.id}')" title="Klicken zum Bearbeiten: ${escapeHtml(j.schedule)}">${j.schedule} ✏️</span>
       </div>
-      <div id="cron-edit-${j.id}" style="display:none;margin-bottom:8px;padding:8px;background:var(--bg3);border-radius:6px">
-        <div style="display:flex;gap:6px;align-items:center;margin-bottom:6px">
-          <label style="font-size:0.82em;color:var(--fg2);min-width:60px">Schedule:</label>
-          <input id="cron-sched-${j.id}" class="input" style="flex:1;font-family:monospace;font-size:0.85em" value="${escapeHtml(j.schedule)}" placeholder="z.B. 0 8 * * * oder 5m">
-        </div>
-        <div style="display:flex;gap:6px;align-items:center;margin-bottom:8px">
-          <label style="font-size:0.82em;color:var(--fg2);min-width:60px">Typ:</label>
-          <label style="font-size:0.82em;cursor:pointer"><input type="radio" name="cron-type-${j.id}" value="false" ${!j.oneShot ? 'checked' : ''}> 🔄 Wiederkehrend</label>
-          <label style="font-size:0.82em;cursor:pointer"><input type="radio" name="cron-type-${j.id}" value="true" ${j.oneShot ? 'checked' : ''}> ⚡ Einmalig</label>
-        </div>
-        <div style="display:flex;gap:6px">
-          <button class="btn btn-sm" onclick="saveCronSchedule('${j.id}')">💾 Speichern</button>
-          <button class="btn btn-sm btn-outline" onclick="document.getElementById('cron-edit-${j.id}').style.display='none'">Abbrechen</button>
-        </div>
+      <div id="cron-edit-${j.id}" style="display:none;margin-bottom:10px;padding:12px;background:var(--bg3);border-radius:8px">
+        ${buildScheduleEditor(j.id, j.schedule, j.oneShot)}
       </div>
       <div style="font-size:0.82em;color:var(--fg2);margin-bottom:8px">
         <span>Nächster Lauf: <strong>${j.nextRunFormatted || '—'}</strong></span> · 
@@ -1523,7 +1510,7 @@ async function loadCron() {
       <div style="display:flex;gap:6px">
         <button class="btn btn-sm btn-outline" onclick="toggleCronJob('${j.id}')">${j.enabled ? '⏸ Pause' : '▶️ Start'}</button>
         <button class="btn btn-sm btn-outline" onclick="runCronJob('${j.id}')">▶ Jetzt</button>
-        <button class="btn btn-sm btn-outline" onclick="editCronSchedule('${j.id}','${escapeHtml(j.schedule)}')">✏️ Bearbeiten</button>
+        <button class="btn btn-sm btn-outline" onclick="editCronSchedule('${j.id}')">✏️ Bearbeiten</button>
         <button class="btn btn-sm btn-outline" style="color:var(--red)" onclick="deleteCronJob('${j.id}')">🗑</button>
       </div>
     </div>`;
@@ -1532,16 +1519,22 @@ async function loadCron() {
 
 function showCreateCron() {
   document.getElementById('cron-create-form').style.display = '';
+  // Inject schedule builder for create form (use null id → prefix "create-")
+  const container = document.getElementById('cron-create-schedule-builder');
+  if (container && !container.innerHTML.trim()) {
+    container.innerHTML = buildScheduleEditor(null, '0 8 * * *', false);
+  }
 }
 
 async function createCronJob() {
   const name = document.getElementById('cron-name').value.trim();
   const type = document.getElementById('cron-type').value;
-  const schedule = document.getElementById('cron-schedule').value.trim();
   const payloadText = document.getElementById('cron-payload').value.trim();
-  const oneShot = document.getElementById('cron-oneshot').checked;
 
-  if (!name || !schedule) { toast('Name und Schedule sind Pflicht', 'error'); return; }
+  if (!name) { toast('Name ist Pflicht', 'error'); return; }
+
+  const result = fieldsToCron(null); // null id → create prefix
+  if (!result) return;
 
   const payload = {};
   switch (type) {
@@ -1553,7 +1546,7 @@ async function createCronJob() {
 
   const res = await fetch(API + '/api/cron/create', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name, type, schedule, oneShot, payload, target: { platform: 'web', chatId: 'dashboard' } }),
+    body: JSON.stringify({ name, type, schedule: result.schedule, oneShot: result.oneShot, payload, target: { platform: 'telegram', chatId: 'YOUR_USER_ID' } }),
   });
   const data = await res.json();
   if (data.ok) {
@@ -1561,7 +1554,7 @@ async function createCronJob() {
     document.getElementById('cron-create-form').style.display = 'none';
     document.getElementById('cron-name').value = '';
     document.getElementById('cron-payload').value = '';
-    document.getElementById('cron-schedule').value = '';
+    document.getElementById('cron-create-schedule-builder').innerHTML = '';
     loadCron();
   } else {
     toast(data.error, 'error');
@@ -1580,19 +1573,147 @@ async function deleteCronJob(id) {
   loadCron();
 }
 
+// ── Schedule Builder ─────────────────────────────────────
+
+function parseCronToFields(schedule) {
+  // Interval strings
+  const intMatch = schedule.match(/^(\d+)\s*(m|min|h|hr|d|day|s|sec)s?$/i);
+  if (intMatch) {
+    const val = intMatch[1];
+    const u = intMatch[2].toLowerCase();
+    const unit = (u === 'm' || u === 'min') ? 'min' : (u === 'h' || u === 'hr') ? 'h' : (u === 'd' || u === 'day') ? 'd' : 's';
+    return { mode: 'interval', interval: val, intervalUnit: unit, hour: '08', minute: '00', weekdays: [], monthday: '1' };
+  }
+  // Cron expression
+  const parts = schedule.trim().split(/\s+/);
+  if (parts.length === 5) {
+    const [min, hour, day, , wd] = parts;
+    const weekdays = wd !== '*' ? wd.split(',').flatMap(v => {
+      if (v.includes('-')) { const [a,b] = v.split('-').map(Number); const r=[]; for(let i=a;i<=b;i++) r.push(String(i)); return r; }
+      return [v];
+    }) : [];
+    let mode = 'daily';
+    if (weekdays.length > 0) mode = 'weekly';
+    if (day !== '*') mode = 'monthly';
+    return { mode, interval: '5', intervalUnit: 'min', hour: hour === '*' ? '08' : hour.padStart(2,'0'), minute: min === '*' ? '00' : min.padStart(2,'0'), weekdays, monthday: day === '*' ? '1' : day };
+  }
+  return { mode: 'daily', interval: '5', intervalUnit: 'min', hour: '08', minute: '00', weekdays: [], monthday: '1' };
+}
+
+function fieldsToCron(id) {
+  const pfx = id ? id + '-' : 'create-';
+  const mode = document.querySelector(`input[name="sched-mode-${pfx}"]:checked`)?.value || 'daily';
+  const oneShot = document.querySelector(`input[name="sched-recur-${pfx}"]:checked`)?.value === 'true';
+
+  if (mode === 'interval') {
+    const val = document.getElementById(`sched-interval-${pfx}`)?.value || '5';
+    const unit = document.getElementById(`sched-interval-unit-${pfx}`)?.value || 'min';
+    const unitMap = { min: 'm', h: 'h', d: 'd', s: 's' };
+    return { schedule: val + (unitMap[unit] || 'm'), oneShot };
+  }
+
+  const hour = document.getElementById(`sched-hour-${pfx}`)?.value || '8';
+  const minute = document.getElementById(`sched-minute-${pfx}`)?.value || '0';
+
+  if (mode === 'weekly') {
+    const checks = document.querySelectorAll(`input[name="sched-wd-${pfx}"]:checked`);
+    const days = Array.from(checks).map(c => c.value);
+    if (days.length === 0) { toast('Mindestens einen Wochentag wählen', 'error'); return null; }
+    return { schedule: `${minute} ${hour} * * ${days.join(',')}`, oneShot };
+  }
+
+  if (mode === 'monthly') {
+    const day = document.getElementById(`sched-monthday-${pfx}`)?.value || '1';
+    return { schedule: `${minute} ${hour} ${day} * *`, oneShot };
+  }
+
+  // daily
+  return { schedule: `${minute} ${hour} * * *`, oneShot };
+}
+
+function buildScheduleEditor(id, schedule, oneShot, hideButtons) {
+  const f = parseCronToFields(schedule || '0 8 * * *');
+  const pfx = id ? id + '-' : 'create-';
+  const wdNames = ['So','Mo','Di','Mi','Do','Fr','Sa'];
+  const modeOptions = [
+    { val: 'interval', label: '⏱ Intervall', desc: 'z.B. alle 5 Min' },
+    { val: 'daily', label: '📅 Täglich', desc: '' },
+    { val: 'weekly', label: '📆 Wöchentlich', desc: '' },
+    { val: 'monthly', label: '🗓 Monatlich', desc: '' },
+  ];
+
+  return `
+    <div style="margin-bottom:10px">
+      <div style="font-size:0.82em;color:var(--fg2);margin-bottom:6px;font-weight:500">Wiederholung</div>
+      <div style="display:flex;gap:4px;flex-wrap:wrap">
+        ${modeOptions.map(o => `<label style="display:flex;align-items:center;gap:4px;padding:4px 10px;border-radius:6px;cursor:pointer;font-size:0.82em;background:${f.mode===o.val?'var(--accent)':'var(--bg2)'};color:${f.mode===o.val?'#fff':'var(--fg)'}">
+          <input type="radio" name="sched-mode-${pfx}" value="${o.val}" ${f.mode===o.val?'checked':''} onchange="toggleSchedFields('${pfx}')" style="display:none"> ${o.label}
+        </label>`).join('')}
+      </div>
+    </div>
+
+    <div id="sched-interval-row-${pfx}" style="display:${f.mode==='interval'?'flex':'none'};gap:6px;align-items:center;margin-bottom:8px">
+      <span style="font-size:0.82em;color:var(--fg2)">Alle</span>
+      <input id="sched-interval-${pfx}" type="number" min="1" value="${f.interval}" class="input" style="width:60px;text-align:center">
+      <select id="sched-interval-unit-${pfx}" class="input" style="width:auto">
+        <option value="s" ${f.intervalUnit==='s'?'selected':''}>Sekunden</option>
+        <option value="min" ${f.intervalUnit==='min'?'selected':''}>Minuten</option>
+        <option value="h" ${f.intervalUnit==='h'?'selected':''}>Stunden</option>
+        <option value="d" ${f.intervalUnit==='d'?'selected':''}>Tage</option>
+      </select>
+    </div>
+
+    <div id="sched-time-row-${pfx}" style="display:${f.mode!=='interval'?'flex':'none'};gap:6px;align-items:center;margin-bottom:8px">
+      <span style="font-size:0.82em;color:var(--fg2)">Um</span>
+      <input id="sched-hour-${pfx}" type="number" min="0" max="23" value="${f.hour}" class="input" style="width:50px;text-align:center">
+      <span style="font-size:1.1em;font-weight:600">:</span>
+      <input id="sched-minute-${pfx}" type="number" min="0" max="59" value="${f.minute}" class="input" style="width:50px;text-align:center">
+      <span style="font-size:0.82em;color:var(--fg2)">Uhr</span>
+    </div>
+
+    <div id="sched-wd-row-${pfx}" style="display:${f.mode==='weekly'?'flex':'none'};gap:4px;flex-wrap:wrap;margin-bottom:8px">
+      ${wdNames.map((d,i) => `<label style="display:flex;align-items:center;gap:2px;padding:4px 8px;border-radius:6px;cursor:pointer;font-size:0.82em;background:${f.weekdays.includes(String(i))?'var(--accent)':'var(--bg2)'};color:${f.weekdays.includes(String(i))?'#fff':'var(--fg)'}">
+        <input type="checkbox" name="sched-wd-${pfx}" value="${i}" ${f.weekdays.includes(String(i))?'checked':''} onchange="this.parentElement.style.background=this.checked?'var(--accent)':'var(--bg2)';this.parentElement.style.color=this.checked?'#fff':'var(--fg)'" style="display:none"> ${d}
+      </label>`).join('')}
+    </div>
+
+    <div id="sched-md-row-${pfx}" style="display:${f.mode==='monthly'?'flex':'none'};gap:6px;align-items:center;margin-bottom:8px">
+      <span style="font-size:0.82em;color:var(--fg2)">Am</span>
+      <input id="sched-monthday-${pfx}" type="number" min="1" max="31" value="${f.monthday}" class="input" style="width:55px;text-align:center">
+      <span style="font-size:0.82em;color:var(--fg2)">. des Monats</span>
+    </div>
+
+    <div style="display:flex;gap:6px;align-items:center;margin-bottom:8px">
+      <span style="font-size:0.82em;color:var(--fg2)">Typ:</span>
+      <label style="font-size:0.82em;cursor:pointer"><input type="radio" name="sched-recur-${pfx}" value="false" ${!oneShot?'checked':''}> 🔄 Wiederkehrend</label>
+      <label style="font-size:0.82em;cursor:pointer"><input type="radio" name="sched-recur-${pfx}" value="true" ${oneShot?'checked':''}> ⚡ Einmalig</label>
+    </div>
+
+    ${id ? `<div style="display:flex;gap:6px">
+      <button class="btn btn-sm" onclick="saveCronSchedule('${id}')">💾 Speichern</button>
+      <button class="btn btn-sm btn-outline" onclick="document.getElementById('cron-edit-${id}').style.display='none'">Abbrechen</button>
+    </div>` : ''}`;
+}
+
+function toggleSchedFields(pfx) {
+  const mode = document.querySelector(`input[name="sched-mode-${pfx}"]:checked`)?.value || 'daily';
+  document.getElementById('sched-interval-row-' + pfx).style.display = mode === 'interval' ? 'flex' : 'none';
+  document.getElementById('sched-time-row-' + pfx).style.display = mode !== 'interval' ? 'flex' : 'none';
+  document.getElementById('sched-wd-row-' + pfx).style.display = mode === 'weekly' ? 'flex' : 'none';
+  document.getElementById('sched-md-row-' + pfx).style.display = mode === 'monthly' ? 'flex' : 'none';
+}
+
 function editCronSchedule(id) {
   const el = document.getElementById('cron-edit-' + id);
   el.style.display = el.style.display === 'none' ? '' : 'none';
 }
 
 async function saveCronSchedule(id) {
-  const schedule = document.getElementById('cron-sched-' + id).value.trim();
-  if (!schedule) { toast('Schedule darf nicht leer sein', 'error'); return; }
-  const oneShotRadio = document.querySelector(`input[name="cron-type-${id}"]:checked`);
-  const oneShot = oneShotRadio ? oneShotRadio.value === 'true' : false;
+  const result = fieldsToCron(id);
+  if (!result) return;
   const res = await fetch(API + '/api/cron/update', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ id, schedule, oneShot }),
+    body: JSON.stringify({ id, schedule: result.schedule, oneShot: result.oneShot }),
   });
   const data = await res.json();
   if (data.ok) { toast('✅ Timing aktualisiert!'); loadCron(); }
