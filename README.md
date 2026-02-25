@@ -369,21 +369,20 @@ alvin-bot version   # Show version
   - ✅ Full media processing: photos, documents, audio/voice, video across all platforms
   - ✅ File Browser: create, edit, delete files with safety guards
   - ✅ Git history sanitized (personal data removed via git-filter-repo)
-- [ ] **Phase 10** — Anthropic API Provider + WebUI Provider Management
-  - [ ] Anthropic API key test case in WebUI (validation endpoint)
-  - [ ] "Add Provider" flow in WebUI — add new providers post-setup without editing `.env`
-  - [ ] Claude SDK guided setup from WebUI (install check, login status, step-by-step)
-  - [ ] `.env.example` update with `ANTHROPIC_API_KEY`
-- [ ] **Phase 11** — WebUI Professional Redesign
-  - [ ] Replace emoji icons with Lucide SVG icons (sidebar, pages, buttons)
-  - [ ] i18n framework (`i18n.js`) — bilingual DE/EN with browser-locale detection
-  - [ ] ~200 UI strings translated
-  - [ ] Language toggle in footer/settings
-  - [ ] Typography upgrade (Inter/Geist webfont)
-  - [ ] Gradient accents + subtle glassmorphism on cards
-  - [ ] Smooth page transitions (fade instead of hard show/hide)
-  - [ ] Skeleton loading states + status pulse animations
-  - [ ] Command Palette (Cmd+K) for power users
+- [x] **Phase 10** — Anthropic API Provider + WebUI Provider Management
+  - [x] Anthropic API key test case in WebUI (validation endpoint)
+  - [x] "Add Provider" flow in WebUI — add new providers post-setup without editing `.env`
+  - [x] Claude SDK guided setup from WebUI (install check, login status, step-by-step)
+  - [x] `.env.example` update with `ANTHROPIC_API_KEY`
+- [x] **Phase 11** — WebUI Professional Redesign
+  - [x] Replace emoji icons with Lucide SVG icons (60+ icons, sidebar, pages, buttons)
+  - [x] i18n framework (`i18n.js`) — bilingual DE/EN with browser-locale detection (~400 keys)
+  - [x] Language toggle in sidebar footer (DE | EN)
+  - [x] Typography upgrade (Inter webfont via Google Fonts)
+  - [x] Gradient accents + subtle glassmorphism on cards
+  - [x] Smooth page transitions (fade animation on page switch)
+  - [x] Skeleton loading states + status pulse animations
+  - [x] Command Palette (Cmd+K / Ctrl+K) with fuzzy search
 - [ ] **Phase 12** — Native Installers (Non-Techie Friendly)
   - [ ] Electron wrapper (embedded Node.js + WebUI + tray icon)
   - [ ] macOS `.dmg` via electron-builder
