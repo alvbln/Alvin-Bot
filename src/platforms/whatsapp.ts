@@ -23,7 +23,7 @@ const AUTH_DIR = resolve(BOT_ROOT, "data", "whatsapp-auth");
 
 // ── Global WhatsApp State (accessible from Web API) ─────
 export interface WhatsAppState {
-  status: "disconnected" | "qr" | "connecting" | "connected" | "logged_out";
+  status: "disconnected" | "qr" | "connecting" | "connected" | "logged_out" | "error";
   qrString: string | null; // Raw QR string for rendering
   qrTimestamp: number | null; // When QR was generated
   connectedAt: number | null;
@@ -46,9 +46,13 @@ export class WhatsAppAdapter implements PlatformAdapter {
   readonly platform = "whatsapp";
   private handler: MessageHandler | null = null;
   private sock: any = null;
+  private reconnectAttempts = 0;
+  private maxReconnects = 5;
 
   async start(): Promise<void> {
-    _whatsappState = { status: "connecting", qrString: null, qrTimestamp: null, connectedAt: null, error: null };
+    if (this.reconnectAttempts === 0) {
+      _whatsappState = { status: "connecting", qrString: null, qrTimestamp: null, connectedAt: null, error: null };
+    }
 
     try {
       // Dynamic import — baileys is optional
@@ -62,7 +66,8 @@ export class WhatsAppAdapter implements PlatformAdapter {
 
       this.sock = makeWASocket({
         auth: state,
-        printQRInTerminal: true,
+        // printQRInTerminal is deprecated in newer Baileys — we handle QR via connection.update event
+        browser: ["Mr. Levin", "Chrome", "1.0.0"],
       });
 
       this.sock.ev.on("creds.update", saveCreds);
@@ -73,24 +78,34 @@ export class WhatsAppAdapter implements PlatformAdapter {
           _whatsappState.status = "qr";
           _whatsappState.qrString = qr;
           _whatsappState.qrTimestamp = Date.now();
-          console.log("📱 WhatsApp: Scan QR code to connect (also available in Web UI → Platforms)");
+          _whatsappState.error = null;
+          this.reconnectAttempts = 0; // Reset on valid QR
+          console.log("📱 WhatsApp: QR code ready — scan via Web UI → Platforms");
         }
         if (connection === "close") {
           const statusCode = lastDisconnect?.error?.output?.statusCode;
-          if (statusCode !== DisconnectReason.loggedOut) {
-            _whatsappState.status = "connecting";
-            console.log("WhatsApp reconnecting...");
-            this.start(); // Reconnect
-          } else {
+          if (statusCode === DisconnectReason.loggedOut) {
             _whatsappState.status = "logged_out";
             _whatsappState.qrString = null;
             console.log("WhatsApp logged out. Delete data/whatsapp-auth/ and restart to re-link.");
+          } else if (this.reconnectAttempts < this.maxReconnects) {
+            this.reconnectAttempts++;
+            _whatsappState.status = "connecting";
+            const delay = Math.min(this.reconnectAttempts * 2000, 10000);
+            console.log(`WhatsApp reconnecting (${this.reconnectAttempts}/${this.maxReconnects}) in ${delay/1000}s...`);
+            setTimeout(() => this.start(), delay);
+          } else {
+            _whatsappState.status = "error";
+            _whatsappState.error = "Max reconnect attempts reached. Restart bot to try again.";
+            console.log("WhatsApp: max reconnect attempts reached.");
           }
         }
         if (connection === "open") {
           _whatsappState.status = "connected";
           _whatsappState.qrString = null;
           _whatsappState.connectedAt = Date.now();
+          _whatsappState.error = null;
+          this.reconnectAttempts = 0;
           console.log("📱 WhatsApp adapter connected");
         }
       });

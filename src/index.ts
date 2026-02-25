@@ -103,6 +103,57 @@ process.on("unhandledRejection", (reason) => {
   console.error("Unhandled rejection:", reason);
 });
 
+// Start optional platform adapters (WhatsApp, Discord, Signal)
+async function startOptionalPlatforms() {
+  // WhatsApp
+  if (process.env.WHATSAPP_ENABLED === "true") {
+    try {
+      const { WhatsAppAdapter } = await import("./platforms/whatsapp.js");
+      const wa = new WhatsAppAdapter();
+      wa.onMessage(async (msg) => {
+        // For now: echo that WhatsApp is connected but routing isn't wired yet
+        console.log(`WhatsApp message from ${msg.userName}: ${msg.text.slice(0, 50)}`);
+      });
+      await wa.start();
+      console.log("📱 WhatsApp platform started");
+    } catch (err) {
+      console.error("WhatsApp start failed:", err instanceof Error ? err.message : err);
+    }
+  }
+
+  // Discord
+  if (process.env.DISCORD_TOKEN) {
+    try {
+      const { DiscordAdapter } = await import("./platforms/discord.js");
+      const discord = new DiscordAdapter(process.env.DISCORD_TOKEN);
+      discord.onMessage(async (msg) => {
+        console.log(`Discord message from ${msg.userName}: ${msg.text.slice(0, 50)}`);
+      });
+      await discord.start();
+      console.log("🎮 Discord platform started");
+    } catch (err) {
+      console.error("Discord start failed:", err instanceof Error ? err.message : err);
+    }
+  }
+
+  // Signal
+  if (process.env.SIGNAL_API_URL && process.env.SIGNAL_NUMBER) {
+    try {
+      const { SignalAdapter } = await import("./platforms/signal.js");
+      const signal = new SignalAdapter(process.env.SIGNAL_API_URL, process.env.SIGNAL_NUMBER);
+      signal.onMessage(async (msg) => {
+        console.log(`Signal message from ${msg.userName}: ${msg.text.slice(0, 50)}`);
+      });
+      await signal.start();
+      console.log("🔒 Signal platform started");
+    } catch (err) {
+      console.error("Signal start failed:", err instanceof Error ? err.message : err);
+    }
+  }
+}
+
+startOptionalPlatforms().catch(err => console.error("Platform startup error:", err));
+
 // Start Web UI
 const webServer = startWebServer();
 

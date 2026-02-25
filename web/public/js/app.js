@@ -593,12 +593,15 @@ async function loadPlatforms() {
   let html = '<div style="margin-bottom:20px"><h3 style="font-size:1em;margin-bottom:4px">📱 Messaging-Plattformen</h3><div class="sub">Verbinde Mr. Levin mit verschiedenen Messaging-Diensten. Mehrere gleichzeitig möglich.</div></div>';
 
   for (const p of data.platforms) {
-    const statusBadge = p.configured
-      ? '<span class="badge badge-green">✅ Konfiguriert</span>'
-      : '<span class="badge badge-red">Nicht eingerichtet</span>';
-    const depsBadge = !p.depsInstalled
-      ? '<span class="badge badge-yellow">📦 Dependencies fehlen</span>'
-      : '';
+    let statusBadge;
+    if (p.configured && p.depsInstalled) {
+      statusBadge = `<span class="badge badge-green" id="badge-${p.id}">✅ Bereit</span>`;
+    } else if (p.configured && !p.depsInstalled) {
+      statusBadge = `<span class="badge badge-yellow" id="badge-${p.id}">📦 Deps fehlen</span>`;
+    } else {
+      statusBadge = `<span class="badge badge-red" id="badge-${p.id}">Nicht eingerichtet</span>`;
+    }
+    const depsBadge = '';
 
     html += `<div class="card setup-card" style="margin-bottom:16px">
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
@@ -757,19 +760,41 @@ async function loadPlatformStatuses() {
     const statuses = await res.json();
     for (const [id, state] of Object.entries(statuses)) {
       const el = document.getElementById('platform-live-' + id);
-      if (!el) continue;
+      const badge = document.getElementById('badge-' + id);
       const s = state;
-      const icons = { connected: '🟢', connecting: '🟡', qr: '📱', error: '🔴', disconnected: '⚫', logged_out: '🔴', not_configured: '', unknown: '❓' };
-      const labels = { connected: 'Verbunden', connecting: 'Verbinde...', qr: 'QR-Code bereit', error: s.error || 'Fehler', disconnected: 'Getrennt', logged_out: 'Abgemeldet', not_configured: '', unknown: '' };
+      const icons = { connected: '🟢', connecting: '🟡', qr: '📱', error: '🔴', disconnected: '⚫', logged_out: '🔴', not_configured: '', unknown: '' };
+      const labels = { connected: 'Verbunden', connecting: 'Verbinde...', qr: 'QR-Code scannen!', error: s.error || 'Fehler', disconnected: 'Nicht verbunden', logged_out: 'Abgemeldet', not_configured: '', unknown: '' };
       const icon = icons[s.status] || '';
       const label = labels[s.status] || s.status;
-      if (icon) {
+
+      // Update live status text
+      if (el && icon) {
         let extra = '';
         if (s.botUsername) extra = ` @${s.botUsername}`;
         else if (s.botTag) extra = ` ${s.botTag}`;
         else if (s.guildCount) extra = ` (${s.guildCount} Server)`;
         else if (s.apiVersion) extra = ` v${s.apiVersion}`;
         el.innerHTML = `<span style="color:${s.status === 'connected' ? 'var(--green)' : s.status === 'error' || s.status === 'logged_out' ? 'var(--red)' : 'var(--fg2)'}">${icon} ${label}${extra}</span>`;
+      }
+
+      // Update badge to reflect real connection status
+      if (badge) {
+        if (s.status === 'connected') {
+          badge.className = 'badge badge-green';
+          badge.textContent = '🟢 Verbunden';
+        } else if (s.status === 'qr') {
+          badge.className = 'badge badge-yellow';
+          badge.textContent = '📱 QR scannen';
+        } else if (s.status === 'connecting') {
+          badge.className = 'badge badge-yellow';
+          badge.textContent = '🟡 Verbinde...';
+        } else if (s.status === 'error' || s.status === 'logged_out') {
+          badge.className = 'badge badge-red';
+          badge.textContent = '🔴 Fehler';
+        } else if (s.status === 'disconnected') {
+          badge.className = 'badge badge-yellow';
+          badge.textContent = '⚫ Getrennt';
+        }
       }
     }
   } catch { /* ignore */ }
