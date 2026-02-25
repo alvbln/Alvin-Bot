@@ -477,6 +477,14 @@ async function loadModels() {
       <div id="key-result-${p.id}" style="font-size:0.78em;margin-bottom:8px"></div>`;
     }
 
+    // Live models button (for providers with API keys)
+    if (p.hasKey && p.id !== 'claude-sdk' && p.id !== 'ollama') {
+      html += `<details id="live-models-${p.id}" style="margin-bottom:8px">
+        <summary onclick="loadLiveModels('${p.id}')" style="cursor:pointer;color:var(--accent2);font-size:0.82em;font-weight:500">🔍 Verfügbare Modelle (live von API laden)</summary>
+        <div id="live-models-list-${p.id}" style="margin-top:8px;max-height:300px;overflow-y:auto;font-size:0.82em">⏳ Lade...</div>
+      </details>`;
+    }
+
     // Model list with activate buttons
     html += `<div style="border-top:1px solid var(--bg3);padding-top:8px;margin-top:4px">`;
     for (const m of p.modelsActive) {
@@ -633,6 +641,90 @@ async function addFallback() {
   loadFallbackOrder();
 
   document.getElementById('models-setup').innerHTML = html;
+}
+
+const _liveModelsCache = {};
+async function loadLiveModels(providerId) {
+  const container = document.getElementById('live-models-list-' + providerId);
+  if (!container) return;
+  
+  // Use cache if loaded within last 60s
+  if (_liveModelsCache[providerId] && Date.now() - _liveModelsCache[providerId].ts < 60000) {
+    renderLiveModels(providerId, _liveModelsCache[providerId].models, container);
+    return;
+  }
+  
+  container.innerHTML = '<span style="color:var(--fg2)">⏳ Modelle werden geladen...</span>';
+  try {
+    const res = await fetch(API + '/api/providers/live-models?id=' + providerId);
+    const data = await res.json();
+    if (!data.ok || !data.models?.length) {
+      container.innerHTML = '<span style="color:var(--fg2)">Keine Modelle gefunden oder Key nicht gesetzt.</span>';
+      return;
+    }
+    _liveModelsCache[providerId] = { models: data.models, ts: Date.now() };
+    renderLiveModels(providerId, data.models, container);
+  } catch (err) {
+    container.innerHTML = `<span style="color:var(--red)">Fehler: ${err.message}</span>`;
+  }
+}
+
+function renderLiveModels(providerId, models, container) {
+  // Group hint for large lists
+  const countInfo = models.length > 20 ? ` <span style="color:var(--fg2)">(${models.length} Modelle)</span>` : '';
+  let html = `<div style="margin-bottom:6px;font-weight:500">Verfügbare Modelle${countInfo}:</div>`;
+  html += '<div style="display:flex;flex-direction:column;gap:2px">';
+  for (const m of models) {
+    html += `<div style="display:flex;align-items:center;gap:8px;padding:4px 8px;border-radius:4px;background:var(--bg2)">
+      <span style="flex:1;font-family:monospace;font-size:0.9em" title="${m.name}">${m.id}</span>
+      ${m.name !== m.id ? `<span style="color:var(--fg2);font-size:0.85em">${m.name}</span>` : ''}
+      <button class="btn btn-sm btn-outline" style="padding:1px 8px;font-size:0.78em" onclick="activateLiveModel('${providerId}','${m.id}','${(m.name||m.id).replace(/'/g,"\\'")}')">Aktivieren</button>
+    </div>`;
+  }
+  html += '</div>';
+  container.innerHTML = html;
+}
+
+async function activateLiveModel(providerId, modelId, modelName) {
+  // Map provider to base URL
+  const baseUrls = {
+    anthropic: 'https://api.anthropic.com/v1/',
+    openai: 'https://api.openai.com/v1',
+    google: 'https://generativelanguage.googleapis.com/v1beta/openai',
+    groq: 'https://api.groq.com/openai/v1',
+    nvidia: 'https://integrate.api.nvidia.com/v1',
+    openrouter: 'https://openrouter.ai/api/v1',
+  };
+  const apiKeyEnvs = {
+    anthropic: 'ANTHROPIC_API_KEY',
+    openai: 'OPENAI_API_KEY',
+    google: 'GOOGLE_API_KEY',
+    groq: 'GROQ_API_KEY',
+    nvidia: 'NVIDIA_API_KEY',
+    openrouter: 'OPENROUTER_API_KEY',
+  };
+  
+  const key = modelId.replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-');
+  const baseUrl = baseUrls[providerId] || '';
+  const apiKeyEnv = apiKeyEnvs[providerId] || '';
+  
+  // Add as custom model so it persists
+  const res = await fetch(API + '/api/providers/add-custom', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ key, name: modelName || modelId, model: modelId, baseUrl, apiKeyEnv, type: 'openai-compatible' }),
+  });
+  const data = await res.json();
+  if (data.ok) {
+    // Switch to it
+    await fetch(API + '/api/models/switch', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key }),
+    });
+    toast(`${modelName || modelId} aktiviert!`, 'success');
+    loadModels();
+  } else {
+    toast(data.error || 'Fehler beim Aktivieren', 'error');
+  }
 }
 
 async function switchModel(key) {

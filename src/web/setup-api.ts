@@ -501,6 +501,19 @@ export async function handleSetupAPI(
     return true;
   }
 
+  // GET /api/providers/live-models?id=<providerId> — fetch available models from provider API
+  if (urlPath?.startsWith("/api/providers/live-models") && req.method === "GET") {
+    try {
+      const url = new URL(req.url || "", `http://${req.headers.host}`);
+      const providerId = url.searchParams.get("id") || "";
+      const models = await fetchLiveModels(providerId);
+      res.end(JSON.stringify({ ok: true, providerId, models }));
+    } catch (err: unknown) {
+      res.end(JSON.stringify({ ok: false, error: err instanceof Error ? err.message : String(err), models: [] }));
+    }
+    return true;
+  }
+
   // POST /api/providers/add-custom — add a custom model
   if (urlPath === "/api/providers/add-custom" && req.method === "POST") {
     try {
@@ -990,5 +1003,103 @@ async function testApiKey(providerId: string, apiKey: string): Promise<{ ok: boo
     }
   } catch (err: unknown) {
     return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+// ── Live Model Fetching ─────────────────────────────────
+
+interface LiveModel {
+  id: string;
+  name: string;
+  owned_by?: string;
+}
+
+async function fetchLiveModels(providerId: string): Promise<LiveModel[]> {
+  const env = process.env;
+
+  switch (providerId) {
+    case "anthropic": {
+      const key = env.ANTHROPIC_API_KEY;
+      if (!key) return [];
+      const r = await fetch("https://api.anthropic.com/v1/models", {
+        headers: { "x-api-key": key, "anthropic-version": "2023-06-01" },
+      });
+      if (!r.ok) return [];
+      const data = await r.json() as any;
+      return (data.data || [])
+        .filter((m: any) => m.id && !m.id.includes("pdfs"))
+        .map((m: any) => ({ id: m.id, name: m.display_name || m.id, owned_by: "anthropic" }))
+        .sort((a: LiveModel, b: LiveModel) => a.id.localeCompare(b.id));
+    }
+    case "openai": {
+      const key = env.OPENAI_API_KEY;
+      if (!key) return [];
+      const r = await fetch("https://api.openai.com/v1/models", {
+        headers: { Authorization: `Bearer ${key}` },
+      });
+      if (!r.ok) return [];
+      const data = await r.json() as any;
+      // Filter to chat-relevant models only
+      const chatPrefixes = ["gpt-4", "gpt-3.5", "o1", "o3", "o4", "chatgpt"];
+      return (data.data || [])
+        .filter((m: any) => chatPrefixes.some(p => m.id.startsWith(p)))
+        .map((m: any) => ({ id: m.id, name: m.id, owned_by: m.owned_by || "openai" }))
+        .sort((a: LiveModel, b: LiveModel) => a.id.localeCompare(b.id));
+    }
+    case "google": {
+      const key = env.GOOGLE_API_KEY;
+      if (!key) return [];
+      const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${key}`);
+      if (!r.ok) return [];
+      const data = await r.json() as any;
+      return (data.models || [])
+        .filter((m: any) => m.name && m.supportedGenerationMethods?.includes("generateContent"))
+        .map((m: any) => ({
+          id: m.name.replace("models/", ""),
+          name: m.displayName || m.name.replace("models/", ""),
+          owned_by: "google",
+        }))
+        .sort((a: LiveModel, b: LiveModel) => a.id.localeCompare(b.id));
+    }
+    case "groq": {
+      const key = env.GROQ_API_KEY;
+      if (!key) return [];
+      const r = await fetch("https://api.groq.com/openai/v1/models", {
+        headers: { Authorization: `Bearer ${key}` },
+      });
+      if (!r.ok) return [];
+      const data = await r.json() as any;
+      return (data.data || [])
+        .filter((m: any) => m.id && m.active !== false)
+        .map((m: any) => ({ id: m.id, name: m.id, owned_by: m.owned_by || "groq" }))
+        .sort((a: LiveModel, b: LiveModel) => a.id.localeCompare(b.id));
+    }
+    case "nvidia": {
+      const key = env.NVIDIA_API_KEY;
+      if (!key) return [];
+      const r = await fetch("https://integrate.api.nvidia.com/v1/models", {
+        headers: { Authorization: `Bearer ${key}` },
+      });
+      if (!r.ok) return [];
+      const data = await r.json() as any;
+      return (data.data || [])
+        .map((m: any) => ({ id: m.id, name: m.id, owned_by: m.owned_by || "nvidia" }))
+        .sort((a: LiveModel, b: LiveModel) => a.id.localeCompare(b.id));
+    }
+    case "openrouter": {
+      const key = env.OPENROUTER_API_KEY;
+      if (!key) return [];
+      const r = await fetch("https://openrouter.ai/api/v1/models", {
+        headers: { Authorization: `Bearer ${key}` },
+      });
+      if (!r.ok) return [];
+      const data = await r.json() as any;
+      return (data.data || [])
+        .slice(0, 100) // OpenRouter has 200+ models, limit display
+        .map((m: any) => ({ id: m.id, name: m.name || m.id, owned_by: "openrouter" }))
+        .sort((a: LiveModel, b: LiveModel) => a.id.localeCompare(b.id));
+    }
+    default:
+      return [];
   }
 }
