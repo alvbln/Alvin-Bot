@@ -13,6 +13,29 @@
 
 import type { PlatformAdapter, IncomingMessage, MessageHandler, SendOptions } from "./types.js";
 
+// ── Global Discord State ────────────────────────────────
+export interface DiscordState {
+  status: "disconnected" | "connecting" | "connected" | "error";
+  botName: string | null;
+  botTag: string | null;
+  guildCount: number;
+  connectedAt: number | null;
+  error: string | null;
+}
+
+let _discordState: DiscordState = {
+  status: "disconnected",
+  botName: null,
+  botTag: null,
+  guildCount: 0,
+  connectedAt: null,
+  error: null,
+};
+
+export function getDiscordState(): DiscordState {
+  return { ..._discordState };
+}
+
 export class DiscordAdapter implements PlatformAdapter {
   readonly platform = "discord";
   private handler: MessageHandler | null = null;
@@ -72,9 +95,21 @@ export class DiscordAdapter implements PlatformAdapter {
         await this.handler(incoming);
       });
 
+      _discordState.status = "connecting";
+
+      this.client.on("ready", () => {
+        _discordState.status = "connected";
+        _discordState.botName = this.client.user?.displayName || this.client.user?.username || null;
+        _discordState.botTag = this.client.user?.tag || null;
+        _discordState.guildCount = this.client.guilds.cache.size;
+        _discordState.connectedAt = Date.now();
+      });
+
       await this.client.login(this.token);
       console.log(`🎮 Discord adapter started (${this.client.user?.tag})`);
     } catch (err) {
+      _discordState.status = "error";
+      _discordState.error = err instanceof Error ? err.message : String(err);
       console.error("Discord adapter failed to start:", err);
       throw err;
     }

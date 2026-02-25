@@ -10,6 +10,27 @@ import type { PlatformAdapter, IncomingMessage, MessageHandler, SendOptions } fr
 import { config } from "../config.js";
 import { authMiddleware } from "../middleware/auth.js";
 
+// ── Global Telegram State ───────────────────────────────
+export interface TelegramState {
+  status: "disconnected" | "connecting" | "connected" | "error";
+  botName: string | null;
+  botUsername: string | null;
+  connectedAt: number | null;
+  error: string | null;
+}
+
+let _telegramState: TelegramState = {
+  status: "disconnected",
+  botName: null,
+  botUsername: null,
+  connectedAt: null,
+  error: null,
+};
+
+export function getTelegramState(): TelegramState {
+  return { ..._telegramState };
+}
+
 export class TelegramAdapter implements PlatformAdapter {
   readonly platform = "telegram";
   private bot: Bot;
@@ -50,8 +71,17 @@ export class TelegramAdapter implements PlatformAdapter {
       await this.handler(msg);
     });
 
+    _telegramState.status = "connecting";
+
     await this.bot.start({
-      onStart: () => console.log(`📱 Telegram adapter started`),
+      onStart: () => {
+        const me = this.bot.botInfo;
+        _telegramState.status = "connected";
+        _telegramState.botName = me.first_name || null;
+        _telegramState.botUsername = me.username || null;
+        _telegramState.connectedAt = Date.now();
+        console.log(`📱 Telegram adapter started (@${me.username})`);
+      },
     });
   }
 

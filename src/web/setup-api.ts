@@ -670,9 +670,49 @@ export async function handleSetupAPI(
     return true;
   }
 
-  // ── WhatsApp Status + QR Code ──────────────────────────
+  // ── Platform Connection Status ─────────────────────────
 
-  // GET /api/whatsapp/status — get WhatsApp connection state + QR string
+  // GET /api/platforms/status — live connection status for all platforms
+  if (urlPath === "/api/platforms/status") {
+    const statuses: Record<string, any> = {};
+
+    // Telegram
+    try {
+      const { getTelegramState } = await import("../platforms/telegram.js");
+      statuses.telegram = getTelegramState();
+    } catch {
+      statuses.telegram = { status: !!process.env.BOT_TOKEN ? "unknown" : "not_configured" };
+    }
+
+    // Discord
+    try {
+      const { getDiscordState } = await import("../platforms/discord.js");
+      statuses.discord = getDiscordState();
+    } catch {
+      statuses.discord = { status: !!process.env.DISCORD_TOKEN ? "unknown" : "not_configured" };
+    }
+
+    // WhatsApp
+    try {
+      const { getWhatsAppState } = await import("../platforms/whatsapp.js");
+      statuses.whatsapp = getWhatsAppState();
+    } catch {
+      statuses.whatsapp = { status: process.env.WHATSAPP_ENABLED === "true" ? "unknown" : "not_configured" };
+    }
+
+    // Signal
+    try {
+      const { getSignalState } = await import("../platforms/signal.js");
+      statuses.signal = getSignalState();
+    } catch {
+      statuses.signal = { status: !!process.env.SIGNAL_API_URL ? "unknown" : "not_configured" };
+    }
+
+    res.end(JSON.stringify(statuses));
+    return true;
+  }
+
+  // GET /api/whatsapp/status — WhatsApp-specific (QR code needs its own endpoint)
   if (urlPath === "/api/whatsapp/status") {
     try {
       const { getWhatsAppState } = await import("../platforms/whatsapp.js");
@@ -680,27 +720,6 @@ export async function handleSetupAPI(
       res.end(JSON.stringify(state));
     } catch {
       res.end(JSON.stringify({ status: "disconnected", qrString: null, error: "WhatsApp adapter not loaded" }));
-    }
-    return true;
-  }
-
-  // GET /api/whatsapp/qr — render QR code as SVG image
-  if (urlPath === "/api/whatsapp/qr") {
-    try {
-      const { getWhatsAppState } = await import("../platforms/whatsapp.js");
-      const state = getWhatsAppState();
-      if (!state.qrString) {
-        res.statusCode = 404;
-        res.end(JSON.stringify({ error: "No QR code available" }));
-        return true;
-      }
-      // Generate QR code as SVG using a simple implementation
-      const svg = generateQrSvg(state.qrString);
-      res.setHeader("Content-Type", "image/svg+xml");
-      res.end(svg);
-    } catch {
-      res.statusCode = 500;
-      res.end(JSON.stringify({ error: "QR generation failed" }));
     }
     return true;
   }
@@ -720,26 +739,72 @@ export async function handleSetupAPI(
     return true;
   }
 
+  // POST /api/platforms/test-connection — test a specific platform
+  if (urlPath === "/api/platforms/test-connection" && req.method === "POST") {
+    try {
+      const { platformId } = JSON.parse(body);
+
+      if (platformId === "telegram") {
+        const token = process.env.BOT_TOKEN;
+        if (!token) { res.end(JSON.stringify({ ok: false, error: "BOT_TOKEN nicht gesetzt" })); return true; }
+        const apiRes = await fetch(`https://api.telegram.org/bot${token}/getMe`);
+        const data = await apiRes.json() as any;
+        if (data.ok) {
+          res.end(JSON.stringify({ ok: true, info: `@${data.result.username} (${data.result.first_name})` }));
+        } else {
+          res.end(JSON.stringify({ ok: false, error: data.description || "Token ungültig" }));
+        }
+        return true;
+      }
+
+      if (platformId === "discord") {
+        const token = process.env.DISCORD_TOKEN;
+        if (!token) { res.end(JSON.stringify({ ok: false, error: "DISCORD_TOKEN nicht gesetzt" })); return true; }
+        const apiRes = await fetch("https://discord.com/api/v10/users/@me", {
+          headers: { Authorization: `Bot ${token}` },
+        });
+        const data = await apiRes.json() as any;
+        if (data.id) {
+          res.end(JSON.stringify({ ok: true, info: `${data.username}#${data.discriminator || '0'} (ID: ${data.id})` }));
+        } else {
+          res.end(JSON.stringify({ ok: false, error: data.message || "Token ungültig" }));
+        }
+        return true;
+      }
+
+      if (platformId === "signal") {
+        const apiUrl = process.env.SIGNAL_API_URL;
+        if (!apiUrl) { res.end(JSON.stringify({ ok: false, error: "SIGNAL_API_URL nicht gesetzt" })); return true; }
+        const apiRes = await fetch(`${apiUrl.replace(/\/$/, '')}/v1/about`);
+        if (apiRes.ok) {
+          const data = await apiRes.json() as any;
+          res.end(JSON.stringify({ ok: true, info: `signal-cli API v${data.version || '?'} erreichbar` }));
+        } else {
+          res.end(JSON.stringify({ ok: false, error: `API antwortet mit ${apiRes.status}` }));
+        }
+        return true;
+      }
+
+      if (platformId === "whatsapp") {
+        try {
+          const { getWhatsAppState } = await import("../platforms/whatsapp.js");
+          const state = getWhatsAppState();
+          res.end(JSON.stringify({ ok: state.status === "connected", info: `Status: ${state.status}` }));
+        } catch {
+          res.end(JSON.stringify({ ok: false, error: "WhatsApp adapter nicht geladen" }));
+        }
+        return true;
+      }
+
+      res.end(JSON.stringify({ ok: false, error: "Unbekannte Plattform" }));
+    } catch (err: unknown) {
+      const error = err instanceof Error ? err.message : String(err);
+      res.end(JSON.stringify({ ok: false, error }));
+    }
+    return true;
+  }
+
   return false; // Not handled
-}
-
-// ── QR Code SVG Generator (no external dependency) ──────
-
-function generateQrSvg(text: string): string {
-  // Minimal QR code as text-based SVG with data URI approach
-  // Since we can't easily generate QR in pure TS without a library,
-  // we'll render it as a styled text block that the frontend converts using JS
-  // The frontend will use a client-side QR library instead
-  // Return the raw string as data for the frontend to render
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="300" height="300">
-    <rect width="300" height="300" fill="#fff"/>
-    <text x="150" y="150" text-anchor="middle" font-size="14" fill="#333">QR Code — see Web UI</text>
-    <metadata>${escapeXml(text)}</metadata>
-  </svg>`;
-}
-
-function escapeXml(s: string): string {
-  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
 // ── Helpers ─────────────────────────────────────────────

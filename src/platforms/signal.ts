@@ -13,6 +13,27 @@
 
 import type { PlatformAdapter, IncomingMessage, MessageHandler, SendOptions } from "./types.js";
 
+// ── Global Signal State ─────────────────────────────────
+export interface SignalState {
+  status: "disconnected" | "connecting" | "connected" | "error";
+  apiVersion: string | null;
+  number: string | null;
+  connectedAt: number | null;
+  error: string | null;
+}
+
+let _signalState: SignalState = {
+  status: "disconnected",
+  apiVersion: null,
+  number: null,
+  connectedAt: null,
+  error: null,
+};
+
+export function getSignalState(): SignalState {
+  return { ..._signalState };
+}
+
 export class SignalAdapter implements PlatformAdapter {
   readonly platform = "signal";
   private handler: MessageHandler | null = null;
@@ -26,12 +47,21 @@ export class SignalAdapter implements PlatformAdapter {
   }
 
   async start(): Promise<void> {
+    _signalState.status = "connecting";
+    _signalState.number = this.number;
+
     // Verify connection
     try {
       const res = await fetch(`${this.apiUrl}/v1/about`);
       if (!res.ok) throw new Error(`Signal API not reachable: ${res.status}`);
+      const about = await res.json().catch(() => ({})) as any;
+      _signalState.status = "connected";
+      _signalState.apiVersion = about.version || about.versions?.[0] || null;
+      _signalState.connectedAt = Date.now();
       console.log("📱 Signal adapter connected");
     } catch (err) {
+      _signalState.status = "error";
+      _signalState.error = err instanceof Error ? err.message : String(err);
       console.error("Signal adapter failed:", err);
       throw err;
     }

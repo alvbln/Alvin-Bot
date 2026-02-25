@@ -637,14 +637,16 @@ async function loadPlatforms() {
     html += `</div>`;
 
     // Action buttons
-    html += `<div style="display:flex;gap:8px;flex-wrap:wrap">
+    html += `<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
       <button class="btn btn-sm" onclick="savePlatform('${p.id}')">💾 Speichern</button>`;
     if (p.npmPackages && !p.depsInstalled) {
       html += `<button class="btn btn-sm btn-outline" onclick="installPlatformDeps('${p.id}')">📦 Dependencies installieren</button>`;
     }
     if (p.configured) {
+      html += `<button class="btn btn-sm btn-outline" onclick="testPlatformConnection('${p.id}')">🧪 Verbindung testen</button>`;
       html += `<button class="btn btn-sm btn-outline" style="color:var(--red)" onclick="disablePlatform('${p.id}')">Deaktivieren</button>`;
     }
+    html += `<span id="platform-live-${p.id}" style="font-size:0.78em;margin-left:4px"></span>`;
     html += `</div>`;
 
     // WhatsApp: QR code + connection status area
@@ -727,6 +729,50 @@ async function disablePlatform(platformId) {
   });
   toast('Plattform deaktiviert. Neustart nötig.');
   loadPlatforms();
+}
+
+// ── Platform Connection Test ────────────────────────────
+async function testPlatformConnection(platformId) {
+  const el = document.getElementById('platform-live-' + platformId);
+  if (el) el.innerHTML = '⏳ Teste...';
+  try {
+    const res = await fetch(API + '/api/platforms/test-connection', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ platformId }),
+    });
+    const data = await res.json();
+    if (el) {
+      el.innerHTML = data.ok
+        ? `<span style="color:var(--green)">✅ ${data.info || 'Verbunden'}</span>`
+        : `<span style="color:var(--red)">❌ ${data.error || 'Fehler'}</span>`;
+    }
+  } catch (err) {
+    if (el) el.innerHTML = `<span style="color:var(--red)">❌ ${err.message}</span>`;
+  }
+}
+
+async function loadPlatformStatuses() {
+  try {
+    const res = await fetch(API + '/api/platforms/status');
+    const statuses = await res.json();
+    for (const [id, state] of Object.entries(statuses)) {
+      const el = document.getElementById('platform-live-' + id);
+      if (!el) continue;
+      const s = state;
+      const icons = { connected: '🟢', connecting: '🟡', qr: '📱', error: '🔴', disconnected: '⚫', logged_out: '🔴', not_configured: '', unknown: '❓' };
+      const labels = { connected: 'Verbunden', connecting: 'Verbinde...', qr: 'QR-Code bereit', error: s.error || 'Fehler', disconnected: 'Getrennt', logged_out: 'Abgemeldet', not_configured: '', unknown: '' };
+      const icon = icons[s.status] || '';
+      const label = labels[s.status] || s.status;
+      if (icon) {
+        let extra = '';
+        if (s.botUsername) extra = ` @${s.botUsername}`;
+        else if (s.botTag) extra = ` ${s.botTag}`;
+        else if (s.guildCount) extra = ` (${s.guildCount} Server)`;
+        else if (s.apiVersion) extra = ` v${s.apiVersion}`;
+        el.innerHTML = `<span style="color:${s.status === 'connected' ? 'var(--green)' : s.status === 'error' || s.status === 'logged_out' ? 'var(--red)' : 'var(--fg2)'}">${icon} ${label}${extra}</span>`;
+      }
+    }
+  } catch { /* ignore */ }
 }
 
 // ── WhatsApp QR + Status ────────────────────────────────
@@ -835,11 +881,13 @@ function renderQrCodeFromLib(text, canvas) {
   }
 }
 
-// Auto-check WhatsApp status when platforms page loads
+// Auto-check platform statuses when platforms page loads
 const origLoadPlatforms = loadPlatforms;
 loadPlatforms = async function() {
   await origLoadPlatforms();
-  // Check WhatsApp status after render
+  // Load live connection statuses for all platforms
+  loadPlatformStatuses();
+  // Check WhatsApp QR status if area exists
   if (document.getElementById('wa-qr-area')) {
     checkWhatsAppStatus();
   }
