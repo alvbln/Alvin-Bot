@@ -369,7 +369,33 @@ alvin-bot version   # Show version
   - ✅ Full media processing: photos, documents, audio/voice, video across all platforms
   - ✅ File Browser: create, edit, delete files with safety guards
   - ✅ Git history sanitized (personal data removed via git-filter-repo)
-- [ ] **Phase 10** — npm publish (security audit)
+- [ ] **Phase 10** — Anthropic API Provider + WebUI Provider Management
+  - [ ] Anthropic API key test case in WebUI (validation endpoint)
+  - [ ] "Add Provider" flow in WebUI — add new providers post-setup without editing `.env`
+  - [ ] Claude SDK guided setup from WebUI (install check, login status, step-by-step)
+  - [ ] `.env.example` update with `ANTHROPIC_API_KEY`
+- [ ] **Phase 11** — WebUI Professional Redesign
+  - [ ] Replace emoji icons with Lucide SVG icons (sidebar, pages, buttons)
+  - [ ] i18n framework (`i18n.js`) — bilingual DE/EN with browser-locale detection
+  - [ ] ~200 UI strings translated
+  - [ ] Language toggle in footer/settings
+  - [ ] Typography upgrade (Inter/Geist webfont)
+  - [ ] Gradient accents + subtle glassmorphism on cards
+  - [ ] Smooth page transitions (fade instead of hard show/hide)
+  - [ ] Skeleton loading states + status pulse animations
+  - [ ] Command Palette (Cmd+K) for power users
+- [ ] **Phase 12** — Native Installers (Non-Techie Friendly)
+  - [ ] Electron wrapper (embedded Node.js + WebUI + tray icon)
+  - [ ] macOS `.dmg` via electron-builder
+  - [ ] Windows `.exe` (NSIS) via electron-builder
+  - [ ] Linux `.AppImage` + `.deb` via electron-builder
+  - [ ] Auto-update mechanism (electron-updater)
+  - [ ] GUI Setup Wizard (provider selection, Telegram token, first-run experience)
+  - [ ] Homebrew formula (`brew install mr-levin`)
+  - [ ] Scoop manifest for Windows
+  - [ ] One-line install script (`curl -fsSL https://install.mrlevin.ai | sh`)
+  - [ ] Docker Compose polish (production-ready `docker-compose.yml`)
+- [ ] **Phase 13** — npm publish (security audit)
 
 ---
 
