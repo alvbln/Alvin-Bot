@@ -152,13 +152,58 @@ export function getPendingApprovals(): PendingApproval[] {
   return Array.from(_pendingApprovals.values());
 }
 
+/** Track which channel is handling approvals: "telegram" | "whatsapp" | "discord" | "signal" */
+let _approvalChannel: string = "telegram";
+
+export function getApprovalChannel(): string {
+  return _approvalChannel;
+}
+
+export function setApprovalChannel(channel: string): void {
+  _approvalChannel = channel;
+}
+
+/**
+ * Check if a self-chat message is an approval response.
+ * Returns the approval ID if matched, null otherwise.
+ */
+export function matchApprovalResponse(text: string): { id: string; approved: boolean } | null {
+  const t = text.trim().toLowerCase();
+  // Find the most recent pending approval
+  const entries = Array.from(_pendingApprovals.entries());
+  if (entries.length === 0) return null;
+
+  // Support: "ok", "ja", "yes", "go", "1", "✅" → approve
+  // Support: "nein", "no", "nope", "2", "❌" → deny
+  const approveWords = ["ok", "ja", "yes", "go", "1", "✅", "freigeben", "approve"];
+  const denyWords = ["nein", "no", "nope", "2", "❌", "ablehnen", "deny", "stop"];
+
+  // Check if response references a specific ID (e.g., "ok wa_abc123")
+  for (const [id] of entries) {
+    if (t.includes(id)) {
+      const isApprove = approveWords.some(w => t.includes(w));
+      return { id, approved: isApprove };
+    }
+  }
+
+  // No specific ID → apply to the most recent pending approval
+  const [latestId] = entries[entries.length - 1];
+  if (approveWords.some(w => t === w || t.startsWith(w + " "))) {
+    return { id: latestId, approved: true };
+  }
+  if (denyWords.some(w => t === w || t.startsWith(w + " "))) {
+    return { id: latestId, approved: false };
+  }
+
+  return null;
+}
+
 /** Clean up stale approvals older than 30 minutes */
 function cleanupStaleApprovals(): void {
   const cutoff = Date.now() - 30 * 60_000;
   for (const [id, p] of _pendingApprovals) {
     if (p.timestamp < cutoff) {
       _pendingApprovals.delete(id);
-      // Clean up temp media files
       if (p.incoming.media?.path) {
         fs.unlink(p.incoming.media.path, () => {});
       }
@@ -166,7 +211,6 @@ function cleanupStaleApprovals(): void {
   }
 }
 
-// Clean stale approvals every 5 minutes
 setInterval(cleanupStaleApprovals, 5 * 60_000);
 
 // ── Global WhatsApp State (accessible from Web API) ─────────────────────────
@@ -384,7 +428,24 @@ export class WhatsAppAdapter implements PlatformAdapter {
 
     // ── Access control ───────────────────────────────────────────────────
     if (isSelf) {
-      // Self-chat: always allowed
+      // Self-chat: check if this is an approval response (when WhatsApp is approval channel)
+      if (text && _approvalChannel === "whatsapp" && _pendingApprovals.size > 0) {
+        const match = matchApprovalResponse(text);
+        if (match) {
+          const pending = removePendingApproval(match.id);
+          if (pending) {
+            if (match.approved) {
+              await this.sendText(chat.id._serialized, `✅ Freigegeben: ${pending.senderName} in ${pending.groupName}`);
+              if (this.handler) await this.handler(pending.incoming);
+            } else {
+              await this.sendText(chat.id._serialized, `❌ Abgelehnt: ${pending.senderName}`);
+              if (pending.incoming.media?.path) fs.unlink(pending.incoming.media.path, () => {});
+            }
+            return; // Don't process as normal message
+          }
+        }
+      }
+      // Normal self-chat: proceed to AI
     } else if (isGroup) {
       // Group: check whitelist
       if (msg.fromMe) return; // Skip own messages in groups
@@ -635,6 +696,11 @@ export class WhatsAppAdapter implements PlatformAdapter {
       ? MessageMedia.fromFilePath(audio)
       : new MessageMedia("audio/ogg", audio.toString("base64"));
     await this.client.sendMessage(chatId, media, { sendAudioAsVoice: true });
+  }
+
+  /** Get the owner's self-chat ID (for DM fallback) */
+  getOwnerChatId(): string | null {
+    return this.client?.info?.wid?._serialized || null;
   }
 
   /** Process an approved message from the pending queue */

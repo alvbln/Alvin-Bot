@@ -174,32 +174,93 @@ async function startOptionalPlatforms() {
       console.log(`${icons[p] || "📡"} ${p.charAt(0).toUpperCase() + p.slice(1)} platform started`);
     }
 
-    // Wire WhatsApp approval flow → sends approval requests to Telegram owner
+    // Wire WhatsApp approval flow — routes to best available channel
     if (loaded.includes("whatsapp")) {
-      const { setApprovalRequestFn } = await import("./platforms/whatsapp.js");
+      const { setApprovalRequestFn, setApprovalChannel, getWhatsAppAdapter } = await import("./platforms/whatsapp.js");
+
       setApprovalRequestFn(async (pending) => {
-        const ownerChatId = config.allowedUsers[0];
-        if (!ownerChatId) return;
-
         const mediaTag = pending.mediaType ? ` [${pending.mediaType}]` : "";
-        const msgText =
-          `💬 <b>WhatsApp Approval</b>\n\n` +
-          `<b>Gruppe:</b> ${pending.groupName}\n` +
-          `<b>Von:</b> ${pending.senderName} (+${pending.senderNumber})\n` +
-          `<b>Nachricht:</b>${mediaTag}\n` +
-          `<blockquote>${pending.preview || "(kein Text)"}</blockquote>`;
 
-        const keyboard = new InlineKeyboard()
-          .text("✅ Freigeben", `wa:approve:${pending.id}`)
-          .text("❌ Ablehnen", `wa:deny:${pending.id}`);
+        // ── Strategy: Try Telegram first → fallback to WhatsApp DM → Discord → Signal
+        let sent = false;
 
-        try {
-          await bot.api.sendMessage(ownerChatId, msgText, {
-            parse_mode: "HTML",
-            reply_markup: keyboard,
-          });
-        } catch (err) {
-          console.error("Failed to send WhatsApp approval request:", err);
+        // 1. Telegram (preferred — has inline keyboards)
+        if (!sent && config.botToken && config.allowedUsers.length > 0) {
+          try {
+            const ownerChatId = config.allowedUsers[0];
+            const msgText =
+              `💬 <b>WhatsApp Approval</b>\n\n` +
+              `<b>Gruppe:</b> ${pending.groupName}\n` +
+              `<b>Von:</b> ${pending.senderName} (+${pending.senderNumber})\n` +
+              `<b>Nachricht:</b>${mediaTag}\n` +
+              `<blockquote>${pending.preview || "(kein Text)"}</blockquote>`;
+
+            const keyboard = new InlineKeyboard()
+              .text("✅ Freigeben", `wa:approve:${pending.id}`)
+              .text("❌ Ablehnen", `wa:deny:${pending.id}`);
+
+            await bot.api.sendMessage(ownerChatId, msgText, {
+              parse_mode: "HTML",
+              reply_markup: keyboard,
+            });
+            setApprovalChannel("telegram");
+            sent = true;
+          } catch (err) {
+            console.warn("Approval via Telegram failed, trying fallback:", err instanceof Error ? err.message : err);
+          }
+        }
+
+        // 2. WhatsApp DM (self-chat) — text-based approval
+        if (!sent) {
+          try {
+            const adapter = getWhatsAppAdapter();
+            const ownerWaId = adapter?.getOwnerChatId();
+            if (adapter && ownerWaId) {
+              const plainText =
+                `🔐 *WhatsApp Approval*\n\n` +
+                `*Gruppe:* ${pending.groupName}\n` +
+                `*Von:* ${pending.senderName} (+${pending.senderNumber})\n` +
+                `*Nachricht:*${mediaTag}\n` +
+                `> ${pending.preview || "(kein Text)"}\n\n` +
+                `Antworte *ok* oder *nein*`;
+
+              await adapter.sendText(ownerWaId, plainText);
+              setApprovalChannel("whatsapp");
+              sent = true;
+            }
+          } catch (err) {
+            console.warn("Approval via WhatsApp DM failed, trying fallback:", err instanceof Error ? err.message : err);
+          }
+        }
+
+        // 3. Discord DM
+        if (!sent) {
+          try {
+            const { getAdapter } = await import("./platforms/index.js");
+            const discord = getAdapter("discord");
+            if (discord) {
+              await discord.sendText("owner", `🔐 WhatsApp Approval\n\nGruppe: ${pending.groupName}\nVon: ${pending.senderName} (+${pending.senderNumber})\nNachricht:${mediaTag}\n> ${pending.preview || "(kein Text)"}\n\nReagiere mit ✅ oder ❌`);
+              setApprovalChannel("discord");
+              sent = true;
+            }
+          } catch { /* Discord not available */ }
+        }
+
+        // 4. Signal
+        if (!sent) {
+          try {
+            const { getAdapter } = await import("./platforms/index.js");
+            const signal = getAdapter("signal");
+            if (signal) {
+              await signal.sendText("owner", `🔐 WhatsApp Approval\n\nGruppe: ${pending.groupName}\nVon: ${pending.senderName}\nNachricht: ${pending.preview || "(kein Text)"}\n\nAntworte ok oder nein`);
+              setApprovalChannel("signal");
+              sent = true;
+            }
+          } catch { /* Signal not available */ }
+        }
+
+        if (!sent) {
+          console.error("❌ No channel available for WhatsApp approval! Auto-denying.");
         }
       });
     }
