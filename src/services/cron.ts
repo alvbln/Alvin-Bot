@@ -415,6 +415,103 @@ export function runJobNow(id: string): Promise<{ output: string; error?: string 
 }
 
 /**
+ * Convert a cron expression or interval string to a human-readable German description.
+ */
+export function humanReadableSchedule(schedule: string): string {
+  // Interval strings (5m, 1h, 30s, 2d)
+  const intervalMatch = schedule.match(/^(\d+(?:\.\d+)?)\s*(s|sec|m|min|h|hr|d|day)s?$/i);
+  if (intervalMatch) {
+    const value = parseFloat(intervalMatch[1]);
+    const unit = intervalMatch[2].toLowerCase();
+    const labels: Record<string, [string, string]> = {
+      s: ["Sekunde", "Sekunden"], sec: ["Sekunde", "Sekunden"],
+      m: ["Minute", "Minuten"], min: ["Minute", "Minuten"],
+      h: ["Stunde", "Stunden"], hr: ["Stunde", "Stunden"],
+      d: ["Tag", "Tage"], day: ["Tag", "Tage"],
+    };
+    const [sing, plur] = labels[unit] || ["?", "?"];
+    return `Alle ${value} ${value === 1 ? sing : plur}`;
+  }
+
+  // Cron expression: MIN HOUR DAY MONTH WEEKDAY
+  const parts = schedule.trim().split(/\s+/);
+  if (parts.length !== 5) return schedule;
+  const [minExpr, hourExpr, dayExpr, monthExpr, weekdayExpr] = parts;
+
+  const weekdayNames = ["So", "Mo", "Di", "Mi", "Do", "Fr", "Sa"];
+  const monthNames = ["", "Jan", "Feb", "Mär", "Apr", "Mai", "Jun", "Jul", "Aug", "Sep", "Okt", "Nov", "Dez"];
+
+  // Helper: format time from hour + minute expressions
+  function formatTime(h: string, m: string): string {
+    if (h === "*" && m === "*") return "";
+    const hh = h === "*" ? "*" : h.padStart(2, "0");
+    const mm = m === "*" ? "00" : m.padStart(2, "0");
+    return `${hh}:${mm} Uhr`;
+  }
+
+  // Helper: expand comma/range fields to readable list
+  function expandField(expr: string, names?: string[]): string {
+    if (expr === "*") return "";
+    const vals = expr.split(",").map(v => {
+      if (v.includes("-")) {
+        const [a, b] = v.split("-");
+        if (names) return `${names[+a]}–${names[+b]}`;
+        return `${a}–${b}`;
+      }
+      return names ? (names[+v] || v) : v;
+    });
+    return vals.join(", ");
+  }
+
+  const time = formatTime(hourExpr, minExpr);
+  const hasStep = [minExpr, hourExpr].some(e => e.includes("/"));
+
+  // Every X minutes/hours
+  if (minExpr.includes("/") && hourExpr === "*" && dayExpr === "*" && monthExpr === "*" && weekdayExpr === "*") {
+    const step = minExpr.split("/")[1];
+    return `Alle ${step} Min`;
+  }
+  if (hourExpr.includes("/") && dayExpr === "*" && monthExpr === "*" && weekdayExpr === "*") {
+    const step = hourExpr.split("/")[1];
+    return `Alle ${step}h`;
+  }
+
+  // Build description
+  const descParts: string[] = [];
+
+  // Weekday specific
+  if (weekdayExpr !== "*") {
+    const days = expandField(weekdayExpr, weekdayNames);
+    if (weekdayExpr === "1-5") descParts.push("Werktags");
+    else if (weekdayExpr === "0,6" || weekdayExpr === "6,0") descParts.push("Am Wochenende");
+    else descParts.push(`Jeden ${days}`);
+  }
+  // Day of month specific
+  else if (dayExpr !== "*") {
+    const dayList = expandField(dayExpr);
+    if (monthExpr !== "*") {
+      const monthList = expandField(monthExpr, monthNames);
+      descParts.push(`Am ${dayList}. ${monthList}`);
+    } else {
+      descParts.push(`Am ${dayList}. jeden Monats`);
+    }
+  }
+  // Month specific only
+  else if (monthExpr !== "*") {
+    const monthList = expandField(monthExpr, monthNames);
+    descParts.push(`Im ${monthList}`);
+  }
+  // Daily (all wildcards except time)
+  else if (!hasStep) {
+    descParts.push("Täglich");
+  }
+
+  if (time && !hasStep) descParts.push(time);
+
+  return descParts.join(", ") || schedule;
+}
+
+/**
  * Format next run time as human-readable.
  */
 export function formatNextRun(nextRunAt: number | null): string {

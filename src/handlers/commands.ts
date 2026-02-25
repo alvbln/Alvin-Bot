@@ -19,7 +19,7 @@ import { getLoadedPlugins, getPluginsDir } from "../services/plugins.js";
 import { getMCPStatus, getMCPTools, callMCPTool } from "../services/mcp.js";
 import { listCustomTools, executeCustomTool, hasCustomTools } from "../services/custom-tools.js";
 import { screenshotUrl, extractText, generatePdf, hasPlaywright } from "../services/browser.js";
-import { listJobs, createJob, deleteJob, toggleJob, runJobNow, formatNextRun, type JobType } from "../services/cron.js";
+import { listJobs, createJob, deleteJob, toggleJob, runJobNow, formatNextRun, humanReadableSchedule, type JobType } from "../services/cron.js";
 import { storePassword, revokePassword, getSudoStatus, verifyPassword, sudoExec } from "../services/sudo.js";
 import { config } from "../config.js";
 
@@ -1207,9 +1207,9 @@ export function registerCommands(bot: Bot): void {
         const status = j.enabled ? "🟢" : "⏸️";
         const next = j.enabled ? formatNextRun(j.nextRunAt) : "pausiert";
         const lastErr = j.lastError ? " ⚠️" : "";
-        const sched = j.schedule.replace(/\*/g, "✱");
-        const recur = j.oneShot ? "⚡einmalig" : "🔄";
-        return `${status} <b>${j.name}</b> (${sched}) ${recur}\n   Typ: ${j.type} | Nächst: ${next} | Runs: ${j.runCount}${lastErr}\n   ID: <code>${j.id}</code>`;
+        const readable = humanReadableSchedule(j.schedule);
+        const recur = j.oneShot ? "⚡ Einmalig" : "🔄 " + readable;
+        return `${status} <b>${j.name}</b>\n   📅 ${recur} | Nächst: ${next}\n   Runs: ${j.runCount}${lastErr} | ID: <code>${j.id}</code>`;
       });
 
       const keyboard = new InlineKeyboard();

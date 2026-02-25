@@ -1486,16 +1486,17 @@ async function loadCron() {
     const typeIcons = { reminder: '⏰', shell: '⚡', http: '🌐', message: '💬', 'ai-query': '🤖' };
     const icon = typeIcons[j.type] || '📋';
     const payload = j.payload.text || j.payload.command || j.payload.url || j.payload.prompt || '';
+    const schedLabel = j.scheduleReadable || j.schedule;
     const recBadge = j.oneShot
       ? '<span class="badge badge-yellow" title="Wird einmalig ausgeführt und dann deaktiviert">⚡ Einmalig</span>'
-      : '<span class="badge" style="background:var(--accent);color:#fff" title="Wiederkehrend nach Zeitplan">🔄 Wiederkehrend</span>';
+      : `<span class="badge" style="background:var(--accent);color:#fff" title="${escapeHtml(j.schedule)}">🔄 ${escapeHtml(schedLabel)}</span>`;
 
     return `<div class="card" style="margin-bottom:12px">
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
         <span style="font-size:1.2em">${statusIcon}</span>
         <span style="font-weight:500;flex:1">${icon} ${escapeHtml(j.name)}${errIcon}</span>
         ${recBadge}
-        <span class="badge" style="cursor:pointer;border:1px dashed var(--fg3)" onclick="editCronSchedule('${j.id}','${escapeHtml(j.schedule)}')" title="Klicken zum Bearbeiten">${j.schedule} ✏️</span>
+        <span class="badge" style="cursor:pointer;border:1px dashed var(--fg3);font-family:monospace;font-size:0.75em" onclick="editCronSchedule('${j.id}')" title="Klicken zum Bearbeiten: ${escapeHtml(j.schedule)}">${j.schedule} ✏️</span>
       </div>
       <div id="cron-edit-${j.id}" style="display:none;margin-bottom:8px;padding:8px;background:var(--bg3);border-radius:6px">
         <div style="display:flex;gap:6px;align-items:center;margin-bottom:6px">

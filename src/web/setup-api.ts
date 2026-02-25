@@ -14,7 +14,7 @@ import { execSync } from "child_process";
 import http from "http";
 import { getRegistry } from "../engine.js";
 import { PROVIDER_PRESETS, type ProviderConfig } from "../providers/types.js";
-import { listJobs, createJob, deleteJob, toggleJob, updateJob, runJobNow, formatNextRun, type CronJob, type JobType } from "../services/cron.js";
+import { listJobs, createJob, deleteJob, toggleJob, updateJob, runJobNow, formatNextRun, humanReadableSchedule, type CronJob, type JobType } from "../services/cron.js";
 import { storePassword, revokePassword, getSudoStatus, verifyPassword, sudoExec, requestAdminViaDialog, openSystemSettings } from "../services/sudo.js";
 
 const BOT_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
@@ -607,6 +607,7 @@ export async function handleSetupAPI(
       ...j,
       nextRunFormatted: formatNextRun(j.nextRunAt),
       lastRunFormatted: j.lastRunAt ? new Date(j.lastRunAt).toLocaleString("de-DE") : null,
+      scheduleReadable: humanReadableSchedule(j.schedule),
     }));
     res.end(JSON.stringify({ jobs: enriched }));
     return true;
