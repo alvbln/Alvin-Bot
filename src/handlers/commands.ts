@@ -1220,7 +1220,7 @@ export function registerCommands(bot: Bot): void {
 
       await ctx.reply(
         `⏰ *Cron Jobs (${jobs.length}):*\n\n${lines.join("\n\n")}\n\n` +
-        `_Befehle: \`/cron add|delete|toggle|run|info <id>\`_`,
+        `Befehle: /cron add · delete · toggle · run · info`,
         { parse_mode: "Markdown", reply_markup: keyboard }
       );
       return;

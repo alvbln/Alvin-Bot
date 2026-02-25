@@ -14,6 +14,8 @@ import fs from "fs";
 import { execSync } from "child_process";
 import { resolve, dirname } from "path";
 import { fileURLToPath } from "url";
+import { getRegistry } from "../engine.js";
+import type { QueryOptions } from "../providers/types.js";
 
 const BOT_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const CRON_FILE = resolve(BOT_ROOT, "docs", "cron-jobs.json");
@@ -217,12 +219,55 @@ async function executeJob(job: CronJob): Promise<{ output: string; error?: strin
       }
 
       case "ai-query": {
-        // AI queries are handled by sending the prompt as a message
+        // AI queries run through the actual AI engine (Claude SDK)
         const prompt = job.payload.prompt || "";
-        if (notifyCallback) {
-          await notifyCallback(job.target, `🤖 Cron AI-Query: ${prompt}`);
+        try {
+          const registry = getRegistry();
+          const queryOpts: QueryOptions = {
+            prompt,
+            systemPrompt: `Du bist Mr. Levin, ein autonomer KI-Assistent. Du führst gerade einen geplanten Cron-Job aus ("${job.name}"). Antworte auf Deutsch, kurz und prägnant. Nutze Telegram-kompatibles Markdown. Du hast Zugriff auf Tools (Bash, Dateien, etc.) — nutze sie wenn nötig.`,
+            effort: "high",
+            workingDir: BOT_ROOT,
+          };
+
+          let fullResponse = "";
+          for await (const chunk of registry.queryWithFallback(queryOpts)) {
+            if (chunk.type === "text" && chunk.text) {
+              fullResponse = chunk.text;
+            }
+            if (chunk.type === "error") {
+              throw new Error(chunk.error || "AI query failed");
+            }
+            if (chunk.type === "done") {
+              break;
+            }
+          }
+
+          // Send AI response to target
+          if (notifyCallback && fullResponse.trim()) {
+            // Split long responses into chunks (Telegram limit ~4096 chars)
+            const maxLen = 3900;
+            if (fullResponse.length <= maxLen) {
+              await notifyCallback(job.target, fullResponse);
+            } else {
+              const parts = [];
+              for (let i = 0; i < fullResponse.length; i += maxLen) {
+                parts.push(fullResponse.slice(i, i + maxLen));
+              }
+              for (const part of parts) {
+                await notifyCallback(job.target, part);
+              }
+            }
+          }
+
+          return { output: fullResponse.slice(0, 500) };
+        } catch (err) {
+          const error = err instanceof Error ? err.message : String(err);
+          if (notifyCallback) {
+            await notifyCallback(job.target, `❌ AI-Query Fehler (${job.name}): ${error}`);
+          }
+          throw err;
         }
-        return { output: `AI query sent: ${prompt.slice(0, 100)}` };
       }
 
       default:

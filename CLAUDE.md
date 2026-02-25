@@ -116,22 +116,25 @@ Dein Kontext-Fenster ist begrenzt. **Checkpoints schützen gegen Datenverlust.**
 
 Du hast Zugriff auf ein Cron-System. Wenn der User regelmäßige Tasks will, erstelle einen Cron-Job.
 
-### Cron-Jobs erstellen via Bash
+### Cron-Jobs erstellen via CLI-Script (EMPFOHLEN)
 
 ```bash
-# docs/cron-jobs.json — Array von Jobs, Scheduler (30s-Loop) erkennt neue Jobs automatisch
-{
-  "id": "unique-id",
-  "name": "Beschreibender Name",
-  "type": "shell",            # reminder | shell | http | message | ai-query
-  "schedule": "0 8 * * *",    # Cron-Expression ODER Intervall (5m, 1h, 1d)
-  "oneShot": false,
-  "payload": { "command": "himalaya list -s 5" },
-  "target": { "platform": "telegram", "chatId": "OWNER" },
-  "enabled": true,
-  "createdAt": 1234567890
-}
+# IMMER dieses Script nutzen — NIEMALS die JSON-Datei direkt editieren!
+node scripts/cron-manage.js add \
+  --name "Täglicher Email-Check" \
+  --type ai-query \
+  --schedule "0 8 * * *" \
+  --prompt "Prüfe meine Emails und fasse zusammen" \
+  --chatId YOUR_USER_ID
+
+# Weitere Befehle:
+node scripts/cron-manage.js list
+node scripts/cron-manage.js delete --id <job-id>
+node scripts/cron-manage.js toggle --id <job-id>
 ```
+
+**Job-Typen:** `reminder` | `shell` | `http` | `message` | `ai-query`
+**Der Scheduler (30s-Loop) erkennt neue Jobs automatisch von Disk.**
 
 ### Schedule-Formate
 - **Intervall:** `30s`, `5m`, `1h`, `6h`, `1d`
