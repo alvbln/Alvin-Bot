@@ -60,7 +60,6 @@ export async function handlePlatformMessage(
 
   try {
     session.messageCount++;
-
     const registry = getRegistry();
     const activeProvider = registry.getActive();
     const isSDK = activeProvider.config.type === "claude-sdk";
@@ -121,6 +120,7 @@ export async function handlePlatformMessage(
     }
   } catch (err) {
     const errorMsg = err instanceof Error ? err.message : String(err);
+    console.error(`Platform message error:`, errorMsg);
     await adapter.sendText(msg.chatId, `⚠️ Fehler: ${errorMsg}`);
   } finally {
     session.isProcessing = false;

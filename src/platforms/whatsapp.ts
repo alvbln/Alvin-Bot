@@ -47,6 +47,8 @@ export class WhatsAppAdapter implements PlatformAdapter {
   readonly platform = "whatsapp";
   private handler: MessageHandler | null = null;
   private client: any = null;
+  private botSentMessages = new Set<string>();
+  private recentBotTexts = new Set<string>(); // Track recent bot responses to avoid loops
 
   async start(): Promise<void> {
     _whatsappState = { status: "connecting", qrString: null, qrTimestamp: null, connectedAt: null, error: null, info: null };
@@ -115,11 +117,11 @@ export class WhatsAppAdapter implements PlatformAdapter {
         _whatsappState.info = info?.pushname || info?.wid?.user || null;
         console.log(`📱 WhatsApp adapter connected (${_whatsappState.info || "unknown"})`);
 
-        // Send welcome ping to own number
+        // Send welcome ping to own number (via sendText to track it)
         try {
           const myNumber = info?.wid?._serialized;
           if (myNumber) {
-            await this.client.sendMessage(myNumber,
+            await this.sendText(myNumber,
               "🤖 *Mr. Levin ist jetzt auf WhatsApp verbunden!*\n\n" +
               "Schreib mir eine Nachricht um zu beginnen.\n" +
               "Tipp: In Gruppenchats erwähne mich mit @Mr.Levin"
@@ -147,24 +149,59 @@ export class WhatsAppAdapter implements PlatformAdapter {
         console.log("WhatsApp disconnected:", reason);
       });
 
-      // Messages
-      this.client.on("message", async (msg: any) => {
+      // Messages — use message_create (fires for all messages, more reliable than "message")
+      this.client.on("message_create", async (msg: any) => {
         if (!this.handler) return;
-        if (msg.fromMe) return;
 
         const text = msg.body;
         if (!text) return;
 
+        const msgId = msg.id?._serialized || "";
+
+        // Skip messages we sent as bot responses (by ID or by content match)
+        if (this.botSentMessages.has(msgId)) {
+          this.botSentMessages.delete(msgId);
+          return;
+        }
+
+        // Skip if this text matches a recent bot response (backup loop prevention)
+        const textHash = text.substring(0, 100);
+        if (msg.fromMe && this.recentBotTexts.has(textHash)) {
+          return;
+        }
+
         const chat = await msg.getChat();
-        const contact = await msg.getContact();
         const isGroup = chat.isGroup;
+
+        // For non-group chats with fromMe: these are messages the user sent from their phone
+        // to another chat. We want to respond to "Saved Messages" / "Note to Self" style usage.
+        // For group chats: skip fromMe (those are our own replies).
+        if (msg.fromMe && isGroup) return;
+
+        // For DMs where fromMe=true: the user is messaging from their phone.
+        // Only respond in self-chat (Note to Self / Saved Messages) — don't hijack other conversations!
+        if (msg.fromMe) {
+          // Self-chat detection: check if chat name matches own name, or if it's a @lid self-chat
+          const chatName = chat.name || "";
+          const ownName = this.client?.info?.pushname || "";
+          const isSelfChat = chat.isMe // whatsapp-web.js v2+ flag
+            || (chatName && ownName && chatName === ownName)
+            || chat.id._serialized === this.client?.info?.wid?._serialized
+            || chat.id._serialized === this.client?.info?.me?._serialized;
+          
+          if (!isSelfChat) {
+            return;
+          }
+        }
+
+        const contact = msg.fromMe ? null : await msg.getContact().catch(() => null);
 
         const incoming: IncomingMessage = {
           platform: "whatsapp",
-          messageId: msg.id._serialized || "",
+          messageId: msgId,
           chatId: chat.id._serialized || "",
-          userId: contact.id._serialized || "",
-          userName: contact.pushname || contact.name || contact.number || "Unknown",
+          userId: msg.fromMe ? "self" : (contact?.id?._serialized || "unknown"),
+          userName: msg.fromMe ? "Ali" : (contact?.pushname || contact?.name || contact?.number || "Unknown"),
           text,
           isGroup,
           isMention: text.includes("@Mr.Levin") || text.includes("@bot"),
@@ -198,7 +235,17 @@ export class WhatsAppAdapter implements PlatformAdapter {
 
   async sendText(chatId: string, text: string): Promise<void> {
     if (!this.client) return;
-    await this.client.sendMessage(chatId, text);
+    // Pre-register text hash to catch message_create before sendMessage returns
+    const textHash = text.substring(0, 100);
+    this.recentBotTexts.add(textHash);
+    setTimeout(() => this.recentBotTexts.delete(textHash), 30000);
+
+    const sent = await this.client.sendMessage(chatId, text);
+    // Track this message ID so we don't process our own responses
+    if (sent?.id?._serialized) {
+      this.botSentMessages.add(sent.id._serialized);
+      setTimeout(() => this.botSentMessages.delete(sent.id._serialized), 60000);
+    }
   }
 
   async sendPhoto(chatId: string, photo: Buffer | string, caption?: string): Promise<void> {
