@@ -14,7 +14,7 @@ import { execSync } from "child_process";
 import http from "http";
 import { getRegistry } from "../engine.js";
 import { PROVIDER_PRESETS, type ProviderConfig } from "../providers/types.js";
-import { listJobs, createJob, deleteJob, toggleJob, runJobNow, formatNextRun, type CronJob, type JobType } from "../services/cron.js";
+import { listJobs, createJob, deleteJob, toggleJob, updateJob, runJobNow, formatNextRun, type CronJob, type JobType } from "../services/cron.js";
 import { storePassword, revokePassword, getSudoStatus, verifyPassword, sudoExec, requestAdminViaDialog, openSystemSettings } from "../services/sudo.js";
 
 const BOT_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
@@ -643,6 +643,27 @@ export async function handleSetupAPI(
     } catch {
       res.statusCode = 400;
       res.end(JSON.stringify({ error: "Invalid request" }));
+    }
+    return true;
+  }
+
+  // POST /api/cron/update — update job fields (schedule, name, oneShot)
+  if (urlPath === "/api/cron/update" && req.method === "POST") {
+    try {
+      const { id, ...updates } = JSON.parse(body);
+      if (!id) { res.statusCode = 400; res.end(JSON.stringify({ error: "id required" })); return true; }
+      // Only allow safe fields
+      const allowed: Partial<CronJob> = {};
+      if (updates.schedule !== undefined) (allowed as any).schedule = updates.schedule;
+      if (updates.name !== undefined) (allowed as any).name = updates.name;
+      if (updates.oneShot !== undefined) (allowed as any).oneShot = updates.oneShot;
+      const job = updateJob(id, allowed);
+      if (!job) { res.statusCode = 404; res.end(JSON.stringify({ error: "Job not found" })); return true; }
+      res.end(JSON.stringify({ ok: true, job }));
+    } catch (err: unknown) {
+      res.statusCode = 400;
+      const error = err instanceof Error ? err.message : "Invalid request";
+      res.end(JSON.stringify({ error }));
     }
     return true;
   }

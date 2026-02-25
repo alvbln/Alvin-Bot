@@ -1486,13 +1486,31 @@ async function loadCron() {
     const typeIcons = { reminder: '⏰', shell: '⚡', http: '🌐', message: '💬', 'ai-query': '🤖' };
     const icon = typeIcons[j.type] || '📋';
     const payload = j.payload.text || j.payload.command || j.payload.url || j.payload.prompt || '';
+    const recBadge = j.oneShot
+      ? '<span class="badge badge-yellow" title="Wird einmalig ausgeführt und dann deaktiviert">⚡ Einmalig</span>'
+      : '<span class="badge" style="background:var(--accent);color:#fff" title="Wiederkehrend nach Zeitplan">🔄 Wiederkehrend</span>';
 
     return `<div class="card" style="margin-bottom:12px">
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
         <span style="font-size:1.2em">${statusIcon}</span>
         <span style="font-weight:500;flex:1">${icon} ${escapeHtml(j.name)}${errIcon}</span>
-        <span class="badge">${j.schedule}</span>
-        ${j.oneShot ? '<span class="badge badge-yellow">Einmalig</span>' : ''}
+        ${recBadge}
+        <span class="badge" style="cursor:pointer;border:1px dashed var(--fg3)" onclick="editCronSchedule('${j.id}','${escapeHtml(j.schedule)}')" title="Klicken zum Bearbeiten">${j.schedule} ✏️</span>
+      </div>
+      <div id="cron-edit-${j.id}" style="display:none;margin-bottom:8px;padding:8px;background:var(--bg3);border-radius:6px">
+        <div style="display:flex;gap:6px;align-items:center;margin-bottom:6px">
+          <label style="font-size:0.82em;color:var(--fg2);min-width:60px">Schedule:</label>
+          <input id="cron-sched-${j.id}" class="input" style="flex:1;font-family:monospace;font-size:0.85em" value="${escapeHtml(j.schedule)}" placeholder="z.B. 0 8 * * * oder 5m">
+        </div>
+        <div style="display:flex;gap:6px;align-items:center;margin-bottom:8px">
+          <label style="font-size:0.82em;color:var(--fg2);min-width:60px">Typ:</label>
+          <label style="font-size:0.82em;cursor:pointer"><input type="radio" name="cron-type-${j.id}" value="false" ${!j.oneShot ? 'checked' : ''}> 🔄 Wiederkehrend</label>
+          <label style="font-size:0.82em;cursor:pointer"><input type="radio" name="cron-type-${j.id}" value="true" ${j.oneShot ? 'checked' : ''}> ⚡ Einmalig</label>
+        </div>
+        <div style="display:flex;gap:6px">
+          <button class="btn btn-sm" onclick="saveCronSchedule('${j.id}')">💾 Speichern</button>
+          <button class="btn btn-sm btn-outline" onclick="document.getElementById('cron-edit-${j.id}').style.display='none'">Abbrechen</button>
+        </div>
       </div>
       <div style="font-size:0.82em;color:var(--fg2);margin-bottom:8px">
         <span>Nächster Lauf: <strong>${j.nextRunFormatted || '—'}</strong></span> · 
@@ -1504,6 +1522,7 @@ async function loadCron() {
       <div style="display:flex;gap:6px">
         <button class="btn btn-sm btn-outline" onclick="toggleCronJob('${j.id}')">${j.enabled ? '⏸ Pause' : '▶️ Start'}</button>
         <button class="btn btn-sm btn-outline" onclick="runCronJob('${j.id}')">▶ Jetzt</button>
+        <button class="btn btn-sm btn-outline" onclick="editCronSchedule('${j.id}','${escapeHtml(j.schedule)}')">✏️ Bearbeiten</button>
         <button class="btn btn-sm btn-outline" style="color:var(--red)" onclick="deleteCronJob('${j.id}')">🗑</button>
       </div>
     </div>`;
@@ -1558,6 +1577,25 @@ async function deleteCronJob(id) {
   await fetch(API + '/api/cron/delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) });
   toast('Gelöscht');
   loadCron();
+}
+
+function editCronSchedule(id) {
+  const el = document.getElementById('cron-edit-' + id);
+  el.style.display = el.style.display === 'none' ? '' : 'none';
+}
+
+async function saveCronSchedule(id) {
+  const schedule = document.getElementById('cron-sched-' + id).value.trim();
+  if (!schedule) { toast('Schedule darf nicht leer sein', 'error'); return; }
+  const oneShotRadio = document.querySelector(`input[name="cron-type-${id}"]:checked`);
+  const oneShot = oneShotRadio ? oneShotRadio.value === 'true' : false;
+  const res = await fetch(API + '/api/cron/update', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ id, schedule, oneShot }),
+  });
+  const data = await res.json();
+  if (data.ok) { toast('✅ Timing aktualisiert!'); loadCron(); }
+  else toast('❌ ' + (data.error || 'Fehler'), 'error');
 }
 
 async function runCronJob(id) {
