@@ -424,12 +424,104 @@ async function loadModels() {
     </div>
   </div>`;
 
-  // Fallback chain
+  // Fallback chain — interactive
   html += `<div class="card">
-    <h3 style="font-size:0.85em;text-transform:none;margin-bottom:8px">⛓️ Fallback-Kette</h3>
-    <div class="sub" style="margin-bottom:8px">Wenn das primäre Modell fehlschlägt, werden diese Modelle der Reihe nach probiert.</div>
-    <div style="font-family:monospace;font-size:0.85em;color:var(--accent2);padding:8px;background:var(--bg3);border-radius:6px">${setupData.activeModel} → ${modelsData.models.filter(m => !m.active).map(m => m.key).slice(0, 3).join(' → ') || '(keine Fallbacks)'}</div>
+    <h3 style="font-size:0.85em;text-transform:none;margin-bottom:8px">⛓️ Fallback-Reihenfolge</h3>
+    <div class="sub" style="margin-bottom:12px">Wenn der primäre Provider fehlschlägt, werden diese der Reihe nach probiert. Per ⬆️/⬇️ umsortieren.</div>
+    <div id="fallback-list" style="font-size:0.85em">⏳ Lade...</div>
   </div>`;
+
+  document.getElementById('models-setup').innerHTML = html;
+  loadFallbackOrder();
+}
+
+async function loadFallbackOrder() {
+  try {
+    const res = await fetch(API + '/api/fallback');
+    const data = await res.json();
+    const container = document.getElementById('fallback-list');
+    if (!container) return;
+
+    const primary = data.primary || '(nicht gesetzt)';
+    const chain = data.chain || [];
+    const health = data.health || {};
+
+    let html = `<div style="display:flex;align-items:center;gap:8px;padding:8px 12px;background:var(--bg3);border-radius:6px;margin-bottom:6px">
+      <span style="font-size:1.1em">👑</span>
+      <span style="flex:1;font-family:monospace;font-weight:600">${primary}</span>
+      <span class="badge badge-green">Primär</span>
+      ${health[primary] ? `<span style="font-size:0.78em;color:${health[primary].healthy ? 'var(--green)' : 'var(--red)'}">${health[primary].healthy ? '● Healthy' : '● Unhealthy'}</span>` : ''}
+    </div>`;
+
+    if (chain.length === 0) {
+      html += `<div style="padding:8px 12px;color:var(--fg2);font-style:italic">Keine Fallback-Provider konfiguriert.</div>`;
+    }
+
+    chain.forEach((key, i) => {
+      const h = health[key];
+      const healthDot = h ? `<span style="font-size:0.78em;color:${h.healthy ? 'var(--green)' : 'var(--red)'}">${h.healthy ? '● Healthy' : '● Unhealthy'}</span>` : '';
+      html += `<div style="display:flex;align-items:center;gap:8px;padding:6px 12px;background:var(--bg2);border-radius:6px;margin-bottom:4px">
+        <span style="color:var(--fg2);min-width:20px;text-align:center">${i + 1}.</span>
+        <span style="flex:1;font-family:monospace">${key}</span>
+        ${healthDot}
+        <button class="btn btn-sm btn-outline" style="padding:2px 8px;font-size:0.8em" onclick="moveFallback('${key}','up')" ${i === 0 ? 'disabled style="opacity:0.3;padding:2px 8px;font-size:0.8em"' : ''}>⬆️</button>
+        <button class="btn btn-sm btn-outline" style="padding:2px 8px;font-size:0.8em" onclick="moveFallback('${key}','down')" ${i === chain.length - 1 ? 'disabled style="opacity:0.3;padding:2px 8px;font-size:0.8em"' : ''}>⬇️</button>
+        <button class="btn btn-sm btn-outline" style="padding:2px 8px;font-size:0.8em;color:var(--red)" onclick="removeFallback('${key}')">✕</button>
+      </div>`;
+    });
+
+    // Add fallback button
+    const allProviders = ['claude-sdk','groq','openai','google','nvidia-llama-3.3-70b','nvidia-kimi-k2.5','openrouter'];
+    const available = allProviders.filter(p => p !== primary && !chain.includes(p));
+    if (available.length > 0) {
+      html += `<div style="margin-top:8px;display:flex;gap:8px;align-items:center">
+        <select id="fallback-add-select" style="flex:1;background:var(--bg3);border:1px solid var(--bg3);border-radius:6px;padding:6px 10px;color:var(--fg);font:inherit;font-size:0.85em">
+          ${available.map(p => `<option value="${p}">${p}</option>`).join('')}
+        </select>
+        <button class="btn btn-sm" onclick="addFallback()">+ Hinzufügen</button>
+      </div>`;
+    }
+
+    container.innerHTML = html;
+  } catch (err) {
+    const container = document.getElementById('fallback-list');
+    if (container) container.innerHTML = `<span style="color:var(--red)">Fehler: ${err.message}</span>`;
+  }
+}
+
+async function moveFallback(key, direction) {
+  await fetch(API + '/api/fallback/move', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ key, direction }),
+  });
+  loadFallbackOrder();
+}
+
+async function removeFallback(key) {
+  const res = await fetch(API + '/api/fallback');
+  const data = await res.json();
+  const newChain = (data.chain || []).filter(k => k !== key);
+  await fetch(API + '/api/fallback', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ order: newChain }),
+  });
+  toast(`${key} entfernt`);
+  loadFallbackOrder();
+}
+
+async function addFallback() {
+  const sel = document.getElementById('fallback-add-select');
+  if (!sel) return;
+  const key = sel.value;
+  const res = await fetch(API + '/api/fallback');
+  const data = await res.json();
+  const newChain = [...(data.chain || []), key];
+  await fetch(API + '/api/fallback', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ order: newChain }),
+  });
+  toast(`${key} hinzugefügt`, 'success');
+  loadFallbackOrder();
 
   document.getElementById('models-setup').innerHTML = html;
 }
