@@ -26,3 +26,4 @@ data/
 # WhatsApp auth
 data/whatsapp-auth/
 .wwebjs_cache/
+docs/whatsapp-groups.json

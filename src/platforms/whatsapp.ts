@@ -4,27 +4,113 @@
  * Uses whatsapp-web.js (Puppeteer-based) for WhatsApp Web connection.
  * Optional dependency — only loaded if WHATSAPP_ENABLED=true.
  *
- * How it works:
- *   whatsapp-web.js connects as YOUR WhatsApp account (not a separate bot).
- *   Messages you send to yourself ("Note to Self" / Saved Messages) are
- *   treated as prompts to the AI. In group chats, mention @Mr.Levin.
- *   The bot will NOT respond in your private conversations with other people.
+ * Features:
+ *   - Self-chat (Note to Self) as AI notepad
+ *   - Group chat with per-group + per-contact whitelist
+ *   - Voice/audio transcription, photo/document processing
+ *   - Persistent auth via LocalAuth
  *
  * Setup:
  *   1. Set WHATSAPP_ENABLED=true in .env (or via Web UI → Platforms)
  *   2. Open Web UI → Platforms → scan the QR code with your phone
  *   3. Start chatting in your "Saved Messages" / self-chat
- *
- * Auth data is saved to data/whatsapp-auth/ for session persistence.
  */
 
 import type { PlatformAdapter, IncomingMessage, MessageHandler } from "./types.js";
 import fs from "fs";
-import { resolve, dirname } from "path";
+import { resolve, dirname, join } from "path";
 import { fileURLToPath } from "url";
+import { tmpdir } from "os";
 
 const BOT_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const AUTH_DIR = resolve(BOT_ROOT, "data", "whatsapp-auth");
+const GROUP_CONFIG_FILE = resolve(BOT_ROOT, "docs", "whatsapp-groups.json");
+
+// ── Group Whitelist Config ──────────────────────────────────────────────────
+
+export interface GroupRule {
+  /** WhatsApp group JID (e.g., 120363314394291236@g.us) */
+  groupId: string;
+  /** Display name (cached for UI) */
+  groupName: string;
+  /** Is the bot enabled in this group? */
+  enabled: boolean;
+  /** Whitelisted participant JIDs — empty = all participants allowed */
+  allowedParticipants: string[];
+  /** Cached participant names for UI display */
+  participantNames: Record<string, string>;
+  /** Must the bot be @mentioned or does any message trigger it? */
+  requireMention: boolean;
+  /** Process media (photos, documents, audio) from this group? */
+  allowMedia: boolean;
+  /** Timestamp of last config update */
+  updatedAt: number;
+}
+
+export interface GroupConfig {
+  groups: GroupRule[];
+}
+
+function loadGroupConfig(): GroupConfig {
+  try {
+    const data = JSON.parse(fs.readFileSync(GROUP_CONFIG_FILE, "utf-8"));
+    return data;
+  } catch {
+    return { groups: [] };
+  }
+}
+
+function saveGroupConfig(config: GroupConfig): void {
+  const dir = resolve(BOT_ROOT, "docs");
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(GROUP_CONFIG_FILE, JSON.stringify(config, null, 2));
+}
+
+/** Get a group rule by ID (or undefined if not configured) */
+export function getGroupRule(groupId: string): GroupRule | undefined {
+  return loadGroupConfig().groups.find(g => g.groupId === groupId);
+}
+
+/** Get all group rules */
+export function getGroupRules(): GroupRule[] {
+  return loadGroupConfig().groups;
+}
+
+/** Create or update a group rule */
+export function upsertGroupRule(rule: Partial<GroupRule> & { groupId: string }): GroupRule {
+  const config = loadGroupConfig();
+  const existing = config.groups.find(g => g.groupId === rule.groupId);
+  if (existing) {
+    Object.assign(existing, rule, { updatedAt: Date.now() });
+    saveGroupConfig(config);
+    return existing;
+  }
+  const newRule: GroupRule = {
+    groupId: rule.groupId,
+    groupName: rule.groupName || "Unknown Group",
+    enabled: rule.enabled ?? false,
+    allowedParticipants: rule.allowedParticipants || [],
+    participantNames: rule.participantNames || {},
+    requireMention: rule.requireMention ?? true,
+    allowMedia: rule.allowMedia ?? true,
+    updatedAt: Date.now(),
+  };
+  config.groups.push(newRule);
+  saveGroupConfig(config);
+  return newRule;
+}
+
+/** Delete a group rule */
+export function deleteGroupRule(groupId: string): boolean {
+  const config = loadGroupConfig();
+  const before = config.groups.length;
+  config.groups = config.groups.filter(g => g.groupId !== groupId);
+  if (config.groups.length < before) {
+    saveGroupConfig(config);
+    return true;
+  }
+  return false;
+}
 
 // ── Global WhatsApp State (accessible from Web API) ─────────────────────────
 
@@ -53,56 +139,45 @@ export function getWhatsAppState(): WhatsAppState {
 // ── Chrome/Chromium Discovery ───────────────────────────────────────────────
 
 const CHROME_PATHS = [
-  // macOS
   "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
   "/Applications/Chromium.app/Contents/MacOS/Chromium",
   "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser",
-  // Linux
   "/usr/bin/google-chrome",
   "/usr/bin/google-chrome-stable",
   "/usr/bin/chromium",
   "/usr/bin/chromium-browser",
   "/snap/bin/chromium",
-  // Windows (WSL)
   "/mnt/c/Program Files/Google/Chrome/Application/chrome.exe",
   "/mnt/c/Program Files (x86)/Google/Chrome/Application/chrome.exe",
 ];
 
 function findChrome(): string | undefined {
-  // Check CHROME_PATH env var first (user override)
   if (process.env.CHROME_PATH && fs.existsSync(process.env.CHROME_PATH)) {
     return process.env.CHROME_PATH;
   }
   return CHROME_PATHS.find(p => fs.existsSync(p));
 }
 
-// ── Scope Settings ──────────────────────────────────────────────────────────
-// Controls where the bot responds. Defaults: self-chat only (safest).
-
-interface WhatsAppScope {
-  selfChatOnly: boolean;  // Only respond in self-chat (default: true)
-  allowGroups: boolean;   // Respond in groups when @mentioned (default: false)
-  allowDMs: boolean;      // Respond to DMs from other people (default: false)
-}
-
-function loadScope(): WhatsAppScope {
-  return {
-    selfChatOnly: process.env.WHATSAPP_SELF_CHAT_ONLY !== "false", // default true
-    allowGroups: process.env.WHATSAPP_ALLOW_GROUPS === "true",      // default false
-    allowDMs: process.env.WHATSAPP_ALLOW_DMS === "true",            // default false
-  };
-}
-
 // ── Adapter ─────────────────────────────────────────────────────────────────
+
+/** Singleton reference for API access */
+let _adapterInstance: WhatsAppAdapter | null = null;
+export function getWhatsAppAdapter(): WhatsAppAdapter | null {
+  return _adapterInstance;
+}
 
 export class WhatsAppAdapter implements PlatformAdapter {
   readonly platform = "whatsapp";
   private handler: MessageHandler | null = null;
   private client: any = null;
 
-  // Loop prevention: track bot-sent message IDs and text hashes
+  // Loop prevention
   private botSentIds = new Set<string>();
   private botSentTexts = new Set<string>();
+
+  constructor() {
+    _adapterInstance = this;
+  }
 
   async start(): Promise<void> {
     _whatsappState = {
@@ -110,7 +185,6 @@ export class WhatsAppAdapter implements PlatformAdapter {
       connectedAt: null, error: null, info: null,
     };
 
-    // ── Dependency check ──────────────────────────────────────────────────
     let wwjs: any;
     try {
       wwjs = await import("whatsapp-web.js");
@@ -121,31 +195,17 @@ export class WhatsAppAdapter implements PlatformAdapter {
       throw new Error(msg);
     }
 
-    // Robust import: try direct exports first, then .default (CJS/ESM compat)
     const Client = wwjs.Client || wwjs.default?.Client;
     const LocalAuth = wwjs.LocalAuth || wwjs.default?.LocalAuth;
 
-    if (!Client) {
-      const msg = "whatsapp-web.js: Client class not found. Check your version.";
-      _whatsappState = { ..._whatsappState, status: "error", error: msg };
-      throw new Error(msg);
-    }
-    if (!LocalAuth) {
-      const msg = "whatsapp-web.js: LocalAuth class not found. Check your version.";
-      _whatsappState = { ..._whatsappState, status: "error", error: msg };
-      throw new Error(msg);
-    }
+    if (!Client) throw new Error("whatsapp-web.js: Client class not found.");
+    if (!LocalAuth) throw new Error("whatsapp-web.js: LocalAuth class not found.");
 
-    // ── Chrome check ──────────────────────────────────────────────────────
     const execPath = findChrome();
     if (!execPath) {
-      console.warn(
-        "⚠️ WhatsApp: No Chrome/Chromium found. Install Google Chrome or set CHROME_PATH env var.\n" +
-        "   Trying Puppeteer's bundled Chromium as fallback..."
-      );
+      console.warn("⚠️ WhatsApp: No Chrome found. Trying Puppeteer bundled Chromium...");
     }
 
-    // ── Auth directory ────────────────────────────────────────────────────
     if (!fs.existsSync(AUTH_DIR)) fs.mkdirSync(AUTH_DIR, { recursive: true });
 
     try {
@@ -154,12 +214,8 @@ export class WhatsAppAdapter implements PlatformAdapter {
         puppeteer: {
           headless: true,
           args: [
-            "--no-sandbox",
-            "--disable-setuid-sandbox",
-            "--disable-dev-shm-usage",
-            "--disable-gpu",
-            "--single-process",
-            "--disable-extensions",
+            "--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage",
+            "--disable-gpu", "--single-process", "--disable-extensions",
           ],
           ...(execPath ? { executablePath: execPath } : {}),
         },
@@ -180,7 +236,6 @@ export class WhatsAppAdapter implements PlatformAdapter {
   private setupEventHandlers(): void {
     const client = this.client;
 
-    // QR Code — displayed in Web UI for scanning
     client.on("qr", (qr: string) => {
       _whatsappState.status = "qr";
       _whatsappState.qrString = qr;
@@ -189,14 +244,12 @@ export class WhatsAppAdapter implements PlatformAdapter {
       console.log("📱 WhatsApp: QR code ready — scan via Web UI → Platforms");
     });
 
-    // Authenticated (QR scanned or session restored)
     client.on("authenticated", () => {
       _whatsappState.status = "connecting";
       _whatsappState.qrString = null;
       console.log("📱 WhatsApp: Authenticated, loading session...");
     });
 
-    // Ready — fully connected
     client.on("ready", async () => {
       _whatsappState.status = "connected";
       _whatsappState.qrString = null;
@@ -206,22 +259,18 @@ export class WhatsAppAdapter implements PlatformAdapter {
       _whatsappState.info = info?.pushname || info?.wid?.user || null;
       console.log(`📱 WhatsApp connected (${_whatsappState.info || "unknown"})`);
 
-      // Send welcome ping to self-chat
       try {
         const myId = info?.wid?._serialized;
         if (myId) {
           await this.sendText(myId,
             "🤖 *Mr. Levin ist jetzt auf WhatsApp verbunden!*\n\n" +
             "Schreib hier (Eigene Nachrichten) um mit mir zu chatten.\n" +
-            "In Gruppenchats: erwähne mich mit @Mr.Levin"
+            "In Gruppenchats: aktiviere Gruppen im Web UI."
           );
         }
-      } catch {
-        // Welcome ping is nice-to-have, not critical
-      }
+      } catch { /* nice-to-have */ }
     });
 
-    // Auth failure
     client.on("auth_failure", (msg: string) => {
       _whatsappState.status = "error";
       _whatsappState.error = `Auth failed: ${msg}`;
@@ -229,7 +278,6 @@ export class WhatsAppAdapter implements PlatformAdapter {
       console.error("❌ WhatsApp auth failure:", msg);
     });
 
-    // Disconnected
     client.on("disconnected", (reason: string) => {
       _whatsappState.status = "disconnected";
       _whatsappState.qrString = null;
@@ -237,9 +285,6 @@ export class WhatsAppAdapter implements PlatformAdapter {
       console.log("📱 WhatsApp disconnected:", reason);
     });
 
-    // ── Message handling ──────────────────────────────────────────────────
-    // Use message_create (fires for ALL messages including own).
-    // The "message" event is unreliable in some whatsapp-web.js versions.
     client.on("message_create", async (msg: any) => {
       try {
         await this.handleIncomingMessage(msg);
@@ -255,75 +300,111 @@ export class WhatsAppAdapter implements PlatformAdapter {
     if (!this.handler) return;
 
     const text = msg.body?.trim();
-    const msgType = msg.type; // "chat", "ptt" (voice), "audio", "image", "video", etc.
+    const msgType = msg.type; // "chat", "ptt", "audio", "image", "video", "document", etc.
     const isVoice = msgType === "ptt" || msgType === "audio";
+    const isImage = msgType === "image" || msgType === "sticker";
+    const isDocument = msgType === "document";
+    const isVideo = msgType === "video";
+    const hasMedia = isVoice || isImage || isDocument || isVideo;
 
-    // Must have text OR be a voice message
-    if (!text && !isVoice) return;
+    // Must have text or media
+    if (!text && !hasMedia) return;
 
     const msgId = msg.id?._serialized || "";
 
-    // ── Loop prevention ───────────────────────────────────────────────────
-    // Skip messages we sent as bot responses (by ID)
+    // ── Loop prevention ──────────────────────────────────────────────────
     if (this.botSentIds.has(msgId)) {
       this.botSentIds.delete(msgId);
       return;
     }
-    // Skip if text matches a recent bot response (backup: catches race conditions)
     if (text && msg.fromMe && this.botSentTexts.has(text.substring(0, 100))) {
       return;
     }
 
     const chat = await msg.getChat();
-
-    // ── Scope filtering — where should the bot respond? ──────────────────
-    const scope = loadScope();
     const isGroup = chat.isGroup;
     const isSelf = this.isSelfChat(chat);
 
-    // Self-chat: always allowed (that's the whole point)
+    // ── Access control ───────────────────────────────────────────────────
     if (isSelf) {
-      // OK — proceed
+      // Self-chat: always allowed
     } else if (isGroup) {
-      // Group chat: only if explicitly enabled
-      if (!scope.allowGroups) return;
-      // In groups: only respond to @mentions (voice in groups always allowed if groups enabled)
-      if (!isVoice && text && !text.includes("@Mr.Levin") && !text.includes("@bot")) return;
-      // Skip own messages in groups
-      if (msg.fromMe) return;
+      // Group: check whitelist
+      if (msg.fromMe) return; // Skip own messages in groups
+
+      const groupId = chat.id._serialized || "";
+      const rule = getGroupRule(groupId);
+
+      // No rule or not enabled → ignore
+      if (!rule || !rule.enabled) return;
+
+      // Check participant whitelist (empty = allow all)
+      const senderId = msg.author || msg.from || "";
+      if (rule.allowedParticipants.length > 0) {
+        // Normalize: strip @c.us / @lid suffix for comparison
+        const senderNorm = senderId.replace(/@.*$/, "");
+        const allowed = rule.allowedParticipants.some(p => p.replace(/@.*$/, "") === senderNorm);
+        if (!allowed) return;
+      }
+
+      // Check mention requirement
+      if (rule.requireMention) {
+        const botName = this.client?.info?.pushname || "Mr. Levin";
+        const mentioned = text && (
+          text.includes("@Mr.Levin") ||
+          text.includes("@bot") ||
+          text.includes("@mr.levin") ||
+          text.toLowerCase().includes(botName.toLowerCase())
+        );
+        // Voice/media in whitelisted groups: allow without mention
+        if (!mentioned && !hasMedia) return;
+      }
+
+      // Check media permission
+      if (hasMedia && !rule.allowMedia) {
+        if (!text) return; // Pure media without text → skip
+      }
     } else {
-      // Private chat with someone else: only if explicitly enabled
-      if (!scope.allowDMs) return;
-      // Skip own outgoing messages to other people
+      // DM from someone else
+      const allowDMs = process.env.WHATSAPP_ALLOW_DMS === "true";
+      if (!allowDMs) return;
       if (msg.fromMe) return;
     }
 
-    // ── Handle voice/audio: download media ───────────────────────────────
+    // ── Download media ───────────────────────────────────────────────────
     let mediaInfo: IncomingMessage["media"] = undefined;
-    if (isVoice) {
+
+    if (hasMedia) {
       try {
         const media = await msg.downloadMedia();
         if (media?.data) {
-          // Save to temp file
-          const fs = await import("fs");
-          const path = await import("path");
-          const os = await import("os");
-          const tmpDir = path.join(os.tmpdir(), "alvin-bot");
+          const tmpDir = join(tmpdir(), "alvin-bot");
           if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true });
 
-          const ext = media.mimetype?.includes("ogg") ? "ogg" : "mp3";
-          const audioPath = path.join(tmpDir, `wa_voice_${Date.now()}.${ext}`);
-          fs.writeFileSync(audioPath, Buffer.from(media.data, "base64"));
-
-          mediaInfo = {
-            type: "voice",
-            path: audioPath,
-            mimeType: media.mimetype || "audio/ogg",
-          };
-          console.log(`📱 WhatsApp: Voice message downloaded → ${audioPath}`);
+          if (isVoice) {
+            const ext = media.mimetype?.includes("ogg") ? "ogg" : "mp3";
+            const audioPath = join(tmpDir, `wa_voice_${Date.now()}.${ext}`);
+            fs.writeFileSync(audioPath, Buffer.from(media.data, "base64"));
+            mediaInfo = { type: "voice", path: audioPath, mimeType: media.mimetype || "audio/ogg" };
+          } else if (isImage) {
+            const ext = media.mimetype?.includes("png") ? "png" : media.mimetype?.includes("webp") ? "webp" : "jpg";
+            const imgPath = join(tmpDir, `wa_photo_${Date.now()}.${ext}`);
+            fs.writeFileSync(imgPath, Buffer.from(media.data, "base64"));
+            mediaInfo = { type: "photo", path: imgPath, mimeType: media.mimetype || "image/jpeg" };
+          } else if (isDocument) {
+            const fileName = media.filename || `wa_doc_${Date.now()}`;
+            const docPath = join(tmpDir, fileName);
+            fs.writeFileSync(docPath, Buffer.from(media.data, "base64"));
+            mediaInfo = { type: "document", path: docPath, mimeType: media.mimetype || "application/octet-stream", fileName };
+          } else if (isVideo) {
+            const ext = media.mimetype?.includes("mp4") ? "mp4" : "webm";
+            const vidPath = join(tmpDir, `wa_video_${Date.now()}.${ext}`);
+            fs.writeFileSync(vidPath, Buffer.from(media.data, "base64"));
+            mediaInfo = { type: "video" as any, path: vidPath, mimeType: media.mimetype || "video/mp4" };
+          }
         }
       } catch (err) {
-        console.error("WhatsApp: Failed to download voice message:", err);
+        console.error(`WhatsApp: Failed to download ${msgType}:`, err instanceof Error ? err.message : err);
       }
     }
 
@@ -337,7 +418,7 @@ export class WhatsAppAdapter implements PlatformAdapter {
       platform: "whatsapp",
       messageId: msgId,
       chatId: chat.id._serialized || "",
-      userId: isSelf ? "self" : (contact?.id?._serialized || "unknown"),
+      userId: isSelf ? "self" : (contact?.id?._serialized || msg.author || "unknown"),
       userName,
       text: text || "",
       isGroup,
@@ -352,44 +433,81 @@ export class WhatsAppAdapter implements PlatformAdapter {
     await this.handler(incoming);
   }
 
-  /**
-   * Detect self-chat (Note to Self / Saved Messages).
-   * WhatsApp uses different ID formats (@lid vs @c.us), so we check multiple signals.
-   */
   private isSelfChat(chat: any): boolean {
-    // whatsapp-web.js v2+ has a direct flag
     if (chat.isMe) return true;
-
-    // Match by chat name vs own display name
     const chatName = chat.name || "";
     const ownName = this.client?.info?.pushname || "";
     if (chatName && ownName && chatName === ownName) return true;
-
-    // Match by WID (phone-format ID)
     const chatId = chat.id?._serialized || "";
     const myWid = this.client?.info?.wid?._serialized || "";
     if (myWid && chatId === myWid) return true;
-
-    // Match by me property
     const myMe = this.client?.info?.me?._serialized || "";
     if (myMe && chatId === myMe) return true;
-
     return false;
+  }
+
+  // ── Public API: Fetch groups + participants ───────────────────────────────
+
+  /** Get all WhatsApp groups the user is in */
+  async getGroups(): Promise<Array<{ id: string; name: string; participantCount: number }>> {
+    if (!this.client || _whatsappState.status !== "connected") return [];
+    try {
+      const chats = await this.client.getChats();
+      return chats
+        .filter((c: any) => c.isGroup)
+        .map((c: any) => ({
+          id: c.id._serialized,
+          name: c.name || "Unnamed Group",
+          participantCount: c.participants?.length || 0,
+        }))
+        .sort((a: any, b: any) => a.name.localeCompare(b.name));
+    } catch (err) {
+      console.error("WhatsApp: Failed to fetch groups:", err);
+      return [];
+    }
+  }
+
+  /** Get participants of a specific group */
+  async getGroupParticipants(groupId: string): Promise<Array<{ id: string; name: string; isAdmin: boolean; number: string }>> {
+    if (!this.client || _whatsappState.status !== "connected") return [];
+    try {
+      const chat = await this.client.getChatById(groupId);
+      if (!chat?.isGroup) return [];
+
+      const participants: Array<{ id: string; name: string; isAdmin: boolean; number: string }> = [];
+      for (const p of chat.participants || []) {
+        const pid = p.id?._serialized || "";
+        let name = pid;
+        let number = pid.replace(/@.*$/, "");
+        try {
+          const contact = await this.client.getContactById(pid);
+          name = contact?.pushname || contact?.name || contact?.number || pid;
+          number = contact?.number || number;
+        } catch { /* use pid */ }
+
+        participants.push({
+          id: pid,
+          name,
+          isAdmin: p.isAdmin || p.isSuperAdmin || false,
+          number,
+        });
+      }
+      return participants.sort((a, b) => a.name.localeCompare(b.name));
+    } catch (err) {
+      console.error("WhatsApp: Failed to fetch participants:", err);
+      return [];
+    }
   }
 
   // ── Sending ───────────────────────────────────────────────────────────────
 
   async sendText(chatId: string, text: string): Promise<void> {
     if (!this.client) return;
-
-    // Pre-register text hash BEFORE sending (message_create may fire synchronously)
     const textHash = text.substring(0, 100);
     this.botSentTexts.add(textHash);
     setTimeout(() => this.botSentTexts.delete(textHash), 30_000);
 
     const sent = await this.client.sendMessage(chatId, text);
-
-    // Track message ID for loop prevention
     if (sent?.id?._serialized) {
       this.botSentIds.add(sent.id._serialized);
       setTimeout(() => this.botSentIds.delete(sent.id._serialized), 60_000);
@@ -400,7 +518,6 @@ export class WhatsAppAdapter implements PlatformAdapter {
     if (!this.client) return;
     const MessageMedia = await this.getMessageMedia();
     if (!MessageMedia) return;
-
     const media = typeof photo === "string"
       ? MessageMedia.fromFilePath(photo)
       : new MessageMedia("image/png", photo.toString("base64"));
@@ -411,7 +528,6 @@ export class WhatsAppAdapter implements PlatformAdapter {
     if (!this.client) return;
     const MessageMedia = await this.getMessageMedia();
     if (!MessageMedia) return;
-
     const media = typeof doc === "string"
       ? MessageMedia.fromFilePath(doc)
       : new MessageMedia("application/octet-stream", doc.toString("base64"), fileName);
@@ -422,16 +538,22 @@ export class WhatsAppAdapter implements PlatformAdapter {
     if (!this.client) return;
     const MessageMedia = await this.getMessageMedia();
     if (!MessageMedia) return;
-
     const media = typeof audio === "string"
       ? MessageMedia.fromFilePath(audio)
       : new MessageMedia("audio/ogg", audio.toString("base64"));
     await this.client.sendMessage(chatId, media, { sendAudioAsVoice: true });
   }
 
+  async setTyping(chatId: string): Promise<void> {
+    if (!this.client) return;
+    try {
+      const chat = await this.client.getChatById(chatId);
+      if (chat) await chat.sendStateTyping();
+    } catch { /* ignore */ }
+  }
+
   async react(chatId: string, messageId: string, emoji: string): Promise<void> {
-    // whatsapp-web.js supports reactions via message.react()
-    // but requires the Message object — not easily accessible here
+    // whatsapp-web.js reactions require the Message object
   }
 
   async stop(): Promise<void> {
@@ -440,6 +562,7 @@ export class WhatsAppAdapter implements PlatformAdapter {
       this.client = null;
     }
     _whatsappState.status = "disconnected";
+    _adapterInstance = null;
   }
 
   onMessage(handler: MessageHandler): void {
@@ -448,7 +571,6 @@ export class WhatsAppAdapter implements PlatformAdapter {
 
   // ── Helpers ───────────────────────────────────────────────────────────────
 
-  /** Lazy-load MessageMedia class (avoids re-importing on every send) */
   private _MessageMedia: any = null;
   private async getMessageMedia(): Promise<any> {
     if (this._MessageMedia) return this._MessageMedia;

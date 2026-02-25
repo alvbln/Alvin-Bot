@@ -57,7 +57,8 @@ document.querySelectorAll('.nav-item').forEach(item => {
     const loaders = { dashboard: loadDashboard, memory: loadMemory, models: loadModels,
       sessions: loadSessions, plugins: loadPlugins, tools: loadTools, cron: loadCron,
       files: () => navigateFiles('.'), users: loadUsers, settings: loadSettings,
-      platforms: loadPlatforms, personality: loadPersonality, maintenance: loadMaintenance };
+      platforms: loadPlatforms, personality: loadPersonality, maintenance: loadMaintenance,
+      'wa-groups': loadWAGroups };
     if (loaders[page]) loaders[page]();
   });
 });
@@ -2021,6 +2022,212 @@ async function loadMaintenance() {
     if (document.getElementById('pm2-status')) refreshPM2Status();
     else clearInterval(window._pm2RefreshInterval);
   }, 10_000);
+}
+
+// ── WhatsApp Groups Management ──────────────────────────
+
+let _waGroupsCache = null;
+let _waRulesCache = null;
+
+async function loadWAGroups() {
+  const container = document.getElementById('wa-groups-content');
+  container.innerHTML = '<div style="color:var(--fg2)">Lade WhatsApp-Gruppen...</div>';
+
+  const [groupsRes, rulesRes] = await Promise.all([
+    fetch(API + '/api/whatsapp/groups').then(r => r.json()).catch(() => ({ groups: [], error: 'Nicht erreichbar' })),
+    fetch(API + '/api/whatsapp/group-rules').then(r => r.json()).catch(() => ({ rules: [] })),
+  ]);
+
+  _waGroupsCache = groupsRes.groups || [];
+  _waRulesCache = rulesRes.rules || [];
+
+  if (groupsRes.error && _waGroupsCache.length === 0) {
+    container.innerHTML = `
+      <div class="card">
+        <div style="text-align:center;padding:20px;color:var(--fg2)">
+          <div style="font-size:2em;margin-bottom:8px">💬</div>
+          <div><b>WhatsApp nicht verbunden</b></div>
+          <div style="font-size:0.85em;margin-top:4px">Verbinde WhatsApp unter 📱 Platforms, um Gruppen zu verwalten.</div>
+        </div>
+      </div>`;
+    return;
+  }
+
+  // Build rules lookup
+  const rulesMap = {};
+  for (const r of _waRulesCache) rulesMap[r.groupId] = r;
+
+  let html = `
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
+      <div style="flex:1">
+        <div style="font-size:0.85em;color:var(--fg2)">
+          ${_waGroupsCache.length} Gruppen gefunden · ${_waRulesCache.filter(r => r.enabled).length} aktiv
+        </div>
+      </div>
+      <button class="btn btn-sm btn-outline" onclick="loadWAGroups()">🔄 Aktualisieren</button>
+    </div>`;
+
+  // Configured groups first, then unconfigured
+  const sorted = [..._waGroupsCache].sort((a, b) => {
+    const aRule = rulesMap[a.id];
+    const bRule = rulesMap[b.id];
+    if (aRule?.enabled && !bRule?.enabled) return -1;
+    if (!aRule?.enabled && bRule?.enabled) return 1;
+    if (aRule && !bRule) return -1;
+    if (!aRule && bRule) return 1;
+    return a.name.localeCompare(b.name);
+  });
+
+  for (const g of sorted) {
+    const rule = rulesMap[g.id];
+    const isEnabled = rule?.enabled;
+    const statusIcon = isEnabled ? '🟢' : '⚪';
+    const allowedCount = rule?.allowedParticipants?.length || 0;
+    const accessLabel = !rule ? 'Nicht konfiguriert' :
+      isEnabled ? (allowedCount > 0 ? `${allowedCount} erlaubte Kontakte` : 'Alle Teilnehmer erlaubt') :
+      'Deaktiviert';
+    const mentionLabel = rule?.requireMention ? '@ Erwähnung nötig' : 'Alle Nachrichten';
+    const mediaLabel = rule?.allowMedia !== false ? '📎 Medien an' : '📎 Medien aus';
+
+    html += `
+      <div class="card" style="margin-bottom:10px">
+        <div style="display:flex;align-items:center;gap:10px">
+          <span style="font-size:1.2em">${statusIcon}</span>
+          <div style="flex:1">
+            <div style="font-weight:600;font-size:0.9em">${escapeHtml(g.name)}</div>
+            <div style="font-size:0.78em;color:var(--fg2)">${accessLabel}${isEnabled ? ' · ' + mentionLabel + ' · ' + mediaLabel : ''}</div>
+          </div>
+          <button class="btn btn-sm ${isEnabled ? '' : 'btn-outline'}" onclick="toggleWAGroup('${g.id}', '${escapeHtml(g.name)}', ${!isEnabled})">
+            ${isEnabled ? '⏸ Deaktivieren' : '▶️ Aktivieren'}
+          </button>
+          <button class="btn btn-sm btn-outline" onclick="configureWAGroup('${g.id}', '${escapeHtml(g.name)}')">⚙️</button>
+        </div>
+      </div>`;
+  }
+
+  container.innerHTML = html;
+}
+
+async function toggleWAGroup(groupId, groupName, enable) {
+  await fetch(API + '/api/whatsapp/group-rules', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ groupId, groupName, enabled: enable }),
+  });
+  toast(enable ? `${groupName} aktiviert` : `${groupName} deaktiviert`, 'success');
+  loadWAGroups();
+}
+
+async function configureWAGroup(groupId, groupName) {
+  const container = document.getElementById('wa-groups-content');
+
+  // Find existing rule
+  const rule = _waRulesCache?.find(r => r.groupId === groupId) || {};
+
+  // Fetch participants
+  container.innerHTML = `<div style="color:var(--fg2)">Lade Teilnehmer von "${groupName}"...</div>`;
+  const res = await fetch(API + `/api/whatsapp/groups/${encodeURIComponent(groupId)}/participants`);
+  const { participants } = await res.json();
+
+  const allowed = new Set(rule.allowedParticipants || []);
+  const requireMention = rule.requireMention !== false;
+  const allowMedia = rule.allowMedia !== false;
+
+  let html = `
+    <div style="margin-bottom:16px">
+      <button class="btn btn-sm btn-outline" onclick="loadWAGroups()">← Zurück</button>
+      <span style="margin-left:12px;font-weight:600;font-size:1em">${escapeHtml(groupName)}</span>
+      <span style="margin-left:8px;font-size:0.8em;color:var(--fg2)">${participants.length} Teilnehmer</span>
+    </div>
+
+    <div class="card" style="margin-bottom:12px">
+      <h3 style="font-size:0.9em;margin-bottom:10px">⚙️ Gruppeneinstellungen</h3>
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <label style="display:flex;align-items:center;gap:8px;font-size:0.85em;cursor:pointer">
+          <input type="checkbox" id="wa-require-mention" ${requireMention ? 'checked' : ''}>
+          <span>@ Erwähnung erforderlich <span style="color:var(--fg2)">(Bot reagiert nur auf @Mr.Levin)</span></span>
+        </label>
+        <label style="display:flex;align-items:center;gap:8px;font-size:0.85em;cursor:pointer">
+          <input type="checkbox" id="wa-allow-media" ${allowMedia ? 'checked' : ''}>
+          <span>📎 Medien verarbeiten <span style="color:var(--fg2)">(Bilder, Dokumente, Audio)</span></span>
+        </label>
+      </div>
+    </div>
+
+    <div class="card" style="margin-bottom:12px">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+        <h3 style="font-size:0.9em;flex:1">👥 Erlaubte Kontakte</h3>
+        <button class="btn btn-sm btn-outline" onclick="waSelectAll(true)">Alle auswählen</button>
+        <button class="btn btn-sm btn-outline" onclick="waSelectAll(false)">Keine</button>
+      </div>
+      <div style="font-size:0.78em;color:var(--fg2);margin-bottom:10px">
+        Wenn keine Kontakte ausgewählt sind, dürfen <b>alle</b> Teilnehmer Mr. Levin ansprechen.
+      </div>
+      <div id="wa-participants" style="max-height:400px;overflow-y:auto">`;
+
+  for (const p of participants) {
+    const checked = allowed.has(p.id) || allowed.has(p.number) ? 'checked' : '';
+    const adminBadge = p.isAdmin ? ' <span style="background:var(--accent);color:var(--bg);padding:1px 6px;border-radius:4px;font-size:0.75em">Admin</span>' : '';
+    html += `
+      <label style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--bg3);cursor:pointer;font-size:0.85em" class="wa-participant">
+        <input type="checkbox" data-pid="${p.id}" data-number="${p.number}" ${checked}>
+        <span style="flex:1">${escapeHtml(p.name)}${adminBadge}</span>
+        <span style="color:var(--fg2);font-size:0.82em;font-family:monospace">+${p.number}</span>
+      </label>`;
+  }
+
+  html += `</div></div>
+
+    <div style="display:flex;gap:8px">
+      <button class="btn" onclick="saveWAGroupConfig('${groupId}', '${escapeHtml(groupName)}')">💾 Speichern & Aktivieren</button>
+      <button class="btn btn-outline" onclick="loadWAGroups()">Abbrechen</button>
+      ${rule.groupId ? `<button class="btn btn-outline" style="color:var(--red);margin-left:auto" onclick="deleteWAGroupRule('${groupId}')">🗑 Regel löschen</button>` : ''}
+    </div>`;
+
+  container.innerHTML = html;
+}
+
+function waSelectAll(selectAll) {
+  document.querySelectorAll('#wa-participants input[type=checkbox]').forEach(cb => cb.checked = selectAll);
+}
+
+async function saveWAGroupConfig(groupId, groupName) {
+  const requireMention = document.getElementById('wa-require-mention').checked;
+  const allowMedia = document.getElementById('wa-allow-media').checked;
+
+  const allowedParticipants = [];
+  const participantNames = {};
+  document.querySelectorAll('#wa-participants input[type=checkbox]:checked').forEach(cb => {
+    const pid = cb.dataset.pid;
+    allowedParticipants.push(pid);
+    const label = cb.closest('label');
+    const name = label?.querySelector('span')?.textContent?.trim() || pid;
+    participantNames[pid] = name;
+  });
+
+  await fetch(API + '/api/whatsapp/group-rules', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      groupId, groupName, enabled: true,
+      allowedParticipants, participantNames,
+      requireMention, allowMedia,
+    }),
+  });
+
+  toast(`${groupName} konfiguriert und aktiviert!`, 'success');
+  loadWAGroups();
+}
+
+async function deleteWAGroupRule(groupId) {
+  if (!confirm('Regel für diese Gruppe löschen?')) return;
+  await fetch(API + `/api/whatsapp/group-rules/${encodeURIComponent(groupId)}`, { method: 'DELETE' });
+  toast('Regel gelöscht', 'success');
+  loadWAGroups();
+}
+
+function escapeHtml(text) {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
 }
 
 // ── Theme Toggle ────────────────────────────────────────

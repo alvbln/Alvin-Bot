@@ -691,6 +691,78 @@ async function handleAPI(req: http.IncomingMessage, res: http.ServerResponse, ur
     return;
   }
 
+  // ── WhatsApp Group Management API ────────────────────────────────────
+
+  // GET /api/whatsapp/groups — list all WhatsApp groups (live from WA)
+  if (urlPath === "/api/whatsapp/groups") {
+    try {
+      const { getWhatsAppAdapter } = await import("../platforms/whatsapp.js");
+      const adapter = getWhatsAppAdapter();
+      if (!adapter) {
+        res.end(JSON.stringify({ groups: [], error: "WhatsApp nicht verbunden" }));
+        return;
+      }
+      const groups = await adapter.getGroups();
+      res.end(JSON.stringify({ groups }));
+    } catch (err) {
+      res.end(JSON.stringify({ groups: [], error: String(err) }));
+    }
+    return;
+  }
+
+  // GET /api/whatsapp/groups/:id/participants — fetch group participants
+  if (urlPath.match(/^\/api\/whatsapp\/groups\/[^/]+\/participants$/)) {
+    try {
+      const groupId = decodeURIComponent(urlPath.split("/")[4]);
+      const { getWhatsAppAdapter } = await import("../platforms/whatsapp.js");
+      const adapter = getWhatsAppAdapter();
+      if (!adapter) {
+        res.end(JSON.stringify({ participants: [], error: "WhatsApp nicht verbunden" }));
+        return;
+      }
+      const participants = await adapter.getGroupParticipants(groupId);
+      res.end(JSON.stringify({ participants }));
+    } catch (err) {
+      res.end(JSON.stringify({ participants: [], error: String(err) }));
+    }
+    return;
+  }
+
+  // GET /api/whatsapp/group-rules — get all configured group rules
+  if (urlPath === "/api/whatsapp/group-rules") {
+    const { getGroupRules } = await import("../platforms/whatsapp.js");
+    res.end(JSON.stringify({ rules: getGroupRules() }));
+    return;
+  }
+
+  // POST /api/whatsapp/group-rules — create or update a group rule
+  if (urlPath === "/api/whatsapp/group-rules" && req.method === "POST") {
+    try {
+      const rule = JSON.parse(body);
+      if (!rule.groupId) {
+        res.statusCode = 400;
+        res.end(JSON.stringify({ error: "groupId ist erforderlich" }));
+        return;
+      }
+      const { upsertGroupRule } = await import("../platforms/whatsapp.js");
+      const saved = upsertGroupRule(rule);
+      res.end(JSON.stringify({ ok: true, rule: saved }));
+    } catch (err) {
+      res.statusCode = 400;
+      res.end(JSON.stringify({ error: String(err) }));
+    }
+    return;
+  }
+
+  // DELETE /api/whatsapp/group-rules/:id — delete a group rule
+  if (urlPath.match(/^\/api\/whatsapp\/group-rules\//) && req.method === "DELETE") {
+    const groupId = decodeURIComponent(urlPath.split("/").slice(4).join("/"));
+    const { deleteGroupRule } = await import("../platforms/whatsapp.js");
+    const ok = deleteGroupRule(groupId);
+    res.end(JSON.stringify({ ok }));
+    return;
+  }
+
   res.statusCode = 404;
   res.end(JSON.stringify({ error: "Not found" }));
 }

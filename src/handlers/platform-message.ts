@@ -70,6 +70,13 @@ export async function handlePlatformMessage(
     text = `[Bild angehängt: ${msg.media.path}]\n\n${caption}`;
   }
 
+  // ── Document: provide path + filename as context ─────────────────────
+  if (msg.media?.type === "document" && msg.media.path) {
+    const fname = msg.media.fileName || "Dokument";
+    const caption = text || `Analysiere dieses Dokument: ${fname}`;
+    text = `[Dokument angehängt: ${msg.media.path} (${fname})]\n\n${caption}`;
+  }
+
   if (!text) return;
 
   // ── Basic command handling for non-Telegram platforms ──────────────
