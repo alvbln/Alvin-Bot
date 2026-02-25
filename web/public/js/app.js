@@ -442,9 +442,12 @@ async function loadFallbackOrder() {
     const container = document.getElementById('fallback-list');
     if (!container) return;
 
-    const primary = data.primary || '(nicht gesetzt)';
-    const chain = data.chain || [];
-    const health = data.health || {};
+    const primary = data.order?.primary || data.activeProvider || '(nicht gesetzt)';
+    const chain = data.order?.fallbacks || [];
+    // Build health map by key
+    const healthArr = data.health || [];
+    const health = {};
+    healthArr.forEach(h => { health[h.key] = h; });
 
     let html = `<div style="display:flex;align-items:center;gap:8px;padding:8px 12px;background:var(--bg3);border-radius:6px;margin-bottom:6px">
       <span style="font-size:1.1em">👑</span>
@@ -500,10 +503,11 @@ async function moveFallback(key, direction) {
 async function removeFallback(key) {
   const res = await fetch(API + '/api/fallback');
   const data = await res.json();
-  const newChain = (data.chain || []).filter(k => k !== key);
+  const primary = data.order?.primary || data.activeProvider;
+  const newChain = (data.order?.fallbacks || []).filter(k => k !== key);
   await fetch(API + '/api/fallback', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ order: newChain }),
+    body: JSON.stringify({ primary, fallbacks: newChain }),
   });
   toast(`${key} entfernt`);
   loadFallbackOrder();
@@ -515,10 +519,11 @@ async function addFallback() {
   const key = sel.value;
   const res = await fetch(API + '/api/fallback');
   const data = await res.json();
-  const newChain = [...(data.chain || []), key];
+  const primary = data.order?.primary || data.activeProvider;
+  const newChain = [...(data.order?.fallbacks || []), key];
   await fetch(API + '/api/fallback', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ order: newChain }),
+    body: JSON.stringify({ primary, fallbacks: newChain }),
   });
   toast(`${key} hinzugefügt`, 'success');
   loadFallbackOrder();
