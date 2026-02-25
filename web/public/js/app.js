@@ -2087,7 +2087,8 @@ async function loadWAGroups() {
       isEnabled ? (allowedCount > 0 ? `${allowedCount} erlaubte Kontakte` : 'Alle Teilnehmer erlaubt') :
       'Deaktiviert';
     const mentionLabel = rule?.requireMention ? '@ Erwähnung nötig' : 'Alle Nachrichten';
-    const mediaLabel = rule?.allowMedia !== false ? '📎 Medien an' : '📎 Medien aus';
+    const mediaLabel = rule?.allowMedia !== false ? '📎 Medien' : '';
+    const approvalLabel = rule?.requireApproval !== false ? '🔐 Approval' : '⚡ Auto';
 
     html += `
       <div class="card" style="margin-bottom:10px">
@@ -2095,7 +2096,7 @@ async function loadWAGroups() {
           <span style="font-size:1.2em">${statusIcon}</span>
           <div style="flex:1">
             <div style="font-weight:600;font-size:0.9em">${escapeHtml(g.name)}</div>
-            <div style="font-size:0.78em;color:var(--fg2)">${accessLabel}${isEnabled ? ' · ' + mentionLabel + ' · ' + mediaLabel : ''}</div>
+            <div style="font-size:0.78em;color:var(--fg2)">${accessLabel}${isEnabled ? ' · ' + mentionLabel + ' · ' + approvalLabel + (mediaLabel ? ' · ' + mediaLabel : '') : ''}</div>
           </div>
           <button class="btn btn-sm ${isEnabled ? '' : 'btn-outline'}" onclick="toggleWAGroup('${g.id}', '${escapeHtml(g.name)}', ${!isEnabled})">
             ${isEnabled ? '⏸ Deaktivieren' : '▶️ Aktivieren'}
@@ -2131,6 +2132,7 @@ async function configureWAGroup(groupId, groupName) {
   const allowed = new Set(rule.allowedParticipants || []);
   const requireMention = rule.requireMention !== false;
   const allowMedia = rule.allowMedia !== false;
+  const requireApproval = rule.requireApproval !== false;
 
   let html = `
     <div style="margin-bottom:16px">
@@ -2149,6 +2151,10 @@ async function configureWAGroup(groupId, groupName) {
         <label style="display:flex;align-items:center;gap:8px;font-size:0.85em;cursor:pointer">
           <input type="checkbox" id="wa-allow-media" ${allowMedia ? 'checked' : ''}>
           <span>📎 Medien verarbeiten <span style="color:var(--fg2)">(Bilder, Dokumente, Audio)</span></span>
+        </label>
+        <label style="display:flex;align-items:center;gap:8px;font-size:0.85em;cursor:pointer">
+          <input type="checkbox" id="wa-require-approval" ${requireApproval ? 'checked' : ''}>
+          <span>🔐 Telegram-Freigabe <span style="color:var(--fg2)">(Du musst jede Anfrage auf Telegram genehmigen)</span></span>
         </label>
       </div>
     </div>
@@ -2193,6 +2199,7 @@ function waSelectAll(selectAll) {
 async function saveWAGroupConfig(groupId, groupName) {
   const requireMention = document.getElementById('wa-require-mention').checked;
   const allowMedia = document.getElementById('wa-allow-media').checked;
+  const requireApproval = document.getElementById('wa-require-approval').checked;
 
   const allowedParticipants = [];
   const participantNames = {};
@@ -2209,7 +2216,7 @@ async function saveWAGroupConfig(groupId, groupName) {
     body: JSON.stringify({
       groupId, groupName, enabled: true,
       allowedParticipants, participantNames,
-      requireMention, allowMedia,
+      requireMention, allowMedia, requireApproval,
     }),
   });
 

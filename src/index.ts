@@ -1,4 +1,4 @@
-import { Bot } from "grammy";
+import { Bot, InlineKeyboard } from "grammy";
 import { config } from "./config.js";
 import { authMiddleware } from "./middleware/auth.js";
 import { registerCommands } from "./handlers/commands.js";
@@ -59,6 +59,51 @@ bot.use(authMiddleware);
 // Commands registrieren
 registerCommands(bot);
 registerPluginCommands(bot);
+
+// ── WhatsApp Approval Callbacks ──────────────────────────────────────────────
+
+bot.callbackQuery(/^wa:approve:(.+)$/, async (ctx) => {
+  const approvalId = ctx.match![1];
+  const { removePendingApproval, getWhatsAppAdapter } = await import("./platforms/whatsapp.js");
+  const pending = removePendingApproval(approvalId);
+  if (!pending) {
+    await ctx.answerCallbackQuery("⏰ Anfrage abgelaufen");
+    await ctx.editMessageText(ctx.msg?.text + "\n\n⏰ _Abgelaufen_", { parse_mode: "Markdown" }).catch(() => {});
+    return;
+  }
+
+  await ctx.answerCallbackQuery("✅ Freigegeben");
+  await ctx.editMessageText(
+    ctx.msg?.text + `\n\n✅ Freigegeben`,
+    { parse_mode: "HTML" }
+  ).catch(() => {});
+
+  // Process the message through the platform handler
+  const adapter = getWhatsAppAdapter();
+  if (adapter) {
+    adapter.processApprovedMessage(pending.incoming).catch(err =>
+      console.error("WhatsApp approved message processing error:", err)
+    );
+  }
+});
+
+bot.callbackQuery(/^wa:deny:(.+)$/, async (ctx) => {
+  const approvalId = ctx.match![1];
+  const { removePendingApproval } = await import("./platforms/whatsapp.js");
+  const pending = removePendingApproval(approvalId);
+
+  await ctx.answerCallbackQuery("❌ Abgelehnt");
+  await ctx.editMessageText(
+    (ctx.msg?.text || "") + `\n\n❌ Abgelehnt`,
+    { parse_mode: "HTML" }
+  ).catch(() => {});
+
+  // Clean up temp media files
+  if (pending?.incoming.media?.path) {
+    const fs = await import("fs");
+    fs.unlink(pending.incoming.media.path, () => {});
+  }
+});
 
 // Content handlers (Reihenfolge wichtig: spezifisch vor allgemein)
 bot.on("message:voice", handleVoice);
@@ -127,6 +172,36 @@ async function startOptionalPlatforms() {
     const icons: Record<string, string> = { whatsapp: "📱", discord: "🎮", signal: "🔒" };
     for (const p of loaded) {
       console.log(`${icons[p] || "📡"} ${p.charAt(0).toUpperCase() + p.slice(1)} platform started`);
+    }
+
+    // Wire WhatsApp approval flow → sends approval requests to Telegram owner
+    if (loaded.includes("whatsapp")) {
+      const { setApprovalRequestFn } = await import("./platforms/whatsapp.js");
+      setApprovalRequestFn(async (pending) => {
+        const ownerChatId = config.allowedUsers[0];
+        if (!ownerChatId) return;
+
+        const mediaTag = pending.mediaType ? ` [${pending.mediaType}]` : "";
+        const msgText =
+          `💬 <b>WhatsApp Approval</b>\n\n` +
+          `<b>Gruppe:</b> ${pending.groupName}\n` +
+          `<b>Von:</b> ${pending.senderName} (+${pending.senderNumber})\n` +
+          `<b>Nachricht:</b>${mediaTag}\n` +
+          `<blockquote>${pending.preview || "(kein Text)"}</blockquote>`;
+
+        const keyboard = new InlineKeyboard()
+          .text("✅ Freigeben", `wa:approve:${pending.id}`)
+          .text("❌ Ablehnen", `wa:deny:${pending.id}`);
+
+        try {
+          await bot.api.sendMessage(ownerChatId, msgText, {
+            parse_mode: "HTML",
+            reply_markup: keyboard,
+          });
+        } catch (err) {
+          console.error("Failed to send WhatsApp approval request:", err);
+        }
+      });
     }
   }
 }

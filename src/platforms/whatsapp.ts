@@ -43,6 +43,8 @@ export interface GroupRule {
   requireMention: boolean;
   /** Process media (photos, documents, audio) from this group? */
   allowMedia: boolean;
+  /** Require owner approval via Telegram before processing? */
+  requireApproval: boolean;
   /** Timestamp of last config update */
   updatedAt: number;
 }
@@ -93,6 +95,7 @@ export function upsertGroupRule(rule: Partial<GroupRule> & { groupId: string }):
     participantNames: rule.participantNames || {},
     requireMention: rule.requireMention ?? true,
     allowMedia: rule.allowMedia ?? true,
+    requireApproval: rule.requireApproval ?? true,
     updatedAt: Date.now(),
   };
   config.groups.push(newRule);
@@ -111,6 +114,60 @@ export function deleteGroupRule(groupId: string): boolean {
   }
   return false;
 }
+
+// ── Approval Queue ──────────────────────────────────────────────────────────
+
+export interface PendingApproval {
+  id: string;
+  incoming: IncomingMessage;
+  groupName: string;
+  senderName: string;
+  senderNumber: string;
+  preview: string;
+  mediaType?: string;
+  timestamp: number;
+}
+
+const _pendingApprovals = new Map<string, PendingApproval>();
+
+/** Approval callback — set by index.ts to send Telegram messages */
+type ApprovalRequestFn = (pending: PendingApproval) => Promise<void>;
+let _approvalRequestFn: ApprovalRequestFn | null = null;
+
+export function setApprovalRequestFn(fn: ApprovalRequestFn): void {
+  _approvalRequestFn = fn;
+}
+
+export function getPendingApproval(id: string): PendingApproval | undefined {
+  return _pendingApprovals.get(id);
+}
+
+export function removePendingApproval(id: string): PendingApproval | undefined {
+  const p = _pendingApprovals.get(id);
+  _pendingApprovals.delete(id);
+  return p;
+}
+
+export function getPendingApprovals(): PendingApproval[] {
+  return Array.from(_pendingApprovals.values());
+}
+
+/** Clean up stale approvals older than 30 minutes */
+function cleanupStaleApprovals(): void {
+  const cutoff = Date.now() - 30 * 60_000;
+  for (const [id, p] of _pendingApprovals) {
+    if (p.timestamp < cutoff) {
+      _pendingApprovals.delete(id);
+      // Clean up temp media files
+      if (p.incoming.media?.path) {
+        fs.unlink(p.incoming.media.path, () => {});
+      }
+    }
+  }
+}
+
+// Clean stale approvals every 5 minutes
+setInterval(cleanupStaleApprovals, 5 * 60_000);
 
 // ── Global WhatsApp State (accessible from Web API) ─────────────────────────
 
@@ -430,6 +487,42 @@ export class WhatsAppAdapter implements PlatformAdapter {
       media: mediaInfo,
     };
 
+    // ── Approval gate for group messages from non-owner ──────────────────
+    if (isGroup && !isSelf && !msg.fromMe) {
+      const groupId = chat.id._serialized || "";
+      const rule = getGroupRule(groupId);
+
+      if (rule?.requireApproval && _approvalRequestFn) {
+        const approvalId = `wa_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+        const senderNumber = (contact?.number || msg.author || "").replace(/@.*$/, "");
+
+        // Build preview (truncate long text)
+        let preview = text || "";
+        if (preview.length > 200) preview = preview.slice(0, 200) + "…";
+        if (hasMedia && !preview) {
+          const mediaLabels: Record<string, string> = { ptt: "🎤 Sprachnachricht", audio: "🎵 Audio", image: "📷 Bild", document: "📄 Dokument", video: "🎬 Video", sticker: "🏷 Sticker" };
+          preview = mediaLabels[msgType] || `📎 ${msgType}`;
+        } else if (hasMedia) {
+          preview = `📎 +Medien: ${preview}`;
+        }
+
+        const pending: PendingApproval = {
+          id: approvalId,
+          incoming,
+          groupName: chat.name || "Gruppe",
+          senderName: userName,
+          senderNumber,
+          preview,
+          mediaType: hasMedia ? msgType : undefined,
+          timestamp: Date.now(),
+        };
+
+        _pendingApprovals.set(approvalId, pending);
+        await _approvalRequestFn(pending);
+        return; // Don't process yet — wait for approval
+      }
+    }
+
     await this.handler(incoming);
   }
 
@@ -542,6 +635,12 @@ export class WhatsAppAdapter implements PlatformAdapter {
       ? MessageMedia.fromFilePath(audio)
       : new MessageMedia("audio/ogg", audio.toString("base64"));
     await this.client.sendMessage(chatId, media, { sendAudioAsVoice: true });
+  }
+
+  /** Process an approved message from the pending queue */
+  async processApprovedMessage(incoming: IncomingMessage): Promise<void> {
+    if (!this.handler) return;
+    await this.handler(incoming);
   }
 
   async setTyping(chatId: string): Promise<void> {
