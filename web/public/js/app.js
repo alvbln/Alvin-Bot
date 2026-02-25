@@ -268,10 +268,13 @@ function handleWSMessage(msg) {
       break;
     case 'done':
       flushToolGroup();
-      if (msg.cost && currentAssistantMsg) {
+      if (currentAssistantMsg && (msg.cost || msg.inputTokens || msg.outputTokens)) {
         const costEl = document.createElement('span');
         costEl.className = 'time';
-        costEl.textContent = `$${msg.cost.toFixed(4)}`;
+        const parts = [];
+        if (msg.inputTokens || msg.outputTokens) parts.push(`${(msg.inputTokens||0)+(msg.outputTokens||0)} tokens`);
+        if (msg.cost) parts.push(`$${msg.cost.toFixed(4)}`);
+        costEl.textContent = parts.join(' · ');
         currentAssistantMsg.querySelector('.msg-text').appendChild(costEl);
       }
       if (currentAssistantMsg) {
@@ -579,9 +582,12 @@ document.addEventListener('keydown', (e) => {
 async function loadDashboard() {
   const res = await fetch(API + '/api/status');
   const data = await res.json();
+  const tok = data.tokens || {};
+  const fmtTokens = (n) => n >= 1000000 ? (n/1000000).toFixed(1) + 'M' : n >= 1000 ? (n/1000).toFixed(1) + 'k' : String(n || 0);
   document.getElementById('dashboard-cards').innerHTML = `
     <div class="card"><h3>${icon('bot', 14)} ${t('dashboard.model')}</h3><div class="value">${data.model.name}</div><div class="sub">${data.model.model}</div></div>
     <div class="card"><h3>${icon('clock', 14)} ${t('dashboard.uptime')}</h3><div class="value">${Math.floor(data.bot.uptime/3600)}h ${Math.floor(data.bot.uptime%3600/60)}m</div><div class="sub">v${data.bot.version}</div></div>
+    <div class="card"><h3>${icon('zap', 14)} ${t('dashboard.tokens')}</h3><div class="value">${fmtTokens(tok.total)}</div><div class="sub">${fmtTokens(tok.totalInput)} ${t('dashboard.tokens.in')} · ${fmtTokens(tok.totalOutput)} ${t('dashboard.tokens.out')} · $${(tok.totalCost || 0).toFixed(4)}</div></div>
     <div class="card"><h3>${icon('brain', 14)} ${t('dashboard.memory')}</h3><div class="value">${data.memory.dailyLogs} ${t('dashboard.memory.days')}</div><div class="sub">${data.memory.vectors} ${t('dashboard.memory.vectors')} · ${data.memory.todayEntries} ${t('dashboard.memory.today')}</div></div>
     <div class="card"><h3>${icon('plug', 14)} ${t('dashboard.plugins')}</h3><div class="value">${data.plugins}</div><div class="sub">${t('dashboard.plugins.loaded')}</div></div>
     <div class="card"><h3>${icon('wrench', 14)} ${t('dashboard.mcp')}</h3><div class="value">${data.mcp}</div><div class="sub">${t('dashboard.mcp.servers')}</div></div>
@@ -976,14 +982,216 @@ async function loadSessions() {
 
 // ── Plugins ─────────────────────────────────────────────
 async function loadPlugins() {
-  const res = await fetch(API + '/api/plugins');
+  const [pluginsRes, mcpRes, skillsRes] = await Promise.all([
+    fetch(API + '/api/plugins'),
+    fetch(API + '/api/mcp').catch(() => ({ json: () => ({ servers: [], tools: [], config: { servers: {} } }) })),
+    fetch(API + '/api/skills').catch(() => ({ json: () => ({ skills: [] }) })),
+  ]);
+  const pluginsData = await pluginsRes.json();
+  const mcpData = await mcpRes.json();
+  const skillsData = await skillsRes.json();
+
+  let html = '';
+
+  // ── Plugins Section ──
+  html += `<div style="margin-bottom:24px">
+    <h3 style="font-size:1em;margin-bottom:8px;display:flex;align-items:center;gap:8px">${icon('plug', 18)} ${t('plugins.none').replace('Keine ','').replace('No ','') || 'Plugins'}</h3>`;
+  if (pluginsData.plugins.length === 0) {
+    html += `<div class="card"><div class="sub">${t('plugins.none.desc')}</div></div>`;
+  } else {
+    html += pluginsData.plugins.map(p => `<div class="list-item"><div class="icon">${icon('plug', 18)}</div><div class="info">
+      <div class="name">${p.name} <span class="badge">${p.version}</span></div>
+      <div class="desc">${p.description}${p.commands.length ? ' · '+p.commands.join(', ') : ''}</div>
+    </div></div>`).join('');
+  }
+  html += '</div>';
+
+  // ── MCP Servers Section ──
+  html += `<div style="margin-bottom:24px">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+      <h3 style="font-size:1em;display:flex;align-items:center;gap:8px;flex:1">${icon('server', 18)} MCP Servers</h3>
+      <button class="btn btn-sm" onclick="showAddMCP()">${icon('plus', 14)} ${t('models.fallback.add')}</button>
+      <button class="btn btn-sm btn-outline" onclick="discoverMCP()">${icon('search', 14)} Auto-Discover</button>
+    </div>`;
+
+  if (mcpData.servers.length === 0) {
+    html += `<div class="card"><div class="sub">No MCP servers configured. Add one or use Auto-Discover.</div></div>`;
+  } else {
+    for (const s of mcpData.servers) {
+      const statusBadge = s.connected
+        ? `<span class="badge badge-green">${icon('check', 12)} Connected · ${s.tools} tools</span>`
+        : `<span class="badge badge-red">${icon('x', 12)} Disconnected</span>`;
+      html += `<div class="list-item">
+        <div class="icon">${icon('server', 18)}</div>
+        <div class="info"><div class="name">${escapeHtml(s.name)}</div></div>
+        ${statusBadge}
+        <button class="btn btn-sm btn-outline" style="color:var(--red);padding:2px 8px" onclick="removeMCP('${escapeHtml(s.name)}')">${icon('trash-2', 14)}</button>
+      </div>`;
+    }
+  }
+
+  // Add MCP form (hidden by default)
+  html += `<div id="mcp-add-form" style="display:none;margin-top:12px;padding:16px;background:var(--bg2);border:1px solid var(--glass-border);border-radius:var(--radius)">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+      <input id="mcp-name" placeholder="Server name (e.g. filesystem)" class="input">
+      <input id="mcp-command" placeholder="Command (e.g. npx)" class="input">
+      <input id="mcp-args" placeholder="Args (comma-separated, e.g. -y,@modelcontextprotocol/server-filesystem,/tmp)" class="input" style="grid-column:1/-1">
+      <input id="mcp-url" placeholder="Or HTTP URL (for remote servers)" class="input" style="grid-column:1/-1">
+    </div>
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-sm" onclick="addMCP()">${icon('save', 14)} ${t('save')}</button>
+      <button class="btn btn-sm btn-outline" onclick="document.getElementById('mcp-add-form').style.display='none'">${t('cancel')}</button>
+    </div>
+  </div>`;
+
+  // Discovery results area
+  html += `<div id="mcp-discover-results" style="margin-top:8px"></div>`;
+  html += '</div>';
+
+  // ── Skills Section ──
+  html += `<div style="margin-bottom:24px">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+      <h3 style="font-size:1em;display:flex;align-items:center;gap:8px;flex:1">${icon('sparkles', 18)} Skills</h3>
+      <button class="btn btn-sm" onclick="showAddSkill()">${icon('plus', 14)} ${t('cron.create')}</button>
+    </div>`;
+
+  if (skillsData.skills.length === 0) {
+    html += `<div class="card"><div class="sub">No skills installed. Create one to add specialized knowledge.</div></div>`;
+  } else {
+    for (const s of skillsData.skills) {
+      html += `<div class="list-item">
+        <div class="icon">${icon('sparkles', 18)}</div>
+        <div class="info">
+          <div class="name">${escapeHtml(s.name)} <span class="badge">${s.category}</span></div>
+          <div class="desc">${escapeHtml(s.description || '')} · Triggers: ${s.triggers.join(', ')}</div>
+        </div>
+        <button class="btn btn-sm btn-outline" onclick="editSkill('${escapeHtml(s.id)}')">${icon('edit', 14)}</button>
+        <button class="btn btn-sm btn-outline" style="color:var(--red);padding:2px 8px" onclick="deleteSkill('${escapeHtml(s.id)}')">${icon('trash-2', 14)}</button>
+      </div>`;
+    }
+  }
+
+  // Add Skill form (hidden)
+  html += `<div id="skill-add-form" style="display:none;margin-top:12px;padding:16px;background:var(--bg2);border:1px solid var(--glass-border);border-radius:var(--radius)">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+      <input id="skill-id" placeholder="Unique ID (e.g. video-creation)" class="input">
+      <input id="skill-name" placeholder="Display name" class="input">
+      <input id="skill-desc" placeholder="Short description" class="input">
+      <input id="skill-triggers" placeholder="Trigger keywords (comma-separated)" class="input">
+      <input id="skill-category" placeholder="Category (e.g. media, code, data)" class="input">
+      <select id="skill-priority" class="input"><option value="3">Priority: Normal (3)</option><option value="5">High (5)</option><option value="1">Low (1)</option></select>
+    </div>
+    <textarea id="skill-content" class="editor" style="min-height:200px" placeholder="Skill content (instructions, workflows, best practices)..."></textarea>
+    <div style="display:flex;gap:8px;margin-top:8px">
+      <button class="btn btn-sm" onclick="createSkill()">${icon('save', 14)} ${t('save')}</button>
+      <button class="btn btn-sm btn-outline" onclick="document.getElementById('skill-add-form').style.display='none'">${t('cancel')}</button>
+    </div>
+  </div>`;
+  html += '</div>';
+
+  document.getElementById('plugins-list').innerHTML = html;
+}
+
+// ── MCP Management Functions ────────────────────────────
+
+function showAddMCP() { document.getElementById('mcp-add-form').style.display = ''; }
+
+async function addMCP() {
+  const name = document.getElementById('mcp-name').value.trim();
+  const command = document.getElementById('mcp-command').value.trim();
+  const argsStr = document.getElementById('mcp-args').value.trim();
+  const url = document.getElementById('mcp-url').value.trim();
+  if (!name) { toast('Name required', 'error'); return; }
+  const args = argsStr ? argsStr.split(',').map(a => a.trim()) : [];
+  const res = await fetch(API + '/api/mcp/add', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name, command: command || undefined, args: args.length ? args : undefined, url: url || undefined }),
+  });
   const data = await res.json();
-  document.getElementById('plugins-list').innerHTML = data.plugins.length === 0
-    ? `<div class="card"><h3>${t('plugins.none')}</h3><div class="sub">${t('plugins.none.desc')}</div></div>`
-    : data.plugins.map(p => `<div class="list-item"><div class="icon">${icon('plug', 18)}</div><div class="info">
-        <div class="name">${p.name} <span class="badge">${p.version}</span></div>
-        <div class="desc">${p.description}${p.commands.length ? ' · '+p.commands.join(', ') : ''}</div>
-      </div></div>`).join('');
+  if (data.ok) { toast('MCP server added. Restart needed.'); document.getElementById('mcp-add-form').style.display = 'none'; loadPlugins(); }
+  else toast(data.error, 'error');
+}
+
+async function removeMCP(name) {
+  if (!confirm(`Remove MCP server "${name}"?`)) return;
+  await fetch(API + '/api/mcp/remove', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name }) });
+  toast('Removed'); loadPlugins();
+}
+
+async function discoverMCP() {
+  const el = document.getElementById('mcp-discover-results');
+  el.innerHTML = `<div class="sub" style="padding:8px">${icon('search', 14)} Scanning system for MCP servers...</div>`;
+  const res = await fetch(API + '/api/mcp/discover');
+  const data = await res.json();
+  if (!data.discovered?.length) { el.innerHTML = `<div class="sub" style="padding:8px">No MCP servers found on this system.</div>`; return; }
+  el.innerHTML = `<div style="padding:8px;font-size:0.85em"><strong>Found ${data.discovered.length} MCP server(s):</strong></div>` +
+    data.discovered.map(d => `<div class="list-item" style="padding:8px 12px">
+      <div class="info"><div class="name">${escapeHtml(d.name)} <span class="badge">${d.source}</span></div>
+      <div class="desc">${d.command} ${d.args.join(' ')}</div></div>
+      <button class="btn btn-sm" onclick="installDiscoveredMCP('${escapeHtml(d.name)}','${escapeHtml(d.command)}','${escapeHtml(d.args.join(','))}')">${icon('plus', 14)} Add</button>
+    </div>`).join('');
+}
+
+async function installDiscoveredMCP(name, command, argsStr) {
+  const args = argsStr.split(',').filter(Boolean);
+  const res = await fetch(API + '/api/mcp/add', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name, command, args }),
+  });
+  const data = await res.json();
+  if (data.ok) { toast(`${name} added!`); loadPlugins(); }
+  else toast(data.error, 'error');
+}
+
+// ── Skills Management Functions ─────────────────────────
+
+function showAddSkill() { document.getElementById('skill-add-form').style.display = ''; }
+
+async function createSkill() {
+  const skill = {
+    id: document.getElementById('skill-id').value.trim(),
+    name: document.getElementById('skill-name').value.trim(),
+    description: document.getElementById('skill-desc').value.trim(),
+    triggers: document.getElementById('skill-triggers').value.trim(),
+    category: document.getElementById('skill-category').value.trim(),
+    priority: parseInt(document.getElementById('skill-priority').value) || 3,
+    content: document.getElementById('skill-content').value,
+  };
+  if (!skill.id || !skill.name) { toast('ID and name required', 'error'); return; }
+  const res = await fetch(API + '/api/skills/create', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(skill),
+  });
+  const data = await res.json();
+  if (data.ok) { toast('Skill created!'); document.getElementById('skill-add-form').style.display = 'none'; loadPlugins(); }
+  else toast(data.error, 'error');
+}
+
+async function editSkill(id) {
+  const res = await fetch(API + `/api/skills/detail/${id}`);
+  const data = await res.json();
+  if (!data.ok) { toast('Skill not found', 'error'); return; }
+  const s = data.skill;
+  // Populate form
+  document.getElementById('skill-id').value = s.id;
+  document.getElementById('skill-name').value = s.name;
+  document.getElementById('skill-desc').value = s.description || '';
+  document.getElementById('skill-triggers').value = s.triggers.join(', ');
+  document.getElementById('skill-category').value = s.category || '';
+  document.getElementById('skill-priority').value = String(s.priority || 3);
+  document.getElementById('skill-content').value = s.content || '';
+  document.getElementById('skill-add-form').style.display = '';
+}
+
+async function deleteSkill(id) {
+  if (!confirm(`Delete skill "${id}"?`)) return;
+  const res = await fetch(API + '/api/skills/delete', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ id }),
+  });
+  const data = await res.json();
+  if (data.ok) { toast('Skill deleted'); loadPlugins(); }
+  else toast(data.error, 'error');
 }
 
 // ── Users ───────────────────────────────────────────────

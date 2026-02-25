@@ -118,14 +118,30 @@ async function handleAPI(req: http.IncomingMessage, res: http.ServerResponse, ur
     const users = listProfiles();
     const tools = listCustomTools();
 
+    // Aggregate token usage across all sessions
+    const { getAllSessions } = await import("../services/session.js");
+    const allSessions = getAllSessions();
+    let totalInputTokens = 0, totalOutputTokens = 0, totalCost = 0;
+    for (const { session: s } of allSessions) {
+      totalInputTokens += s.totalInputTokens || 0;
+      totalOutputTokens += s.totalOutputTokens || 0;
+      totalCost += s.totalCost || 0;
+    }
+
     res.end(JSON.stringify({
-      bot: { version: "2.3.0", uptime: process.uptime() },
+      bot: { version: "3.0.0", uptime: process.uptime() },
       model: { name: active.name, model: active.model, status: active.status },
       memory: { ...memory, vectors: index.entries, indexSize: index.sizeBytes },
       plugins: plugins.length,
       mcp: mcp.length,
       users: users.length,
       tools: tools.length,
+      tokens: {
+        totalInput: totalInputTokens,
+        totalOutput: totalOutputTokens,
+        total: totalInputTokens + totalOutputTokens,
+        totalCost,
+      },
     }));
     return;
   }
@@ -358,6 +374,211 @@ async function handleAPI(req: http.IncomingMessage, res: http.ServerResponse, ur
     return;
   }
 
+  // ── MCP Management ─────────────────────────────────────
+
+  // GET /api/mcp — list MCP servers + tools
+  if (urlPath === "/api/mcp") {
+    const { getMCPStatus, getMCPTools, hasMCPConfig } = await import("../services/mcp.js");
+    const servers = getMCPStatus();
+    const tools = getMCPTools();
+    // Read raw config for editing
+    const configPath = resolve(dirname(fileURLToPath(import.meta.url)), "../../docs/mcp.json");
+    let rawConfig: Record<string, unknown> = { servers: {} };
+    try { rawConfig = JSON.parse(fs.readFileSync(configPath, "utf-8")); } catch {}
+    res.end(JSON.stringify({ servers, tools, config: rawConfig, hasConfig: hasMCPConfig() }));
+    return;
+  }
+
+  // POST /api/mcp/add — add a new MCP server
+  if (urlPath === "/api/mcp/add" && req.method === "POST") {
+    try {
+      const { name, command, args, url: serverUrl, env, headers } = JSON.parse(body);
+      if (!name) { res.statusCode = 400; res.end(JSON.stringify({ error: "Name required" })); return; }
+      const configPath = resolve(dirname(fileURLToPath(import.meta.url)), "../../docs/mcp.json");
+      let config: { servers: Record<string, unknown> } = { servers: {} };
+      try { config = JSON.parse(fs.readFileSync(configPath, "utf-8")); } catch {}
+      const entry: Record<string, unknown> = {};
+      if (command) { entry.command = command; entry.args = args || []; if (env) entry.env = env; }
+      else if (serverUrl) { entry.url = serverUrl; if (headers) entry.headers = headers; }
+      else { res.statusCode = 400; res.end(JSON.stringify({ error: "command or url required" })); return; }
+      config.servers[name] = entry;
+      fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
+      res.end(JSON.stringify({ ok: true, note: "Restart needed to connect." }));
+    } catch (e: unknown) {
+      res.statusCode = 400;
+      res.end(JSON.stringify({ error: e instanceof Error ? e.message : String(e) }));
+    }
+    return;
+  }
+
+  // POST /api/mcp/remove — remove an MCP server
+  if (urlPath === "/api/mcp/remove" && req.method === "POST") {
+    try {
+      const { name } = JSON.parse(body);
+      const configPath = resolve(dirname(fileURLToPath(import.meta.url)), "../../docs/mcp.json");
+      let config: { servers: Record<string, unknown> } = { servers: {} };
+      try { config = JSON.parse(fs.readFileSync(configPath, "utf-8")); } catch {}
+      delete config.servers[name];
+      fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
+      res.end(JSON.stringify({ ok: true }));
+    } catch (e: unknown) {
+      res.statusCode = 400;
+      res.end(JSON.stringify({ error: e instanceof Error ? e.message : String(e) }));
+    }
+    return;
+  }
+
+  // GET /api/mcp/discover — auto-discover MCP servers on the system
+  if (urlPath === "/api/mcp/discover") {
+    const discovered: Array<{ name: string; command: string; args: string[]; source: string }> = [];
+    const { execSync } = await import("child_process");
+
+    // Check for common MCP server npm packages
+    const knownServers = [
+      { pkg: "@modelcontextprotocol/server-filesystem", name: "filesystem", args: ["/tmp"] },
+      { pkg: "@modelcontextprotocol/server-brave-search", name: "brave-search", args: [] },
+      { pkg: "@modelcontextprotocol/server-github", name: "github", args: [] },
+      { pkg: "@modelcontextprotocol/server-postgres", name: "postgres", args: [] },
+      { pkg: "@modelcontextprotocol/server-sqlite", name: "sqlite", args: [] },
+      { pkg: "@modelcontextprotocol/server-slack", name: "slack", args: [] },
+      { pkg: "@modelcontextprotocol/server-memory", name: "memory", args: [] },
+      { pkg: "@modelcontextprotocol/server-puppeteer", name: "puppeteer", args: [] },
+      { pkg: "@modelcontextprotocol/server-fetch", name: "web-fetch", args: [] },
+      { pkg: "@anthropic/mcp-server-sequential-thinking", name: "sequential-thinking", args: [] },
+    ];
+
+    for (const s of knownServers) {
+      try {
+        execSync(`npx --yes ${s.pkg} --help`, { timeout: 5000, stdio: "pipe", env: { ...process.env, PATH: process.env.PATH + ":/opt/homebrew/bin:/usr/local/bin" } });
+        discovered.push({ name: s.name, command: "npx", args: ["-y", s.pkg, ...s.args], source: "npm" });
+      } catch {
+        // Not installed — try checking if globally available
+        try {
+          execSync(`npm list -g ${s.pkg} --depth=0`, { timeout: 5000, stdio: "pipe" });
+          discovered.push({ name: s.name, command: "npx", args: ["-y", s.pkg, ...s.args], source: "npm-global" });
+        } catch { /* not installed */ }
+      }
+    }
+
+    // Check for Claude Desktop MCP config
+    const homeDir = process.env.HOME || process.env.USERPROFILE || "";
+    const claudeConfigPaths = [
+      resolve(homeDir, ".config/claude/claude_desktop_config.json"),
+      resolve(homeDir, "Library/Application Support/Claude/claude_desktop_config.json"),
+      resolve(homeDir, "AppData/Roaming/Claude/claude_desktop_config.json"),
+    ];
+    for (const cfgPath of claudeConfigPaths) {
+      try {
+        const cfg = JSON.parse(fs.readFileSync(cfgPath, "utf-8"));
+        if (cfg.mcpServers) {
+          for (const [name, srv] of Object.entries(cfg.mcpServers) as Array<[string, any]>) {
+            if (srv.command) {
+              discovered.push({ name: `claude-${name}`, command: srv.command, args: srv.args || [], source: "claude-desktop" });
+            }
+          }
+        }
+      } catch { /* not found */ }
+    }
+
+    res.end(JSON.stringify({ discovered }));
+    return;
+  }
+
+  // ── Skills Management ─────────────────────────────────
+
+  // GET /api/skills — already in setup-api.ts, but add full CRUD here
+  // GET /api/skills/detail/:id — get full skill content
+  if (urlPath?.match(/^\/api\/skills\/detail\//) && req.method === "GET") {
+    const skillId = urlPath.split("/").pop();
+    const { getSkills } = await import("../services/skills.js");
+    const skill = getSkills().find(s => s.id === skillId);
+    if (skill) {
+      res.end(JSON.stringify({ ok: true, skill }));
+    } else {
+      res.statusCode = 404;
+      res.end(JSON.stringify({ error: "Skill not found" }));
+    }
+    return;
+  }
+
+  // POST /api/skills/create — create a new skill
+  if (urlPath === "/api/skills/create" && req.method === "POST") {
+    try {
+      const { id, name, description, triggers, category, content, priority } = JSON.parse(body);
+      if (!id || !name) { res.statusCode = 400; res.end(JSON.stringify({ error: "id and name required" })); return; }
+      const skillsDir = resolve(dirname(fileURLToPath(import.meta.url)), "../../skills");
+      const skillDir = resolve(skillsDir, id);
+      if (!fs.existsSync(skillDir)) fs.mkdirSync(skillDir, { recursive: true });
+      const frontmatter = [
+        "---",
+        `name: ${name}`,
+        description ? `description: ${description}` : "",
+        triggers ? `triggers: ${Array.isArray(triggers) ? triggers.join(", ") : triggers}` : "",
+        `priority: ${priority || 3}`,
+        `category: ${category || "custom"}`,
+        "---",
+      ].filter(Boolean).join("\n");
+      fs.writeFileSync(resolve(skillDir, "SKILL.md"), `${frontmatter}\n\n${content || ""}`);
+      // Force reload
+      const { loadSkills } = await import("../services/skills.js");
+      loadSkills();
+      res.end(JSON.stringify({ ok: true }));
+    } catch (e: unknown) {
+      res.statusCode = 400;
+      res.end(JSON.stringify({ error: e instanceof Error ? e.message : String(e) }));
+    }
+    return;
+  }
+
+  // POST /api/skills/update — update an existing skill
+  if (urlPath === "/api/skills/update" && req.method === "POST") {
+    try {
+      const { id, content } = JSON.parse(body);
+      const skillPath = resolve(dirname(fileURLToPath(import.meta.url)), "../../skills", id, "SKILL.md");
+      if (!fs.existsSync(skillPath)) {
+        // Try flat file
+        const flatPath = resolve(dirname(fileURLToPath(import.meta.url)), "../../skills", id + ".md");
+        if (fs.existsSync(flatPath)) {
+          fs.writeFileSync(flatPath, content);
+        } else {
+          res.statusCode = 404; res.end(JSON.stringify({ error: "Skill not found" })); return;
+        }
+      } else {
+        fs.writeFileSync(skillPath, content);
+      }
+      const { loadSkills } = await import("../services/skills.js");
+      loadSkills();
+      res.end(JSON.stringify({ ok: true }));
+    } catch (e: unknown) {
+      res.statusCode = 400;
+      res.end(JSON.stringify({ error: e instanceof Error ? e.message : String(e) }));
+    }
+    return;
+  }
+
+  // POST /api/skills/delete — delete a skill
+  if (urlPath === "/api/skills/delete" && req.method === "POST") {
+    try {
+      const { id } = JSON.parse(body);
+      const skillDir = resolve(dirname(fileURLToPath(import.meta.url)), "../../skills", id);
+      const flatFile = resolve(dirname(fileURLToPath(import.meta.url)), "../../skills", id + ".md");
+      if (fs.existsSync(skillDir)) {
+        fs.rmSync(skillDir, { recursive: true });
+      } else if (fs.existsSync(flatFile)) {
+        fs.unlinkSync(flatFile);
+      } else {
+        res.statusCode = 404; res.end(JSON.stringify({ error: "Skill not found" })); return;
+      }
+      const { loadSkills } = await import("../services/skills.js");
+      loadSkills();
+      res.end(JSON.stringify({ ok: true }));
+    } catch (e: unknown) {
+      res.statusCode = 400;
+      res.end(JSON.stringify({ error: e instanceof Error ? e.message : String(e) }));
+    }
+    return;
+  }
+
   // GET /api/config
   if (urlPath === "/api/config") {
     res.end(JSON.stringify({
@@ -388,6 +609,8 @@ async function handleAPI(req: http.IncomingMessage, res: http.ServerResponse, ur
         messageCount: s.session.messageCount,
         toolUseCount: s.session.toolUseCount,
         totalCost: s.session.totalCost,
+        totalInputTokens: s.session.totalInputTokens || 0,
+        totalOutputTokens: s.session.totalOutputTokens || 0,
         effort: s.session.effort,
         startedAt: s.session.startedAt,
         lastActivity: s.session.lastActivity,
@@ -834,7 +1057,13 @@ function handleWebSocket(wss: WebSocketServer): void {
                   gotDone = true;
                   if (chunk.sessionId) session.sessionId = chunk.sessionId;
                   if (chunk.costUsd) session.totalCost += chunk.costUsd;
-                  ws.send(JSON.stringify({ type: "done", cost: chunk.costUsd, sessionId: chunk.sessionId }));
+                  if (chunk.inputTokens) session.totalInputTokens = (session.totalInputTokens || 0) + chunk.inputTokens;
+                  if (chunk.outputTokens) session.totalOutputTokens = (session.totalOutputTokens || 0) + chunk.outputTokens;
+                  ws.send(JSON.stringify({
+                    type: "done", cost: chunk.costUsd, sessionId: chunk.sessionId,
+                    inputTokens: chunk.inputTokens, outputTokens: chunk.outputTokens,
+                    sessionTokens: { input: session.totalInputTokens || 0, output: session.totalOutputTokens || 0 },
+                  }));
                   break;
                 case "error":
                   ws.send(JSON.stringify({ type: "error", error: chunk.error }));

@@ -65,6 +65,8 @@ export class OpenAICompatibleProvider implements Provider {
     const messages = this.buildMessages(options);
     let accumulatedText = "";
     let totalCost = 0;
+    let totalInputTokens = 0;
+    let totalOutputTokens = 0;
 
     for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
       // Non-streaming request for tool use (streaming + tools is complex)
@@ -118,6 +120,10 @@ export class OpenAICompatibleProvider implements Provider {
 
       const msg = choice.message;
       totalCost += this.estimateCostFromUsage(data.usage);
+      if (data.usage) {
+        totalInputTokens += data.usage.prompt_tokens || 0;
+        totalOutputTokens += data.usage.completion_tokens || 0;
+      }
 
       // Check for tool calls
       if (msg.tool_calls && msg.tool_calls.length > 0) {
@@ -169,13 +175,13 @@ export class OpenAICompatibleProvider implements Provider {
         yield { type: "text", text: accumulatedText };
       }
 
-      yield { type: "done", text: accumulatedText, costUsd: totalCost };
+      yield { type: "done", text: accumulatedText, costUsd: totalCost, inputTokens: totalInputTokens, outputTokens: totalOutputTokens };
       return;
     }
 
     // Max rounds reached
     if (accumulatedText) {
-      yield { type: "done", text: accumulatedText, costUsd: totalCost };
+      yield { type: "done", text: accumulatedText, costUsd: totalCost, inputTokens: totalInputTokens, outputTokens: totalOutputTokens };
     } else {
       yield { type: "error", error: "Max tool call rounds reached" };
     }
@@ -220,6 +226,8 @@ export class OpenAICompatibleProvider implements Provider {
       }
 
       let accumulatedText = "";
+      let streamInputTokens = 0;
+      let streamOutputTokens = 0;
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let buffer = "";
@@ -251,11 +259,21 @@ export class OpenAICompatibleProvider implements Provider {
               yield { type: "text", text: accumulatedText, delta: delta.content };
             }
 
+            // Some providers include usage in the final streaming chunk
+            if (json.usage) {
+              streamInputTokens = json.usage.prompt_tokens || 0;
+              streamOutputTokens = json.usage.completion_tokens || 0;
+            }
+
             if (json.choices?.[0]?.finish_reason) {
+              const estOut = streamOutputTokens || Math.ceil(accumulatedText.length / 4);
+              const estIn = streamInputTokens || Math.ceil((options.prompt?.length || 0) / 4);
               yield {
                 type: "done",
                 text: accumulatedText,
                 costUsd: this.estimateCost(accumulatedText),
+                inputTokens: estIn,
+                outputTokens: estOut,
               };
               return;
             }
@@ -266,7 +284,9 @@ export class OpenAICompatibleProvider implements Provider {
       }
 
       if (accumulatedText) {
-        yield { type: "done", text: accumulatedText, costUsd: this.estimateCost(accumulatedText) };
+        const estOut = streamOutputTokens || Math.ceil(accumulatedText.length / 4);
+        const estIn = streamInputTokens || Math.ceil((options.prompt?.length || 0) / 4);
+        yield { type: "done", text: accumulatedText, costUsd: this.estimateCost(accumulatedText), inputTokens: estIn, outputTokens: estOut };
       }
     } catch (err) {
       if (err instanceof Error && err.name === "AbortError") {

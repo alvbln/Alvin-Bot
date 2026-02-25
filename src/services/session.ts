@@ -31,6 +31,10 @@ export interface UserSession {
   messageCount: number;
   /** Tool use count in current session (for checkpoint reminders) */
   toolUseCount: number;
+  /** Total input tokens in current session */
+  totalInputTokens: number;
+  /** Total output tokens in current session */
+  totalOutputTokens: number;
   /** Conversation history for non-SDK providers */
   history: ChatMessage[];
   /** Preferred language */
@@ -61,6 +65,8 @@ export function getSession(userId: number): UserSession {
       voiceReply: false,
       messageCount: 0,
       toolUseCount: 0,
+      totalInputTokens: 0,
+      totalOutputTokens: 0,
       history: [],
       language: "en",
       messageQueue: [],
@@ -78,15 +84,19 @@ export function resetSession(userId: number): void {
   session.queriesByProvider = {};
   session.messageCount = 0;
   session.toolUseCount = 0;
+  session.totalInputTokens = 0;
+  session.totalOutputTokens = 0;
   session.history = [];
   session.startedAt = Date.now();
 }
 
-/** Track cost and query count for a provider. */
-export function trackProviderUsage(userId: number, providerKey: string, cost: number): void {
+/** Track cost, query count, and tokens for a provider. */
+export function trackProviderUsage(userId: number, providerKey: string, cost: number, inputTokens?: number, outputTokens?: number): void {
   const session = getSession(userId);
   session.costByProvider[providerKey] = (session.costByProvider[providerKey] || 0) + cost;
   session.queriesByProvider[providerKey] = (session.queriesByProvider[providerKey] || 0) + 1;
+  if (inputTokens) session.totalInputTokens += inputTokens;
+  if (outputTokens) session.totalOutputTokens += outputTokens;
 }
 
 /** Add a message to conversation history (for non-SDK providers). */

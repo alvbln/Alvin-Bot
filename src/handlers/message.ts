@@ -153,7 +153,7 @@ export async function handleMessage(ctx: Context): Promise<void> {
         case "done":
           if (chunk.sessionId) session.sessionId = chunk.sessionId;
           if (chunk.costUsd) session.totalCost += chunk.costUsd;
-          trackProviderUsage(userId, registry.getActiveKey(), chunk.costUsd || 0);
+          trackProviderUsage(userId, registry.getActiveKey(), chunk.costUsd || 0, chunk.inputTokens, chunk.outputTokens);
           session.lastActivity = Date.now();
           break;
 

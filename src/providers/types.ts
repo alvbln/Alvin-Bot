@@ -34,6 +34,9 @@ export interface StreamChunk {
   sessionId?: string;
   /** Cost of this turn in USD */
   costUsd?: number;
+  /** Token usage for this turn */
+  inputTokens?: number;
+  outputTokens?: number;
   /** Provider name (for fallback notifications) */
   providerName?: string;
   /** Failed provider name (for fallback notifications) */
