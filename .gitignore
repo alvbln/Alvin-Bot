@@ -29,3 +29,6 @@ data/whatsapp-auth/
 .wwebjs_cache/
 docs/whatsapp-groups.json
 data/wa-media/
+release/
+.prod-node-modules/
+.electron-prod/

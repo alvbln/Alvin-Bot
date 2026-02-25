@@ -15,7 +15,8 @@
     "electron:compile": "tsc -p electron/tsconfig.json",
     "electron:dev": "npm run electron:compile && electron .",
     "electron:build": "npm run build && npm run electron:compile && electron-builder --publish never",
-    "electron:pack": "npm run build && npm run electron:compile && electron-builder --dir --publish never"
+    "electron:pack": "npm run build && npm run electron:compile && electron-builder --dir --publish never",
+    "electron:build:full": "bash scripts/electron-build.sh"
   },
   "build": {
     "appId": "com.alvinbot.app",
@@ -23,12 +24,6 @@
     "directories": {
       "output": "release"
     },
-    "files": [
-      "electron/dist/**/*",
-      "!node_modules",
-      "!src",
-      "!electron/*.cts"
-    ],
     "extraResources": [
       {
         "from": "dist",
@@ -51,7 +46,7 @@
         "to": "app/skills"
       },
       {
-        "from": "node_modules",
+        "from": ".prod-node-modules",
         "to": "app/node_modules"
       },
       {
@@ -68,7 +63,7 @@
         {
           "target": "dmg",
           "arch": [
-            "universal"
+            "arm64"
           ]
         }
       ],
@@ -90,7 +85,24 @@
       ],
       "icon": "build/icon.png",
       "category": "Utility"
-    }
+    },
+    "asar": false,
+    "files": [
+      "electron/dist/**/*",
+      "package.json",
+      "!node_modules",
+      "!src",
+      "!data",
+      "!backups",
+      "!.wwebjs_cache",
+      "!.git",
+      "!.env",
+      "!.env.*",
+      "!.prod-node-modules",
+      "!.electron-prod",
+      "!release",
+      "!scripts"
+    ]
   },
   "keywords": [
     "telegram",
