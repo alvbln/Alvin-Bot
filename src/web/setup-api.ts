@@ -310,10 +310,16 @@ export async function handleSetupAPI(
     const env = readEnv();
     const platforms = PLATFORMS.map(p => ({
       ...p,
-      configured: p.envVars.every(v => {
-        if (v.type === "toggle") return env[v.key] === "true";
-        return !!env[v.key];
-      }),
+      configured: (() => {
+        // A platform is "configured" if its primary env var(s) are set
+        // Toggles: the first toggle being true is enough (e.g., WHATSAPP_ENABLED)
+        // Text fields: all non-toggle fields must have a value
+        const required = p.envVars.filter(v => v.type !== "toggle");
+        const toggles = p.envVars.filter(v => v.type === "toggle");
+        if (required.length > 0) return required.every(v => !!env[v.key]);
+        if (toggles.length > 0) return toggles[0] && env[toggles[0].key] === "true";
+        return false;
+      })(),
       values: Object.fromEntries(
         p.envVars.map(v => [v.key, v.secret && env[v.key] ? maskSecret(env[v.key]) : (env[v.key] || "")])
       ),

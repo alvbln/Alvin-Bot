@@ -741,8 +741,8 @@ async function loadPlatforms() {
       </div>`;
     }
 
-    // WhatsApp: Group Management section (embedded)
-    if (p.id === 'whatsapp' && p.configured) {
+    // WhatsApp: Group Management section (embedded — show when configured or deps installed)
+    if (p.id === 'whatsapp' && (p.configured || p.depsInstalled)) {
       html += `<div style="margin-top:16px;border-top:1px solid var(--bg3);padding-top:12px">
         <details id="wa-groups-details">
           <summary style="cursor:pointer;font-weight:600;font-size:0.9em;display:flex;align-items:center;gap:8px">
