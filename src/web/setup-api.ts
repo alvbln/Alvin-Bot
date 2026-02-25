@@ -346,7 +346,11 @@ export async function handleSetupAPI(
           removeEnvVar(v.key);
         }
       }
-      res.end(JSON.stringify({ ok: true, note: "Neustart nötig um Änderungen zu aktivieren." }));
+      // WhatsApp toggle-only changes (self-chat, groups, DMs) don't need restart
+      const onlyToggles = platform.envVars.every(v => v.type === "toggle") ||
+        (platformId === "whatsapp" && platform.envVars.filter(v => v.type !== "toggle").every(v => !values[v.key]));
+      const restartNeeded = !onlyToggles;
+      res.end(JSON.stringify({ ok: true, restartNeeded, note: restartNeeded ? "Neustart nötig um Änderungen zu aktivieren." : "Gespeichert." }));
     } catch {
       res.statusCode = 400;
       res.end(JSON.stringify({ error: "Invalid request" }));

@@ -780,8 +780,13 @@ async function savePlatform(platformId) {
   const data = await res.json();
   const resultDiv = document.getElementById('platform-result-' + platformId);
   if (data.ok) {
-    toast('✅ Gespeichert! Neustart nötig.');
-    resultDiv.innerHTML = '<span style="color:var(--green)">✅ Gespeichert. Bitte Bot neustarten.</span>';
+    if (data.restartNeeded === false) {
+      toast('✅ Gespeichert!');
+      resultDiv.innerHTML = '<span style="color:var(--green)">✅ Gespeichert.</span>';
+    } else {
+      toast('✅ Gespeichert! Neustart nötig für Änderungen.');
+      resultDiv.innerHTML = '<span style="color:var(--green)">✅ Gespeichert. Bitte Bot neustarten.</span>';
+    }
   } else {
     toast(data.error, 'error');
     resultDiv.innerHTML = `<span style="color:var(--red)">❌ ${data.error}</span>`;
