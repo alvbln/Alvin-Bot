@@ -19,6 +19,15 @@ import { config } from "../config.js";
 import type { QueryOptions } from "../providers/types.js";
 import type { IncomingMessage, PlatformAdapter } from "../platforms/types.js";
 
+/** Platform-specific message length limits */
+const PLATFORM_LIMITS: Record<string, number> = {
+  discord: 2000,
+  telegram: 4096,
+  whatsapp: 4096,
+  signal: 6000,
+  web: 100_000,
+};
+
 /**
  * Handle an incoming message from any platform adapter.
  * Runs the AI query and sends the response back via the adapter's sendText.
@@ -37,7 +46,6 @@ export async function handlePlatformMessage(
     }
     try {
       const transcript = await transcribeAudio(msg.media.path);
-      // Clean up temp file
       fs.unlink(msg.media.path, () => {});
 
       if (!transcript.trim()) {
@@ -45,31 +53,35 @@ export async function handlePlatformMessage(
         return;
       }
 
-      // Show what was understood
       await adapter.sendText(msg.chatId, `🎙️ _"${transcript}"_`);
-
-      // Use transcript as the message text
       text = transcript;
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : String(err);
       console.error("Voice transcription error:", errMsg);
       await adapter.sendText(msg.chatId, `⚠️ Sprachnachricht-Fehler: ${errMsg}`);
-      // Clean up temp file on error too
       if (msg.media.path) fs.unlink(msg.media.path, () => {});
       return;
     }
   }
 
+  // ── Photo with caption: describe as context ──────────────────────────
+  if (msg.media?.type === "photo" && msg.media.path) {
+    const caption = text || "Beschreibe dieses Bild.";
+    text = `[Bild angehängt: ${msg.media.path}]\n\n${caption}`;
+  }
+
   if (!text) return;
 
-  // Use a numeric hash of the userId for session compatibility
+  // ── Basic command handling for non-Telegram platforms ──────────────
+  const cmdHandled = await handlePlatformCommand(text, msg, adapter);
+  if (cmdHandled) return;
+
   const userId = hashUserId(msg.userId);
   const session = getSession(userId);
 
-  // Track user profile
   touchProfile(userId, msg.userName, msg.userHandle, msg.platform as any, text);
 
-  // Skip if already processing
+  // Skip if already processing (queue up to 3)
   if (session.isProcessing) {
     if (session.messageQueue.length < 3) {
       session.messageQueue.push(text);
@@ -95,10 +107,19 @@ export async function handlePlatformMessage(
   session.isProcessing = true;
   let finalText = "";
 
+  // Show typing indicator
+  if (adapter.setTyping) {
+    adapter.setTyping(msg.chatId).catch(() => {});
+  }
+
+  // Keep typing indicator alive during long requests (refresh every 4s)
+  const typingInterval = adapter.setTyping
+    ? setInterval(() => adapter.setTyping!(msg.chatId).catch(() => {}), 4000)
+    : null;
+
   try {
     session.messageCount++;
 
-    // Auto-detect and adapt language
     const adaptedLang = trackAndAdapt(Number(msg.userId) || 0, fullText, session.language);
     if (adaptedLang !== session.language) session.language = adaptedLang;
 
@@ -121,12 +142,10 @@ export async function handlePlatformMessage(
       history: !isSDK ? session.history : undefined,
     };
 
-    // Add user message to history (for non-SDK providers)
     if (!isSDK) {
       addToHistory(userId, { role: "user", content: fullText });
     }
 
-    // Run query (collect full response, no streaming for non-Telegram)
     for await (const chunk of registry.queryWithFallback(queryOpts)) {
       switch (chunk.type) {
         case "text":
@@ -146,8 +165,7 @@ export async function handlePlatformMessage(
 
     // Send response
     if (finalText.trim()) {
-      // Split long messages (WhatsApp/Discord have limits)
-      const maxLen = msg.platform === "discord" ? 2000 : 4096;
+      const maxLen = PLATFORM_LIMITS[msg.platform] || 4096;
       if (finalText.length > maxLen) {
         const chunks = splitMessage(finalText, maxLen);
         for (const chunk of chunks) {
@@ -157,17 +175,83 @@ export async function handlePlatformMessage(
         await adapter.sendText(msg.chatId, finalText);
       }
 
-      // Add to history
       if (!isSDK && finalText) {
         addToHistory(userId, { role: "assistant", content: finalText });
       }
     }
   } catch (err) {
     const errorMsg = err instanceof Error ? err.message : String(err);
-    console.error(`Platform message error:`, errorMsg);
+    console.error(`Platform message error (${msg.platform}):`, errorMsg);
     await adapter.sendText(msg.chatId, `⚠️ Fehler: ${errorMsg}`);
   } finally {
+    if (typingInterval) clearInterval(typingInterval);
     session.isProcessing = false;
+  }
+}
+
+/**
+ * Handle basic slash commands on non-Telegram platforms.
+ * Returns true if the message was a command and was handled.
+ */
+async function handlePlatformCommand(
+  text: string,
+  msg: IncomingMessage,
+  adapter: PlatformAdapter
+): Promise<boolean> {
+  if (!text.startsWith("/")) return false;
+
+  const parts = text.split(/\s+/);
+  const cmd = parts[0].toLowerCase();
+  const userId = hashUserId(msg.userId);
+  const session = getSession(userId);
+
+  switch (cmd) {
+    case "/new": {
+      const { resetSession } = await import("../services/session.js");
+      resetSession(userId);
+      await adapter.sendText(msg.chatId, "🔄 Neuer Chat gestartet.");
+      return true;
+    }
+    case "/status": {
+      const { getRegistry } = await import("../engine.js");
+      const registry = getRegistry();
+      const provider = registry.getActiveKey();
+      const msgs = session.messageCount;
+      const cost = session.totalCost.toFixed(4);
+      await adapter.sendText(msg.chatId,
+        `📊 Status\n` +
+        `Provider: ${provider}\n` +
+        `Messages: ${msgs}\n` +
+        `Cost: $${cost}\n` +
+        `Effort: ${session.effort}\n` +
+        `Platform: ${msg.platform}`
+      );
+      return true;
+    }
+    case "/effort": {
+      const level = parts[1]?.toLowerCase();
+      if (["low", "medium", "high", "max"].includes(level)) {
+        session.effort = level as any;
+        await adapter.sendText(msg.chatId, `🧠 Effort: ${level}`);
+      } else {
+        await adapter.sendText(msg.chatId, `🧠 Aktuell: ${session.effort}\nOptionen: /effort low|medium|high|max`);
+      }
+      return true;
+    }
+    case "/help": {
+      await adapter.sendText(msg.chatId,
+        "🤖 Mr. Levin — Befehle\n\n" +
+        "/new — Neuer Chat\n" +
+        "/status — Session-Info\n" +
+        "/effort <low|medium|high|max> — Denktiefe\n" +
+        "/help — Diese Hilfe\n\n" +
+        "Für alle Features nutze das Web Dashboard oder Telegram."
+      );
+      return true;
+    }
+    default:
+      // Unknown command → treat as normal message
+      return false;
   }
 }
 

@@ -124,6 +124,7 @@
   <div class="page content" id="page-files">
     <div class="editor-toolbar">
       <span id="file-breadcrumb" style="flex:1;color:var(--fg2);font-size:0.85em">📁 /</span>
+      <button class="btn btn-sm btn-outline" onclick="createNewFile()">📝 Neue Datei</button>
       <button class="btn btn-sm btn-outline" onclick="navigateFiles('..')">⬆️ Hoch</button>
     </div>
     <div id="file-list"></div>
@@ -131,6 +132,7 @@
       <div class="editor-toolbar">
         <span id="file-edit-name" style="flex:1;color:var(--accent2);font-family:monospace;font-size:0.85em"></span>
         <button class="btn btn-sm" onclick="saveFile()">💾 Speichern</button>
+        <button class="btn btn-sm btn-outline" style="color:var(--red)" onclick="deleteFile(document.getElementById('file-edit-name').textContent)">🗑️</button>
         <button class="btn btn-sm btn-outline" onclick="document.getElementById('file-editor-area').style.display='none'">✕</button>
       </div>
       <textarea class="editor" id="file-editor"></textarea>

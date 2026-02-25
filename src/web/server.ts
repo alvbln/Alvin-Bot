@@ -452,7 +452,15 @@ async function handleAPI(req: http.IncomingMessage, res: http.ServerResponse, ur
           ".eslintrc", ".babelrc", ".npmrc", ".nvmrc", ".lock", ".log", ".csv", ".tsv",
           ".mjs", ".cjs", ".mts", ".cts", ".vue", ".svelte", ".astro",
         ]);
-        const isText = textExts.has(ext) || !ext || stat.size < 500_000;
+        // Files without extension that match known names are always text
+        const textNames = new Set([
+          "dockerfile", "makefile", "procfile", "gemfile", "rakefile",
+          "vagrantfile", "brewfile", "justfile", "taskfile", "cakefile",
+          "license", "licence", "readme", "changelog", "authors", "contributors",
+        ]);
+        const baseName = path.basename(basePath).toLowerCase();
+        const isKnownTextName = textNames.has(baseName);
+        const isText = textExts.has(ext) || isKnownTextName || (!ext && stat.size < 100_000);
 
         if (stat.size > 500_000) {
           res.end(JSON.stringify({ path: reqPath, content: `[File too large: ${(stat.size / 1024).toFixed(1)} KB — max 500 KB]`, size: stat.size }));
@@ -491,6 +499,45 @@ async function handleAPI(req: http.IncomingMessage, res: http.ServerResponse, ur
         return;
       }
       fs.writeFileSync(absPath, content);
+      res.end(JSON.stringify({ ok: true }));
+    } catch (err: unknown) {
+      res.statusCode = 400;
+      const error = err instanceof Error ? err.message : "Invalid request";
+      res.end(JSON.stringify({ error }));
+    }
+    return;
+  }
+
+  // POST /api/files/delete
+  if (urlPath === "/api/files/delete" && req.method === "POST") {
+    try {
+      const { path: filePath } = JSON.parse(body);
+      const absPath = resolve(BOT_ROOT, filePath);
+      if (!absPath.startsWith(BOT_ROOT)) {
+        res.statusCode = 403;
+        res.end(JSON.stringify({ error: "Access denied" }));
+        return;
+      }
+      // Safety: don't allow deleting critical files
+      const critical = [".env", "package.json", "tsconfig.json", "ecosystem.config.cjs"];
+      const baseName = path.basename(absPath);
+      if (critical.includes(baseName)) {
+        res.statusCode = 403;
+        res.end(JSON.stringify({ error: `${baseName} kann nicht gelöscht werden (geschützt)` }));
+        return;
+      }
+      if (!fs.existsSync(absPath)) {
+        res.statusCode = 404;
+        res.end(JSON.stringify({ error: "Datei nicht gefunden" }));
+        return;
+      }
+      const stat = fs.statSync(absPath);
+      if (stat.isDirectory()) {
+        res.statusCode = 400;
+        res.end(JSON.stringify({ error: "Verzeichnisse können nicht gelöscht werden" }));
+        return;
+      }
+      fs.unlinkSync(absPath);
       res.end(JSON.stringify({ ok: true }));
     } catch (err: unknown) {
       res.statusCode = 400;

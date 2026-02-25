@@ -11,6 +11,9 @@
  * 3. Set SIGNAL_API_URL=http://localhost:8080 and SIGNAL_NUMBER=+49... in .env
  */
 
+import fs from "fs";
+import { tmpdir } from "os";
+import { join } from "path";
 import type { PlatformAdapter, IncomingMessage, MessageHandler, SendOptions } from "./types.js";
 
 // ── Global Signal State ─────────────────────────────────
@@ -74,11 +77,45 @@ export class SignalAdapter implements PlatformAdapter {
 
         const messages = await res.json() as any[];
         for (const msg of messages) {
-          if (!msg.envelope?.dataMessage?.message) continue;
+          const data = msg.envelope?.dataMessage;
+          if (!data) continue;
           if (!this.handler) continue;
 
-          const data = msg.envelope.dataMessage;
+          const hasText = !!data.message;
+          const hasVoice = data.attachments?.some((a: any) =>
+            a.contentType?.startsWith("audio/") || a.voiceNote
+          );
+
+          // Must have text or a voice attachment
+          if (!hasText && !hasVoice) continue;
+
           const isGroup = !!data.groupInfo;
+
+          // Download voice attachment if present
+          let mediaInfo: IncomingMessage["media"] = undefined;
+          if (hasVoice) {
+            try {
+              const voiceAtt = data.attachments.find((a: any) =>
+                a.contentType?.startsWith("audio/") || a.voiceNote
+              );
+              if (voiceAtt?.id) {
+                const attRes = await fetch(
+                  `${this.apiUrl}/v1/attachments/${voiceAtt.id}`,
+                  { headers: { "Content-Type": "application/json" } }
+                );
+                if (attRes.ok) {
+                  const tmpDir = join(tmpdir(), "alvin-bot");
+                  if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true });
+                  const ext = voiceAtt.contentType?.includes("ogg") ? "ogg" : "mp3";
+                  const audioPath = join(tmpDir, `signal_voice_${Date.now()}.${ext}`);
+                  fs.writeFileSync(audioPath, Buffer.from(await attRes.arrayBuffer()));
+                  mediaInfo = { type: "voice", path: audioPath, mimeType: voiceAtt.contentType || "audio/ogg" };
+                }
+              }
+            } catch (err) {
+              console.error("Signal: Failed to download voice:", err);
+            }
+          }
 
           const incoming: IncomingMessage = {
             platform: "signal",
@@ -86,15 +123,16 @@ export class SignalAdapter implements PlatformAdapter {
             chatId: isGroup ? data.groupInfo.groupId : msg.envelope.sourceNumber,
             userId: msg.envelope.sourceNumber || "",
             userName: msg.envelope.sourceName || msg.envelope.sourceNumber || "Unknown",
-            text: data.message,
+            text: data.message || "",
             isGroup,
-            isMention: data.message.includes("@bot") || data.message.includes("Mr. Levin"),
+            isMention: !!(data.message && (data.message.includes("@bot") || data.message.includes("Mr. Levin"))),
             isReplyToBot: false,
             replyToText: data.quote?.text,
+            media: mediaInfo,
           };
 
-          // In groups: only respond to mentions
-          if (isGroup && !incoming.isMention) continue;
+          // In groups: only respond to mentions (voice in groups always allowed)
+          if (isGroup && !incoming.isMention && !hasVoice) continue;
 
           await this.handler(incoming);
         }
@@ -138,6 +176,41 @@ export class SignalAdapter implements PlatformAdapter {
     }
   }
 
+  async sendPhoto(chatId: string, photo: Buffer | string, caption?: string): Promise<void> {
+    // Signal sends attachments as base64 in the message body
+    const base64 = typeof photo === "string"
+      ? fs.readFileSync(photo).toString("base64")
+      : photo.toString("base64");
+
+    await fetch(`${this.apiUrl}/v2/send`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        message: caption || "",
+        number: this.number,
+        recipients: [chatId],
+        base64_attachments: [`data:image/png;base64,${base64}`],
+      }),
+    });
+  }
+
+  async sendDocument(chatId: string, doc: Buffer | string, fileName: string, caption?: string): Promise<void> {
+    const base64 = typeof doc === "string"
+      ? fs.readFileSync(doc).toString("base64")
+      : doc.toString("base64");
+
+    await fetch(`${this.apiUrl}/v2/send`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        message: caption || fileName,
+        number: this.number,
+        recipients: [chatId],
+        base64_attachments: [`data:application/octet-stream;filename=${fileName};base64,${base64}`],
+      }),
+    });
+  }
+
   async react(chatId: string, messageId: string, emoji: string): Promise<void> {
     try {
       await fetch(`${this.apiUrl}/v1/reactions/${encodeURIComponent(this.number)}`, {
@@ -151,6 +224,11 @@ export class SignalAdapter implements PlatformAdapter {
         }),
       });
     } catch { /* ignore */ }
+  }
+
+  async setTyping(chatId: string): Promise<void> {
+    // Signal doesn't have a native typing indicator via REST API
+    // No-op to satisfy the interface
   }
 
   onMessage(handler: MessageHandler): void {

@@ -1447,8 +1447,19 @@ async function openFile(filePath) {
     document.getElementById('file-editor-area').style.display = '';
     document.getElementById('file-edit-name').textContent = filePath;
     document.getElementById('file-editor').value = data.content;
+    // Show line count
+    const lines = data.content.split('\n').length;
+    const sizeStr = data.size ? formatSize(data.size) : '';
+    document.getElementById('file-edit-meta')?.remove();
+    const meta = document.createElement('div');
+    meta.id = 'file-edit-meta';
+    meta.style.cssText = 'font-size:0.75em;color:var(--fg2);margin-top:4px';
+    meta.textContent = `${lines} Zeilen · ${sizeStr}`;
+    document.getElementById('file-editor').parentNode.insertBefore(meta, document.getElementById('file-editor'));
+  } else if (data.binary) {
+    toast(`Binärdatei (${formatSize(data.size)}) — kann nicht im Editor geöffnet werden.`, 'error');
   } else {
-    toast('Datei kann nicht geöffnet werden (binär oder zu groß)', 'error');
+    toast('Datei kann nicht geöffnet werden', 'error');
   }
 }
 
@@ -1461,6 +1472,40 @@ async function saveFile() {
   });
   const data = await res.json();
   toast(data.ok ? 'Gespeichert!' : data.error, data.ok ? 'success' : 'error');
+}
+
+async function createNewFile() {
+  const name = prompt('Dateiname (z.B. notes.md):');
+  if (!name) return;
+  const filePath = currentFilePath === '.' ? name : currentFilePath + '/' + name;
+  const res = await fetch(API + '/api/files/save', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ path: filePath, content: '' }),
+  });
+  const data = await res.json();
+  if (data.ok) {
+    toast('Datei erstellt!', 'success');
+    navigateFiles('.'); // Refresh current dir
+    openFile(filePath);
+  } else {
+    toast(data.error || 'Fehler beim Erstellen', 'error');
+  }
+}
+
+async function deleteFile(filePath) {
+  if (!confirm('Datei löschen?\n\n' + filePath)) return;
+  const res = await fetch(API + '/api/files/delete', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ path: filePath }),
+  });
+  const data = await res.json();
+  if (data.ok) {
+    toast('Gelöscht!', 'success');
+    document.getElementById('file-editor-area').style.display = 'none';
+    navigateFiles('.'); // Refresh
+  } else {
+    toast(data.error || 'Fehler beim Löschen', 'error');
+  }
 }
 
 function formatSize(bytes) {
