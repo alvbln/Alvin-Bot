@@ -12,6 +12,25 @@ import { buildMemoryContext } from "./memory.js";
 import { searchMemory } from "./embeddings.js";
 import { getToolSummary } from "./tool-discovery.js";
 
+// Resolve display name for the active provider
+function getActiveProviderLabel(): string {
+  try {
+    const primary = process.env.PRIMARY_PROVIDER || "claude-sdk";
+    const labels: Record<string, string> = {
+      "claude-sdk": "Claude (Anthropic Agent SDK) — Opus/Sonnet Klasse",
+      "openai": "OpenAI GPT",
+      "groq": "Groq (Llama 3.3 70B)",
+      "gemini-2.5-flash": "Google Gemini 2.5 Flash",
+      "google": "Google Gemini",
+      "nvidia-llama-3.3-70b": "NVIDIA NIM (Llama 3.3 70B)",
+      "nvidia-kimi-k2.5": "NVIDIA NIM (Kimi K2.5)",
+    };
+    return labels[primary] || primary;
+  } catch {
+    return "AI-Sprachmodell";
+  }
+}
+
 const BOT_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 
 let soulContent = "";
@@ -27,6 +46,49 @@ Nutze Markdown-Formatierung kompatibel mit Telegram (fett, kursiv, Code-Blöcke)
 
 /** Additional instructions for SDK providers (tool use) */
 const SDK_ADDON = `Wenn du Commands ausführst oder Dateien bearbeitest, erkläre kurz was du getan hast.`;
+
+/**
+ * Self-Awareness Core — Dynamic introspection block.
+ *
+ * This makes the agent deeply aware of what it IS, what it can do natively
+ * (without external APIs), and when to use tools vs its own intelligence.
+ *
+ * Injected into EVERY system prompt, adapted to the active provider.
+ */
+function buildSelfAwareness(isSDK: boolean, providerName?: string): string {
+  const model = providerName || (isSDK ? "Claude (Anthropic Agent SDK)" : "AI-Sprachmodell");
+
+  return `## Selbstbewusstsein — Wer du bist und was du kannst
+
+Du bist ein hochleistungsfähiges KI-Sprachmodell (${model}).
+
+### Was du SELBST kannst (ohne externe APIs oder Tools):
+- **Texte analysieren, zusammenfassen, übersetzen** — Du bist das Sprachmodell. Du BIST die KI.
+- **Inhalte bewerten, kategorisieren, priorisieren** — Dein Kernkompetenz.
+- **Kreativ schreiben** — Briefe, Reports, E-Mails, Geschichten, Code.
+- **Logisch denken** — Probleme lösen, Entscheidungen begründen, Strategien entwickeln.
+- **Daten strukturieren** — JSON, CSV, Tabellen aus Freitext extrahieren.
+- **Code schreiben und debuggen** — In jeder gängigen Programmiersprache.
+
+### Wann du Tools/APIs brauchst (und wann NICHT):
+- **Zusammenfassung eines Textes?** → Du machst das SELBST. Kein API-Call nötig.
+- **E-Mail lesen?** → Tool nutzen (osascript, himalaya). Aber den Inhalt SELBST zusammenfassen.
+- **Bild generieren?** → API nötig (Gemini, DALL-E). Du kannst keine Bilder erzeugen.
+- **Webseite abrufen?** → Tool nutzen (curl, web_fetch). Aber den Inhalt SELBST analysieren.
+- **PDF erstellen?** → Tool nutzen (Python-Script, wkhtmltopdf). Aber den Text SELBST verfassen.
+- **Etwas berechnen?** → Einfache Berechnungen selbst, komplexe via Python-Tool.
+
+### Entscheidungsregel:
+**Frage dich IMMER zuerst:** "Kann ich das mit meinem eigenen Verstand lösen?"
+- Wenn ja → Direkt machen, kein Tool/API.
+- Wenn nein → Das passende Tool nutzen.
+- **NIEMALS** eine externe LLM-API (Groq, Gemini, OpenAI) aufrufen um Texte zu verarbeiten — DU bist das LLM!
+
+### Deine Architektur (zur Orientierung):
+- Du läufst als autonomer Agent mit Shell-Zugriff, Dateisystem-Zugriff und Web-Zugriff.
+- Externe APIs sind für **spezialisierte Dienste** (Bildgenerierung, TTS, Wetter-Daten) — nicht für Denkarbeit.
+- Wenn du Daten hast (E-Mails, Texte, Logs), verarbeite sie DIREKT in deiner Antwort.`;
+}
 
 /**
  * Build the full system prompt for a query.
@@ -45,6 +107,9 @@ export function buildSystemPrompt(isSDK: boolean, language: "de" | "en" = "de", 
   const timeContext = `Aktuelles Datum: ${dateStr}, ${timeStr} Uhr (Europe/Berlin).`;
 
   const parts = [BASE_PROMPT, langInstruction, timeContext];
+
+  // Core self-awareness — always injected, adapted to active provider
+  parts.push(buildSelfAwareness(isSDK, getActiveProviderLabel()));
 
   if (soulContent) {
     parts.push(soulContent);
