@@ -105,14 +105,15 @@ process.on("unhandledRejection", (reason) => {
 
 // Start optional platform adapters (WhatsApp, Discord, Signal)
 async function startOptionalPlatforms() {
+  const { handlePlatformMessage } = await import("./handlers/platform-message.js");
+
   // WhatsApp
   if (process.env.WHATSAPP_ENABLED === "true") {
     try {
       const { WhatsAppAdapter } = await import("./platforms/whatsapp.js");
       const wa = new WhatsAppAdapter();
       wa.onMessage(async (msg) => {
-        // For now: echo that WhatsApp is connected but routing isn't wired yet
-        console.log(`WhatsApp message from ${msg.userName}: ${msg.text.slice(0, 50)}`);
+        await handlePlatformMessage(msg, wa);
       });
       await wa.start();
       console.log("📱 WhatsApp platform started");
@@ -127,7 +128,7 @@ async function startOptionalPlatforms() {
       const { DiscordAdapter } = await import("./platforms/discord.js");
       const discord = new DiscordAdapter(process.env.DISCORD_TOKEN);
       discord.onMessage(async (msg) => {
-        console.log(`Discord message from ${msg.userName}: ${msg.text.slice(0, 50)}`);
+        await handlePlatformMessage(msg, discord);
       });
       await discord.start();
       console.log("🎮 Discord platform started");
@@ -142,7 +143,7 @@ async function startOptionalPlatforms() {
       const { SignalAdapter } = await import("./platforms/signal.js");
       const signal = new SignalAdapter(process.env.SIGNAL_API_URL, process.env.SIGNAL_NUMBER);
       signal.onMessage(async (msg) => {
-        console.log(`Signal message from ${msg.userName}: ${msg.text.slice(0, 50)}`);
+        await handlePlatformMessage(msg, signal);
       });
       await signal.start();
       console.log("🔒 Signal platform started");
