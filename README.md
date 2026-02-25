@@ -11,9 +11,14 @@ Mr. Levin is an open-source, self-hosted AI agent that lives where you chat. Bui
 ### 🧠 Intelligence
 - **Multi-Model Engine** — Claude (Agent SDK with full tool use), OpenAI, Groq, NVIDIA NIM, Google Gemini, OpenRouter, or any OpenAI-compatible API
 - **Automatic Fallback** — If one provider fails, seamlessly tries the next
+- **Heartbeat Monitor** — Pings providers every 5 minutes, auto-failover after 2 failures, auto-recovery
+- **User-Configurable Fallback Order** — Rearrange provider priority via Telegram (`/fallback`), Web UI, or API
 - **Adjustable Thinking** — From quick answers (`/effort low`) to deep analysis (`/effort max`)
 - **Persistent Memory** — Remembers across sessions via vector-indexed knowledge base
 - **Smart Tool Discovery** — Scans your system at startup, knows exactly what CLI tools, plugins, and APIs are available
+- **Skill System** — 6 built-in SKILL.md files (code, data analysis, email, docs, research, sysadmin) auto-activate based on message context
+- **Self-Awareness** — Knows it IS the AI model — won't call external APIs for tasks it can do itself
+- **Automatic Language Detection** — Detects user language (EN/DE) and adapts; learns preference over time
 
 ### 💬 Multi-Platform
 - **Telegram** — Full-featured with streaming, inline keyboards, voice, photos, documents
@@ -109,6 +114,9 @@ pm2 start ecosystem.config.cjs
 | `/status` | Current session & cost info |
 | `/setup` | Configure API keys & platforms |
 | `/system <prompt>` | Set custom system prompt |
+| `/fallback` | View & reorder provider fallback chain |
+| `/skills` | List available skills & their triggers |
+| `/lang <de\|en\|auto>` | Set or auto-detect response language |
 | `/cancel` | Abort running request |
 | `/reload` | Hot-reload personality (SOUL.md) |
 
@@ -257,6 +265,23 @@ Plugins are auto-loaded at startup. Create your own by adding a directory with a
 
 ---
 
+## 🎯 Skills
+
+Built-in skills in `skills/`:
+
+| Skill | Triggers | Description |
+|-------|----------|-------------|
+| code-project | code, build, implement, debug, refactor | Software development workflows, architecture patterns |
+| data-analysis | analyze, chart, csv, excel, statistics | Data processing, visualization, statistical analysis |
+| document-creation | document, report, letter, pdf, write | Professional document creation and formatting |
+| email-summary | email, inbox, unread, newsletter | Email triage, summarization, priority sorting |
+| system-admin | server, deploy, docker, nginx, ssl | DevOps, deployment, system administration |
+| web-research | research, compare, find, review | Deep web research with source verification |
+
+Skills activate automatically when your message matches their trigger keywords. The skill's SKILL.md content is injected into the system prompt, giving the agent specialized expertise for that task.
+
+---
+
 ## 🛠️ CLI
 
 ```bash
@@ -306,6 +331,7 @@ mr-levin version   # Show version
 - **Self-hosted** — Your data stays on your machine
 - **No telemetry** — Zero tracking, zero analytics, zero phone-home
 - **Web UI auth** — Optional password protection for the dashboard
+- **Owner protection** — Owner account cannot be deleted via UI
 
 ---
 
