@@ -8,7 +8,7 @@ let currentAssistantMsg = null;
 let chatMessages = []; // For export
 let isTyping = false;
 let notifySound = true;
-const CHAT_STORAGE_KEY = 'mrlevin_chat_history';
+const CHAT_STORAGE_KEY = 'alvinbot_chat_history';
 
 // ── Chat Persistence ────────────────────────────────────
 function saveChatToStorage() {

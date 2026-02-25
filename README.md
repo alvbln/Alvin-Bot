@@ -391,9 +391,9 @@ alvin-bot version   # Show version
   - [ ] Linux `.AppImage` + `.deb` via electron-builder
   - [ ] Auto-update mechanism (electron-updater)
   - [ ] GUI Setup Wizard (provider selection, Telegram token, first-run experience)
-  - [ ] Homebrew formula (`brew install mr-levin`)
+  - [ ] Homebrew formula (`brew install alvin-bot`)
   - [ ] Scoop manifest for Windows
-  - [ ] One-line install script (`curl -fsSL https://install.mrlevin.ai | sh`)
+  - [ ] One-line install script (`curl -fsSL https://install.alvin-bot.dev | sh`)
   - [ ] Docker Compose polish (production-ready `docker-compose.yml`)
 - [ ] **Phase 13** — npm publish (security audit)
 

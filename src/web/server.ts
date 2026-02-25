@@ -63,7 +63,7 @@ function generateToken(): string {
 function checkAuth(req: http.IncomingMessage): boolean {
   if (!WEB_PASSWORD) return true; // No password = open access
   const cookie = req.headers.cookie || "";
-  const token = cookie.match(/mrlevin_token=([a-f0-9]+)/)?.[1];
+  const token = cookie.match(/alvinbot_token=([a-f0-9]+)/)?.[1];
   return token ? activeSessions.has(token) : false;
 }
 
@@ -79,7 +79,7 @@ async function handleAPI(req: http.IncomingMessage, res: http.ServerResponse, ur
       if (!WEB_PASSWORD || password === WEB_PASSWORD) {
         const token = generateToken();
         activeSessions.add(token);
-        res.setHeader("Set-Cookie", `mrlevin_token=${token}; Path=/; HttpOnly; SameSite=Strict; Max-Age=86400`);
+        res.setHeader("Set-Cookie", `alvinbot_token=${token}; Path=/; HttpOnly; SameSite=Strict; Max-Age=86400`);
         res.end(JSON.stringify({ ok: true }));
       } else {
         res.statusCode = 401;
