@@ -231,6 +231,10 @@ switch (cmd) {
   case "start":
     import("../dist/index.js");
     break;
+  case "tui":
+  case "chat":
+    import("../dist/tui/index.js").then(m => m.startTUI()).catch(console.error);
+    break;
   case "version":
   case "--version":
   case "-v":
@@ -242,9 +246,13 @@ switch (cmd) {
 
 Commands:
   npx mr-levin setup    Interactive setup wizard
+  npx mr-levin tui      Terminal Chat UI  ✨
   npx mr-levin doctor   Check configuration
   npx mr-levin update   Pull latest & rebuild
   npx mr-levin start    Start the bot
   npx mr-levin version  Show version
+
+Aliases:
+  mr-levin chat         Same as tui
 `);
 }
