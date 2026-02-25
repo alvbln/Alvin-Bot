@@ -153,6 +153,69 @@ async function handleAPI(req: http.IncomingMessage, res: http.ServerResponse, ur
     return;
   }
 
+  // GET /api/fallback — Get fallback order + health
+  if (urlPath === "/api/fallback" && req.method === "GET") {
+    try {
+      const { getFallbackOrder } = await import("../services/fallback-order.js");
+      const { getHealthStatus, isFailedOver } = await import("../services/heartbeat.js");
+      const registry = getRegistry();
+      const providers = await registry.listAll();
+
+      res.end(JSON.stringify({
+        order: getFallbackOrder(),
+        health: getHealthStatus(),
+        failedOver: isFailedOver(),
+        activeProvider: registry.getActiveKey(),
+        availableProviders: providers.map(p => ({ key: p.key, name: p.name, status: p.status })),
+      }));
+    } catch (err) {
+      res.end(JSON.stringify({ error: String(err) }));
+    }
+    return;
+  }
+
+  // POST /api/fallback — Set fallback order
+  if (urlPath === "/api/fallback" && req.method === "POST") {
+    try {
+      const { primary, fallbacks } = JSON.parse(body);
+      const { setFallbackOrder } = await import("../services/fallback-order.js");
+      const result = setFallbackOrder(primary, fallbacks, "webui");
+      res.end(JSON.stringify({ ok: true, order: result }));
+    } catch (err) {
+      res.statusCode = 400;
+      res.end(JSON.stringify({ error: String(err) }));
+    }
+    return;
+  }
+
+  // POST /api/fallback/move — Move provider up/down
+  if (urlPath === "/api/fallback/move" && req.method === "POST") {
+    try {
+      const { key, direction } = JSON.parse(body);
+      const fb = await import("../services/fallback-order.js");
+      const result = direction === "up" ? fb.moveUp(key, "webui") : fb.moveDown(key, "webui");
+      res.end(JSON.stringify({ ok: true, order: result }));
+    } catch (err) {
+      res.statusCode = 400;
+      res.end(JSON.stringify({ error: String(err) }));
+    }
+    return;
+  }
+
+  // GET /api/heartbeat — Health status
+  if (urlPath === "/api/heartbeat") {
+    try {
+      const { getHealthStatus, isFailedOver } = await import("../services/heartbeat.js");
+      res.end(JSON.stringify({
+        health: getHealthStatus(),
+        failedOver: isFailedOver(),
+      }));
+    } catch (err) {
+      res.end(JSON.stringify({ health: [], failedOver: false }));
+    }
+    return;
+  }
+
   // GET /api/memory
   if (urlPath === "/api/memory") {
     const ltm = loadLongTermMemory();

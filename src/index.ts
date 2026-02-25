@@ -14,6 +14,7 @@ import { startWebServer } from "./web/server.js";
 import { startScheduler, stopScheduler, setNotifyCallback } from "./services/cron.js";
 
 import { discoverTools } from "./services/tool-discovery.js";
+import { startHeartbeat } from "./services/heartbeat.js";
 
 // Discover available system tools (cached for prompt injection)
 discoverTools();
@@ -188,5 +189,8 @@ await bot.start({
     console.log(`🤖 Mr. Levin v3.0.0 gestartet (@${me.username})`);
     console.log(`   Provider: ${registry.getActiveKey()}`);
     console.log(`   Users: ${config.allowedUsers.length} authorized`);
+
+    // Start heartbeat monitor
+    startHeartbeat();
   },
 });

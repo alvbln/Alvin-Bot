@@ -59,6 +59,7 @@ export function registerCommands(bot: Bot): void {
       `Sprachnachrichten & Fotos verstehe ich auch.\n\n` +
       `⚙️ *Steuerung*\n` +
       `/model — KI-Modell wechseln\n` +
+      `/fallback — Provider-Reihenfolge\n` +
       `/effort — Denktiefe einstellen\n` +
       `/voice — Sprachantworten an/aus\n` +
       `/dir <pfad> — Arbeitsverzeichnis\n\n` +
@@ -338,6 +339,153 @@ export function registerCommands(bot: Bot): void {
       await ctx.answerCallbackQuery(`Gewechselt: ${info.name}`);
     } else {
       await ctx.answerCallbackQuery(`Modell "${key}" nicht gefunden`);
+    }
+  });
+
+  // ── Fallback Order ────────────────────────────────────────────────────
+
+  bot.command("fallback", async (ctx) => {
+    const { getFallbackOrder, setFallbackOrder, formatOrder } = await import("../services/fallback-order.js");
+    const { getHealthStatus } = await import("../services/heartbeat.js");
+    const registry = getRegistry();
+
+    const arg = ctx.match?.trim();
+
+    if (!arg) {
+      // Show current order with inline keyboard
+      const order = getFallbackOrder();
+      const health = getHealthStatus();
+      const healthMap = new Map(health.map(h => [h.key, h]));
+
+      const allKeys = [order.primary, ...order.fallbacks];
+      const keyboard = new InlineKeyboard();
+
+      for (let i = 0; i < allKeys.length; i++) {
+        const key = allKeys[i];
+        const h = healthMap.get(key);
+        const status = h ? (h.healthy ? "✅" : "❌") : "❓";
+        const label = i === 0 ? `🥇 ${key} ${status}` : `${i + 1}. ${key} ${status}`;
+
+        if (i > 0) keyboard.text("⬆️", `fb:up:${key}`);
+        keyboard.text(label, `fb:info:${key}`);
+        if (i < allKeys.length - 1) keyboard.text("⬇️", `fb:down:${key}`);
+        keyboard.row();
+      }
+
+      const text = `🔄 *Fallback-Reihenfolge*\n\n` +
+        `Provider werden in dieser Reihenfolge versucht.\n` +
+        `Nutze ⬆️/⬇️ zum Umsortieren.\n\n` +
+        `_Zuletzt geändert: ${order.updatedBy} (${new Date(order.updatedAt).toLocaleString("de-DE")})_`;
+
+      await ctx.reply(text, { parse_mode: "Markdown", reply_markup: keyboard });
+      return;
+    }
+
+    // Direct text commands: /fallback set groq,openai,nvidia-llama-3.3-70b
+    if (arg.startsWith("set ")) {
+      const parts = arg.slice(4).split(",").map(s => s.trim()).filter(Boolean);
+      if (parts.length < 1) {
+        await ctx.reply("Usage: `/fallback set primary,fallback1,fallback2,...`", { parse_mode: "Markdown" });
+        return;
+      }
+      const [primary, ...fallbacks] = parts;
+      setFallbackOrder(primary, fallbacks, "telegram");
+      await ctx.reply(`✅ Neue Reihenfolge:\n\n${formatOrder()}`);
+      return;
+    }
+
+    await ctx.reply(
+      `🔄 *Fallback-Reihenfolge*\n\n` +
+      `\`/fallback\` — Reihenfolge anzeigen & ändern\n` +
+      `\`/fallback set groq,openai,...\` — Direkt setzen`,
+      { parse_mode: "Markdown" }
+    );
+  });
+
+  // Callback queries for fallback ordering
+  bot.callbackQuery(/^fb:up:(.+)$/, async (ctx) => {
+    const { moveUp, formatOrder, getFallbackOrder } = await import("../services/fallback-order.js");
+    const { getHealthStatus } = await import("../services/heartbeat.js");
+    const key = ctx.match![1];
+
+    moveUp(key, "telegram");
+    const order = getFallbackOrder();
+    const health = getHealthStatus();
+    const healthMap = new Map(health.map(h => [h.key, h]));
+
+    const allKeys = [order.primary, ...order.fallbacks];
+    const keyboard = new InlineKeyboard();
+
+    for (let i = 0; i < allKeys.length; i++) {
+      const k = allKeys[i];
+      const h = healthMap.get(k);
+      const status = h ? (h.healthy ? "✅" : "❌") : "❓";
+      const label = i === 0 ? `🥇 ${k} ${status}` : `${i + 1}. ${k} ${status}`;
+
+      if (i > 0) keyboard.text("⬆️", `fb:up:${k}`);
+      keyboard.text(label, `fb:info:${k}`);
+      if (i < allKeys.length - 1) keyboard.text("⬇️", `fb:down:${k}`);
+      keyboard.row();
+    }
+
+    await ctx.editMessageText(
+      `🔄 *Fallback-Reihenfolge*\n\n` +
+      `Provider werden in dieser Reihenfolge versucht.\n` +
+      `Nutze ⬆️/⬇️ zum Umsortieren.\n\n` +
+      `_Zuletzt geändert: telegram (${new Date().toLocaleString("de-DE")})_`,
+      { parse_mode: "Markdown", reply_markup: keyboard }
+    );
+    await ctx.answerCallbackQuery(`${key} nach oben verschoben`);
+  });
+
+  bot.callbackQuery(/^fb:down:(.+)$/, async (ctx) => {
+    const { moveDown, getFallbackOrder } = await import("../services/fallback-order.js");
+    const { getHealthStatus } = await import("../services/heartbeat.js");
+    const key = ctx.match![1];
+
+    moveDown(key, "telegram");
+    const order = getFallbackOrder();
+    const health = getHealthStatus();
+    const healthMap = new Map(health.map(h => [h.key, h]));
+
+    const allKeys = [order.primary, ...order.fallbacks];
+    const keyboard = new InlineKeyboard();
+
+    for (let i = 0; i < allKeys.length; i++) {
+      const k = allKeys[i];
+      const h = healthMap.get(k);
+      const status = h ? (h.healthy ? "✅" : "❌") : "❓";
+      const label = i === 0 ? `🥇 ${k} ${status}` : `${i + 1}. ${k} ${status}`;
+
+      if (i > 0) keyboard.text("⬆️", `fb:up:${k}`);
+      keyboard.text(label, `fb:info:${k}`);
+      if (i < allKeys.length - 1) keyboard.text("⬇️", `fb:down:${k}`);
+      keyboard.row();
+    }
+
+    await ctx.editMessageText(
+      `🔄 *Fallback-Reihenfolge*\n\n` +
+      `Provider werden in dieser Reihenfolge versucht.\n` +
+      `Nutze ⬆️/⬇️ zum Umsortieren.\n\n` +
+      `_Zuletzt geändert: telegram (${new Date().toLocaleString("de-DE")})_`,
+      { parse_mode: "Markdown", reply_markup: keyboard }
+    );
+    await ctx.answerCallbackQuery(`${key} nach unten verschoben`);
+  });
+
+  bot.callbackQuery(/^fb:info:(.+)$/, async (ctx) => {
+    const { getHealthStatus } = await import("../services/heartbeat.js");
+    const key = ctx.match![1];
+    const health = getHealthStatus();
+    const h = health.find(p => p.key === key);
+
+    if (h) {
+      await ctx.answerCallbackQuery({
+        text: `${key}: ${h.healthy ? "✅ Healthy" : "❌ Unhealthy"} | ${h.latencyMs}ms | Fehler: ${h.failCount}`,
+        show_alert: true,
+      });
+    } else {
+      await ctx.answerCallbackQuery(`${key}: Noch nicht geprüft`);
     }
   });
 

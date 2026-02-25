@@ -157,18 +157,41 @@ async function setup() {
 
   console.log(`\n✅ Provider: ${provider.name}`);
 
-  // Check Claude CLI if needed
+  // Check & auto-install Claude CLI if needed
   let hasClaude = false;
   if (provider.needsCLI) {
     try {
       execSync("claude --version", { encoding: "utf-8", stdio: "pipe" });
       hasClaude = true;
-      console.log("  ✅ Claude CLI installiert");
+      console.log("  ✅ Claude CLI bereits installiert");
     } catch {
-      console.log("  ⚠️  Claude CLI nicht gefunden!");
-      console.log("     Installieren: npm i -g @anthropic-ai/claude-code");
-      console.log("     Dann: claude login");
-      console.log("     Du kannst den Bot trotzdem starten — er nutzt dann Text-only Mode.");
+      console.log("  ⚠️  Claude Agent SDK (CLI) nicht gefunden.");
+      console.log("");
+      const installClaude = (await ask("  Soll ich die Claude CLI jetzt automatisch installieren? (j/n): ")).trim().toLowerCase();
+      if (installClaude === "j" || installClaude === "y" || installClaude === "ja") {
+        console.log("\n  📦 Installiere @anthropic-ai/claude-code ...");
+        try {
+          execSync("npm install -g @anthropic-ai/claude-code", { stdio: "inherit" });
+          console.log("  ✅ Claude CLI installiert!");
+          console.log("\n  🔐 Jetzt einloggen — dies öffnet deinen Browser:");
+          console.log("     (Benötigt ein Claude Max Abo für $200/Mo)\n");
+          try {
+            execSync("claude login", { stdio: "inherit", timeout: 120_000 });
+            hasClaude = true;
+            console.log("  ✅ Claude Login erfolgreich!");
+          } catch {
+            console.log("  ⚠️  Login abgebrochen/fehlgeschlagen. Du kannst das später mit 'claude login' nachholen.");
+          }
+        } catch {
+          console.log("  ❌ Installation fehlgeschlagen. Manuell installieren:");
+          console.log("     npm install -g @anthropic-ai/claude-code");
+          console.log("     claude login");
+        }
+      } else {
+        console.log("  ℹ️  Kein Problem! Du kannst das später nachholen:");
+        console.log("     npm install -g @anthropic-ai/claude-code && claude login");
+        console.log("     Der Bot startet im Text-only Mode ohne Claude CLI.");
+      }
     }
   }
 
@@ -176,24 +199,72 @@ async function setup() {
   let providerApiKey = "";
   if (provider.envKey) {
     console.log(`\n📋 API Key für ${provider.name}:`);
-    console.log(`   Kostenlos registrieren: ${provider.signup}\n`);
+    console.log(`   Registrieren (kostenlos): ${provider.signup}`);
+    console.log(`   Keine Kreditkarte nötig!\n`);
     providerApiKey = (await ask(`${provider.envKey}: `)).trim();
 
     if (!providerApiKey) {
       console.log("  ⚠️  Ohne API Key kann dieser Provider nicht genutzt werden.");
+      if (provider.key !== "groq") {
+        console.log("  ℹ️  Groq wird als kostenloser Fallback registriert.");
+      }
     }
   }
 
-  // ── Step 4: Optional extras ───────────────────────────────────────────
-  console.log("\n━━━ Schritt 4: Extras (optional, Enter zum Überspringen) ━━━\n");
+  // ── Step 4: Fallback & Extras ─────────────────────────────────────────
+  console.log("\n━━━ Schritt 4: Fallback-Provider & Extras ━━━\n");
 
+  // Groq als universeller Fallback
   let groqKey = "";
   if (provider.key !== "groq") {
-    groqKey = (await ask("Groq API Key (für Spracheingabe, kostenlos @ console.groq.com): ")).trim();
+    console.log("  💡 Groq ist kostenlos und dient als Heartbeat & Fallback.");
+    console.log("     Registriere dich gratis auf https://console.groq.com\n");
+    groqKey = (await ask("Groq API Key (empfohlen, kostenlos): ")).trim();
+    if (!groqKey) {
+      console.log("  ℹ️  Ohne Groq-Key kein automatischer Heartbeat/Fallback.");
+      console.log("     Du kannst den Key später über /setup oder die Web UI nachtragen.\n");
+    }
   } else {
     groqKey = providerApiKey; // Already have it
   }
 
+  // Additional fallback providers
+  console.log("  📋 Weitere API Keys? (Enter zum Überspringen)\n");
+  const extraKeys = {};
+  if (provider.key !== "nvidia-llama-3.3-70b" && provider.key !== "nvidia-kimi-k2.5") {
+    const nk = (await ask("  NVIDIA API Key (kostenlos @ build.nvidia.com): ")).trim();
+    if (nk) extraKeys["NVIDIA_API_KEY"] = nk;
+  }
+  if (provider.key !== "gemini-2.5-flash") {
+    const gk = (await ask("  Google API Key (kostenlos @ aistudio.google.com): ")).trim();
+    if (gk) extraKeys["GOOGLE_API_KEY"] = gk;
+  }
+  if (provider.key !== "openai" && provider.key !== "gpt-4o") {
+    const ok = (await ask("  OpenAI API Key (optional): ")).trim();
+    if (ok) extraKeys["OPENAI_API_KEY"] = ok;
+  }
+
+  // Fallback order
+  console.log("\n  🔄 Fallback-Reihenfolge:");
+  console.log("     Wenn dein primärer Provider ausfällt, werden diese der Reihe nach probiert.");
+  const availableFallbacks = [];
+  if (groqKey && provider.key !== "groq") availableFallbacks.push("groq");
+  if (extraKeys["NVIDIA_API_KEY"]) availableFallbacks.push("nvidia-llama-3.3-70b");
+  if (extraKeys["GOOGLE_API_KEY"]) availableFallbacks.push("gemini-2.5-flash");
+  if (extraKeys["OPENAI_API_KEY"]) availableFallbacks.push("gpt-4o");
+
+  if (availableFallbacks.length > 0) {
+    console.log(`     Standard: ${availableFallbacks.join(" → ")}`);
+    const customOrder = (await ask("     Andere Reihenfolge? (kommagetrennt, Enter = Standard): ")).trim();
+    if (customOrder) {
+      availableFallbacks.length = 0;
+      availableFallbacks.push(...customOrder.split(",").map(s => s.trim()).filter(Boolean));
+    }
+  } else {
+    console.log("     Keine Fallback-Provider konfiguriert.");
+  }
+
+  console.log("");
   const webPassword = (await ask("Web UI Passwort (leer = kein Schutz): ")).trim();
 
   // ── Step 5: Platform choice ───────────────────────────────────────────
@@ -223,17 +294,19 @@ async function setup() {
     envLines.push(`${provider.envKey}=${providerApiKey}`);
   }
 
-  // Fallback providers (add free ones the user didn't pick)
-  const fallbacks = [];
-  if (provider.key !== "groq" && groqKey) {
+  // Groq key (for heartbeat + fallback)
+  if (groqKey && provider.key !== "groq") {
     envLines.push(`GROQ_API_KEY=${groqKey}`);
-    fallbacks.push("groq");
   }
-  if (provider.key === "groq" && groqKey) {
-    // groqKey already set as provider key
+
+  // Extra provider keys
+  for (const [envKey, value] of Object.entries(extraKeys)) {
+    envLines.push(`${envKey}=${value}`);
   }
-  if (fallbacks.length > 0) {
-    envLines.push(`FALLBACK_PROVIDERS=${fallbacks.join(",")}`);
+
+  // Fallback order
+  if (availableFallbacks.length > 0) {
+    envLines.push(`FALLBACK_PROVIDERS=${availableFallbacks.join(",")}`);
   }
 
   envLines.push("");
