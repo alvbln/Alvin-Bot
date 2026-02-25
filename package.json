@@ -1,9 +1,9 @@
 {
   "name": "alvin-bot",
   "version": "3.0.0",
-  "description": "Alvin Bot \u2014 Your personal AI agent on Telegram, WhatsApp, Discord, Signal, and Web.",
+  "description": "Alvin Bot — Your personal AI agent on Telegram, WhatsApp, Discord, Signal, and Web.",
   "type": "module",
-  "main": "dist/index.js",
+  "main": "electron/dist/main.js",
   "bin": {
     "alvin-bot": "./bin/cli.js"
   },
@@ -11,7 +11,86 @@
     "dev": "tsx src/index.ts",
     "build": "tsc",
     "start": "node dist/index.js",
-    "setup": "node bin/cli.js setup"
+    "setup": "node bin/cli.js setup",
+    "electron:compile": "tsc -p electron/tsconfig.json",
+    "electron:dev": "npm run electron:compile && electron .",
+    "electron:build": "npm run build && npm run electron:compile && electron-builder --publish never",
+    "electron:pack": "npm run build && npm run electron:compile && electron-builder --dir --publish never"
+  },
+  "build": {
+    "appId": "com.alvinbot.app",
+    "productName": "Alvin Bot",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "electron/dist/**/*",
+      "!node_modules",
+      "!src",
+      "!electron/*.ts"
+    ],
+    "extraResources": [
+      {
+        "from": "dist",
+        "to": "app/dist"
+      },
+      {
+        "from": "web",
+        "to": "app/web"
+      },
+      {
+        "from": "docs",
+        "to": "app/docs"
+      },
+      {
+        "from": "plugins",
+        "to": "app/plugins"
+      },
+      {
+        "from": "skills",
+        "to": "app/skills"
+      },
+      {
+        "from": "node_modules",
+        "to": "app/node_modules"
+      },
+      {
+        "from": "build",
+        "to": "build"
+      },
+      {
+        "from": "package.json",
+        "to": "app/package.json"
+      }
+    ],
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "universal"
+          ]
+        }
+      ],
+      "icon": "build/icon.png",
+      "category": "public.app-category.utilities"
+    },
+    "win": {
+      "target": "nsis",
+      "icon": "build/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "icon": "build/icon.png",
+      "category": "Utility"
+    }
   },
   "keywords": [
     "telegram",
@@ -44,6 +123,8 @@
   "devDependencies": {
     "@types/node": "^22.0.0",
     "@types/ws": "^8.18.1",
+    "electron": "^35.7.5",
+    "electron-builder": "^26.8.1",
     "tsx": "^4.19.0",
     "typescript": "^5.9.3"
   }

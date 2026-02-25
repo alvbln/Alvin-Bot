@@ -384,7 +384,7 @@ alvin-bot version   # Show version
   - [x] Skeleton loading states + status pulse animations
   - [x] Command Palette (Cmd+K / Ctrl+K) with fuzzy search
 - [ ] **Phase 12** — Native Installers (Non-Techie Friendly)
-  - [ ] Electron wrapper (embedded Node.js + WebUI + tray icon)
+  - [x] Electron wrapper (embedded Node.js + WebUI + tray icon)
   - [ ] macOS `.dmg` via electron-builder
   - [ ] Windows `.exe` (NSIS) via electron-builder
   - [ ] Linux `.AppImage` + `.deb` via electron-builder
