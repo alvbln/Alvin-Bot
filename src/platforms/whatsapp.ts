@@ -390,7 +390,7 @@ export class WhatsAppAdapter implements PlatformAdapter {
       try {
         await this.handleIncomingMessage(msg);
       } catch (err) {
-        console.error("WhatsApp message handler error:", err instanceof Error ? err.message : err);
+        console.error("WhatsApp message handler error:", err instanceof Error ? err.stack || err.message : err);
       }
     });
   }
@@ -399,6 +399,9 @@ export class WhatsAppAdapter implements PlatformAdapter {
 
   private async handleIncomingMessage(msg: any): Promise<void> {
     if (!this.handler) return;
+
+    // Skip channel/newsletter messages (whatsapp-web.js Channel constructor crashes on missing channelMetadata)
+    if (msg.isChannel || msg.from?.endsWith("@newsletter") || msg.from?.endsWith("@broadcast")) return;
 
     const text = msg.body?.trim();
     const msgType = msg.type; // "chat", "ptt", "audio", "image", "video", "document", etc.
@@ -426,6 +429,10 @@ export class WhatsAppAdapter implements PlatformAdapter {
     const isGroup = chat.isGroup;
     const isSelf = this.isSelfChat(chat);
 
+    // ── Global access toggles ─────────────────────────────────────────
+    const selfChatOnly = process.env.WHATSAPP_SELF_CHAT_ONLY === "true";
+    const allowGroups = process.env.WHATSAPP_ALLOW_GROUPS === "true";
+
     // ── Access control ───────────────────────────────────────────────────
     if (isSelf) {
       // Self-chat: check if this is an approval response (when WhatsApp is approval channel)
@@ -447,6 +454,9 @@ export class WhatsAppAdapter implements PlatformAdapter {
       }
       // Normal self-chat: proceed to AI
     } else if (isGroup) {
+      // Global toggle: groups must be explicitly allowed
+      if (selfChatOnly || !allowGroups) return;
+
       // Group: check whitelist
       if (msg.fromMe) return; // Skip own messages in groups
 
@@ -459,21 +469,38 @@ export class WhatsAppAdapter implements PlatformAdapter {
       // Check participant whitelist (empty = allow all)
       const senderId = msg.author || msg.from || "";
       if (rule.allowedParticipants.length > 0) {
-        // Normalize: strip @c.us / @lid suffix for comparison
+        // Resolve contact to get phone number (senderId may be @lid format which differs from @c.us phone)
+        const senderContact = await msg.getContact().catch(() => null);
+        const senderPhone = senderContact?.number || "";
         const senderNorm = senderId.replace(/@.*$/, "");
-        const allowed = rule.allowedParticipants.some(p => p.replace(/@.*$/, "") === senderNorm);
-        if (!allowed) return;
+        const allowed = rule.allowedParticipants.some(p => {
+          const pNorm = p.replace(/@.*$/, "");
+          return pNorm === senderNorm || (senderPhone && pNorm === senderPhone);
+        });
+        if (!allowed) {
+          console.log(`📱 WA Group: participant ${senderNorm} (phone: ${senderPhone}) not in whitelist for ${rule.groupName}`);
+          return;
+        }
       }
 
       // Check mention requirement
       if (rule.requireMention) {
         const botName = this.client?.info?.pushname || "Mr. Levin";
-        const mentioned = text && (
+        const myWid = this.client?.info?.wid?._serialized || "";
+        const myLid = this.client?.info?.me?._serialized || "";
+        // Check text-based mentions
+        const textMention = text && (
           text.includes("@Mr.Levin") ||
           text.includes("@bot") ||
           text.includes("@mr.levin") ||
-          text.toLowerCase().includes(botName.toLowerCase())
+          text.toLowerCase().includes(botName.toLowerCase()) ||
+          text.toLowerCase().includes("mr. levin") ||
+          text.toLowerCase().includes("mr.levin")
         );
+        // Check WhatsApp native mentions (mentionedIds array)
+        const mentionedIds: string[] = msg.mentionedIds?.map((m: any) => m?._serialized || String(m)) || [];
+        const nativeMention = mentionedIds.some((mid: string) => mid === myWid || mid === myLid);
+        const mentioned = textMention || nativeMention;
         // Voice/media in whitelisted groups: allow without mention
         if (!mentioned && !hasMedia) return;
       }
@@ -484,6 +511,7 @@ export class WhatsAppAdapter implements PlatformAdapter {
       }
     } else {
       // DM from someone else
+      if (selfChatOnly) return;
       const allowDMs = process.env.WHATSAPP_ALLOW_DMS === "true";
       if (!allowDMs) return;
       if (msg.fromMe) return;

@@ -342,8 +342,10 @@ export async function handleSetupAPI(
       for (const v of platform.envVars) {
         if (values[v.key] !== undefined && values[v.key] !== "") {
           writeEnvVar(v.key, values[v.key]);
+          process.env[v.key] = values[v.key]; // Hot-apply for toggle changes
         } else if (values[v.key] === "") {
           removeEnvVar(v.key);
+          delete process.env[v.key]; // Hot-remove
         }
       }
       // WhatsApp toggle-only changes (self-chat, groups, DMs) don't need restart
