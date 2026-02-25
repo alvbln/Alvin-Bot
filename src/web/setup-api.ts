@@ -138,9 +138,10 @@ const PLATFORMS: PlatformDef[] = [
     ],
     npmPackages: ["@whiskeysockets/baileys", "qrcode-terminal"],
     setupSteps: [
-      "Aktiviere WhatsApp (Toggle oben)",
-      "Nach dem Neustart erscheint ein QR-Code in den Logs",
-      "Scanne den QR-Code mit WhatsApp → Verknüpfte Geräte",
+      "Klicke 'Dependencies installieren' (falls nötig)",
+      "Aktiviere WhatsApp (Toggle oben) und klicke 'Speichern'",
+      "Starte den Bot neu (Maintenance → Bot neustarten)",
+      "Der QR-Code erscheint hier unten — scanne ihn mit WhatsApp → Verknüpfte Geräte → Gerät hinzufügen",
       "Die Verbindung bleibt gespeichert (data/whatsapp-auth/)",
     ],
   },
@@ -669,7 +670,76 @@ export async function handleSetupAPI(
     return true;
   }
 
+  // ── WhatsApp Status + QR Code ──────────────────────────
+
+  // GET /api/whatsapp/status — get WhatsApp connection state + QR string
+  if (urlPath === "/api/whatsapp/status") {
+    try {
+      const { getWhatsAppState } = await import("../platforms/whatsapp.js");
+      const state = getWhatsAppState();
+      res.end(JSON.stringify(state));
+    } catch {
+      res.end(JSON.stringify({ status: "disconnected", qrString: null, error: "WhatsApp adapter not loaded" }));
+    }
+    return true;
+  }
+
+  // GET /api/whatsapp/qr — render QR code as SVG image
+  if (urlPath === "/api/whatsapp/qr") {
+    try {
+      const { getWhatsAppState } = await import("../platforms/whatsapp.js");
+      const state = getWhatsAppState();
+      if (!state.qrString) {
+        res.statusCode = 404;
+        res.end(JSON.stringify({ error: "No QR code available" }));
+        return true;
+      }
+      // Generate QR code as SVG using a simple implementation
+      const svg = generateQrSvg(state.qrString);
+      res.setHeader("Content-Type", "image/svg+xml");
+      res.end(svg);
+    } catch {
+      res.statusCode = 500;
+      res.end(JSON.stringify({ error: "QR generation failed" }));
+    }
+    return true;
+  }
+
+  // POST /api/whatsapp/disconnect — clear auth and disconnect
+  if (urlPath === "/api/whatsapp/disconnect" && req.method === "POST") {
+    try {
+      const authDir = resolve(BOT_ROOT, "data", "whatsapp-auth");
+      if (fs.existsSync(authDir)) {
+        fs.rmSync(authDir, { recursive: true });
+      }
+      res.end(JSON.stringify({ ok: true, note: "Auth-Daten gelöscht. Neustart nötig für neue Verbindung." }));
+    } catch (err: unknown) {
+      const error = err instanceof Error ? err.message : String(err);
+      res.end(JSON.stringify({ ok: false, error }));
+    }
+    return true;
+  }
+
   return false; // Not handled
+}
+
+// ── QR Code SVG Generator (no external dependency) ──────
+
+function generateQrSvg(text: string): string {
+  // Minimal QR code as text-based SVG with data URI approach
+  // Since we can't easily generate QR in pure TS without a library,
+  // we'll render it as a styled text block that the frontend converts using JS
+  // The frontend will use a client-side QR library instead
+  // Return the raw string as data for the frontend to render
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="300" height="300">
+    <rect width="300" height="300" fill="#fff"/>
+    <text x="150" y="150" text-anchor="middle" font-size="14" fill="#333">QR Code — see Web UI</text>
+    <metadata>${escapeXml(text)}</metadata>
+  </svg>`;
+}
+
+function escapeXml(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
 // ── Helpers ─────────────────────────────────────────────

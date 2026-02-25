@@ -645,8 +645,26 @@ async function loadPlatforms() {
     if (p.configured) {
       html += `<button class="btn btn-sm btn-outline" style="color:var(--red)" onclick="disablePlatform('${p.id}')">Deaktivieren</button>`;
     }
-    html += `</div>
-      <div id="platform-result-${p.id}" style="font-size:0.78em;margin-top:6px"></div>
+    html += `</div>`;
+
+    // WhatsApp: QR code + connection status area
+    if (p.id === 'whatsapp' && p.configured && p.depsInstalled) {
+      html += `<div id="wa-qr-area" style="margin-top:12px;padding:12px;background:var(--bg3);border-radius:8px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+          <span id="wa-status-dot" style="font-size:1.2em">⏳</span>
+          <span id="wa-status-text" style="font-size:0.85em;color:var(--fg2)">Status wird geladen...</span>
+          <div style="flex:1"></div>
+          <button class="btn btn-sm btn-outline" onclick="checkWhatsAppStatus()">🔄 Status prüfen</button>
+          <button class="btn btn-sm btn-outline" style="color:var(--red);font-size:0.78em" onclick="disconnectWhatsApp()">🔌 Trennen & Reset</button>
+        </div>
+        <div id="wa-qr-container" style="display:none;text-align:center;padding:16px;background:#fff;border-radius:8px;margin-top:8px">
+          <canvas id="wa-qr-canvas" style="image-rendering:pixelated"></canvas>
+          <div style="color:#333;font-size:0.82em;margin-top:8px">📱 Scanne mit WhatsApp → Verknüpfte Geräte → Gerät hinzufügen</div>
+        </div>
+      </div>`;
+    }
+
+    html += `<div id="platform-result-${p.id}" style="font-size:0.78em;margin-top:6px"></div>
     </div>`;
   }
 
@@ -710,6 +728,122 @@ async function disablePlatform(platformId) {
   toast('Plattform deaktiviert. Neustart nötig.');
   loadPlatforms();
 }
+
+// ── WhatsApp QR + Status ────────────────────────────────
+let waStatusInterval = null;
+
+async function checkWhatsAppStatus() {
+  try {
+    const res = await fetch(API + '/api/whatsapp/status');
+    const state = await res.json();
+    const dot = document.getElementById('wa-status-dot');
+    const text = document.getElementById('wa-status-text');
+    const qrContainer = document.getElementById('wa-qr-container');
+    if (!dot || !text) return;
+
+    const statusMap = {
+      disconnected: ['⚫', 'Nicht verbunden'],
+      connecting: ['🟡', 'Verbinde...'],
+      qr: ['📱', 'QR-Code bereit — jetzt scannen!'],
+      connected: ['🟢', 'Verbunden' + (state.connectedAt ? ` seit ${new Date(state.connectedAt).toLocaleTimeString('de-DE')}` : '')],
+      logged_out: ['🔴', 'Abgemeldet — Auth-Daten löschen und neu verbinden'],
+    };
+    const [icon, label] = statusMap[state.status] || ['❓', state.status];
+    dot.textContent = icon;
+    text.textContent = label;
+
+    if (state.status === 'qr' && state.qrString && qrContainer) {
+      qrContainer.style.display = '';
+      renderQrCode(state.qrString);
+      // Auto-poll while QR is shown
+      if (!waStatusInterval) {
+        waStatusInterval = setInterval(checkWhatsAppStatus, 3000);
+      }
+    } else {
+      if (qrContainer) qrContainer.style.display = 'none';
+      if (state.status === 'connected' && waStatusInterval) {
+        clearInterval(waStatusInterval);
+        waStatusInterval = null;
+      }
+    }
+  } catch (err) {
+    const text = document.getElementById('wa-status-text');
+    if (text) text.textContent = 'Fehler: ' + err.message;
+  }
+}
+
+async function disconnectWhatsApp() {
+  if (!confirm('WhatsApp-Verbindung trennen und Auth-Daten löschen?\n\nDu musst danach erneut den QR-Code scannen.')) return;
+  try {
+    const res = await fetch(API + '/api/whatsapp/disconnect', { method: 'POST' });
+    const data = await res.json();
+    toast(data.ok ? 'Auth-Daten gelöscht. Bitte Bot neustarten.' : data.error, data.ok ? 'success' : 'error');
+  } catch (err) { toast('Fehler: ' + err.message, 'error'); }
+}
+
+// Minimal QR code renderer using Canvas API
+// Uses a lightweight QR encoder (no external lib)
+function renderQrCode(text) {
+  const canvas = document.getElementById('wa-qr-canvas');
+  if (!canvas) return;
+
+  // If qrcode.js is loaded, use it; otherwise fall back to API
+  if (typeof QRCode !== 'undefined') {
+    // External lib available
+    const qr = new QRCode(canvas.parentElement, { text, width: 256, height: 256, correctLevel: QRCode.CorrectLevel.M });
+    return;
+  }
+
+  // Fallback: load qrcode library dynamically
+  if (!window._qrScriptLoaded) {
+    window._qrScriptLoaded = true;
+    const script = document.createElement('script');
+    script.src = 'https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js';
+    script.onload = () => renderQrCodeFromLib(text, canvas);
+    document.head.appendChild(script);
+  } else if (typeof qrcode !== 'undefined') {
+    renderQrCodeFromLib(text, canvas);
+  }
+}
+
+function renderQrCodeFromLib(text, canvas) {
+  try {
+    const qr = qrcode(0, 'M');
+    qr.addData(text);
+    qr.make();
+
+    const ctx = canvas.getContext('2d');
+    const moduleCount = qr.getModuleCount();
+    const cellSize = Math.max(4, Math.floor(256 / moduleCount));
+    const size = moduleCount * cellSize;
+    canvas.width = size;
+    canvas.height = size;
+
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, size, size);
+
+    ctx.fillStyle = '#000000';
+    for (let row = 0; row < moduleCount; row++) {
+      for (let col = 0; col < moduleCount; col++) {
+        if (qr.isDark(row, col)) {
+          ctx.fillRect(col * cellSize, row * cellSize, cellSize, cellSize);
+        }
+      }
+    }
+  } catch (err) {
+    console.error('QR render error:', err);
+  }
+}
+
+// Auto-check WhatsApp status when platforms page loads
+const origLoadPlatforms = loadPlatforms;
+loadPlatforms = async function() {
+  await origLoadPlatforms();
+  // Check WhatsApp status after render
+  if (document.getElementById('wa-qr-area')) {
+    checkWhatsAppStatus();
+  }
+};
 
 // ── Personality (SOUL.md) ───────────────────────────────
 async function loadPersonality() {

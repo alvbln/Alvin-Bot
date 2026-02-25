@@ -7,7 +7,7 @@
  * Setup:
  * 1. npm install @whiskeysockets/baileys
  * 2. Set WHATSAPP_ENABLED=true in .env
- * 3. Scan QR code on first run
+ * 3. Scan QR code on first run (shown in Web UI + Terminal logs)
  *
  * Auth data saved to data/whatsapp-auth/
  */
@@ -21,12 +21,35 @@ import { fileURLToPath } from "url";
 const BOT_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const AUTH_DIR = resolve(BOT_ROOT, "data", "whatsapp-auth");
 
+// ── Global WhatsApp State (accessible from Web API) ─────
+export interface WhatsAppState {
+  status: "disconnected" | "qr" | "connecting" | "connected" | "logged_out";
+  qrString: string | null; // Raw QR string for rendering
+  qrTimestamp: number | null; // When QR was generated
+  connectedAt: number | null;
+  error: string | null;
+}
+
+let _whatsappState: WhatsAppState = {
+  status: "disconnected",
+  qrString: null,
+  qrTimestamp: null,
+  connectedAt: null,
+  error: null,
+};
+
+export function getWhatsAppState(): WhatsAppState {
+  return { ..._whatsappState };
+}
+
 export class WhatsAppAdapter implements PlatformAdapter {
   readonly platform = "whatsapp";
   private handler: MessageHandler | null = null;
   private sock: any = null;
 
   async start(): Promise<void> {
+    _whatsappState = { status: "connecting", qrString: null, qrTimestamp: null, connectedAt: null, error: null };
+
     try {
       // Dynamic import — baileys is optional
       // @ts-ignore — @whiskeysockets/baileys is an optional dependency
@@ -47,18 +70,27 @@ export class WhatsAppAdapter implements PlatformAdapter {
       this.sock.ev.on("connection.update", (update: any) => {
         const { connection, lastDisconnect, qr } = update;
         if (qr) {
-          console.log("📱 WhatsApp: Scan QR code above to connect");
+          _whatsappState.status = "qr";
+          _whatsappState.qrString = qr;
+          _whatsappState.qrTimestamp = Date.now();
+          console.log("📱 WhatsApp: Scan QR code to connect (also available in Web UI → Platforms)");
         }
         if (connection === "close") {
           const statusCode = lastDisconnect?.error?.output?.statusCode;
           if (statusCode !== DisconnectReason.loggedOut) {
+            _whatsappState.status = "connecting";
             console.log("WhatsApp reconnecting...");
             this.start(); // Reconnect
           } else {
+            _whatsappState.status = "logged_out";
+            _whatsappState.qrString = null;
             console.log("WhatsApp logged out. Delete data/whatsapp-auth/ and restart to re-link.");
           }
         }
         if (connection === "open") {
+          _whatsappState.status = "connected";
+          _whatsappState.qrString = null;
+          _whatsappState.connectedAt = Date.now();
           console.log("📱 WhatsApp adapter connected");
         }
       });
