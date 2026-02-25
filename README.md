@@ -82,7 +82,7 @@ Download the pre-built installer for your platform:
 
 | Platform | File | Architecture |
 |----------|------|-------------|
-| macOS | `Alvin Bot-3.0.0-arm64.dmg` | Apple Silicon (M1+) |
+| macOS | [`Alvin Bot-3.0.1-arm64.dmg`](https://github.com/alvbln/alvin-bot/releases/download/v3.0.1/Alvin.Bot-3.0.1-arm64.dmg) | Apple Silicon (M1+) |
 | Windows | Coming soon | x64 |
 | Linux | Coming soon | x64 |
 
