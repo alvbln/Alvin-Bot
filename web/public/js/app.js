@@ -823,10 +823,49 @@ async function checkWhatsAppStatus() {
     dot.textContent = icon;
     text.textContent = label;
 
+    // Update the top-right badge
+    const badge = document.getElementById('badge-whatsapp');
+    if (badge) {
+      if (state.status === 'connected') {
+        badge.className = 'badge badge-green';
+        badge.textContent = '🟢 Verbunden';
+      } else if (state.status === 'qr') {
+        badge.className = 'badge badge-yellow';
+        badge.textContent = '📱 QR scannen';
+      } else if (state.status === 'connecting') {
+        badge.className = 'badge badge-yellow';
+        badge.textContent = '🟡 Verbinde...';
+      } else if (state.status === 'error') {
+        badge.className = 'badge badge-red';
+        badge.textContent = '🔴 Fehler';
+      }
+    }
+
+    // Update inline status next to buttons
+    const liveEl = document.getElementById('platform-live-whatsapp');
+    if (liveEl) {
+      const infoStr = state.info ? ` (${state.info})` : '';
+      if (state.status === 'connected') {
+        liveEl.innerHTML = `<span style="color:var(--green)">🟢 Verbunden${infoStr}</span>`;
+      } else if (state.status === 'qr') {
+        liveEl.innerHTML = `<span style="color:var(--fg2)">📱 QR bereit</span>`;
+      } else if (state.status === 'connecting') {
+        liveEl.innerHTML = `<span style="color:var(--fg2)">🟡 Verbinde...</span>`;
+      } else if (state.status === 'error') {
+        liveEl.innerHTML = `<span style="color:var(--red)">🔴 ${state.error || 'Fehler'}</span>`;
+      }
+    }
+
     if (state.status === 'qr' && state.qrString && qrContainer) {
       qrContainer.style.display = '';
       renderQrCode(state.qrString);
-      // Auto-poll while QR is shown
+      // Auto-poll while QR or connecting
+      if (!waStatusInterval) {
+        waStatusInterval = setInterval(checkWhatsAppStatus, 3000);
+      }
+    } else if (state.status === 'connecting') {
+      if (qrContainer) qrContainer.style.display = 'none';
+      // Keep polling during connecting phase
       if (!waStatusInterval) {
         waStatusInterval = setInterval(checkWhatsAppStatus, 3000);
       }

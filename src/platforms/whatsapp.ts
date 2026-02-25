@@ -106,7 +106,7 @@ export class WhatsAppAdapter implements PlatformAdapter {
       });
 
       // Ready
-      this.client.on("ready", () => {
+      this.client.on("ready", async () => {
         _whatsappState.status = "connected";
         _whatsappState.qrString = null;
         _whatsappState.connectedAt = Date.now();
@@ -114,6 +114,21 @@ export class WhatsAppAdapter implements PlatformAdapter {
         const info = this.client.info;
         _whatsappState.info = info?.pushname || info?.wid?.user || null;
         console.log(`📱 WhatsApp adapter connected (${_whatsappState.info || "unknown"})`);
+
+        // Send welcome ping to own number
+        try {
+          const myNumber = info?.wid?._serialized;
+          if (myNumber) {
+            await this.client.sendMessage(myNumber,
+              "🤖 *Mr. Levin ist jetzt auf WhatsApp verbunden!*\n\n" +
+              "Schreib mir eine Nachricht um zu beginnen.\n" +
+              "Tipp: In Gruppenchats erwähne mich mit @Mr.Levin"
+            );
+            console.log("📱 WhatsApp: Welcome ping sent");
+          }
+        } catch (err) {
+          console.log("WhatsApp: Could not send welcome ping:", err instanceof Error ? err.message : err);
+        }
       });
 
       // Auth failure
