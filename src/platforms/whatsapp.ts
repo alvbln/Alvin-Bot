@@ -256,42 +256,31 @@ export class WhatsAppAdapter implements PlatformAdapter {
     const chat = await msg.getChat();
     const isGroup = chat.isGroup;
 
-    // ── Group chats: skip own messages ─────────────────────────────────────
-    if (msg.fromMe && isGroup) return;
+    // ── WhatsApp runs as YOUR account — only respond in self-chat ────────
+    // CRITICAL: Never respond anywhere else. Not in private chats,
+    // not in groups (even with mentions). This is YOUR WhatsApp account,
+    // not a separate bot. Responding elsewhere would be creepy/confusing.
+    if (!this.isSelfChat(chat)) return;
 
-    // ── Direct chats: only respond in self-chat ───────────────────────────
-    // whatsapp-web.js runs as YOUR account (not a separate bot).
-    // CRITICAL: Never respond in private chats with other people!
-    // - fromMe=true in non-self-chat → you're messaging a friend → ignore
-    // - fromMe=false in any chat → someone messaged you → ignore
-    // - Only respond in self-chat (Note to Self / Saved Messages)
-    if (!isGroup) {
-      if (!this.isSelfChat(chat)) return;
-    }
+    // Skip bot's own responses (loop prevention already handled above,
+    // but double-check: only process fromMe messages in self-chat)
+    // fromMe in self-chat = user typing from phone = process it
 
     // ── Build incoming message ────────────────────────────────────────────
-    const contact = msg.fromMe ? null : await msg.getContact().catch(() => null);
-    const userName = msg.fromMe
-      ? (this.client?.info?.pushname || "User")
-      : (contact?.pushname || contact?.name || contact?.number || "Unknown");
-
     const incoming: IncomingMessage = {
       platform: "whatsapp",
       messageId: msgId,
       chatId: chat.id._serialized || "",
-      userId: msg.fromMe ? "self" : (contact?.id?._serialized || "unknown"),
-      userName,
+      userId: "self",
+      userName: this.client?.info?.pushname || "User",
       text,
-      isGroup,
-      isMention: isGroup && (text.includes("@Mr.Levin") || text.includes("@bot")),
+      isGroup: false,
+      isMention: false,
       isReplyToBot: false,
       replyToText: msg.hasQuotedMsg
         ? await msg.getQuotedMessage().then((q: any) => q?.body).catch(() => undefined)
         : undefined,
     };
-
-    // In groups: only respond when mentioned or replied to
-    if (isGroup && !incoming.isMention && !incoming.isReplyToBot) return;
 
     await this.handler(incoming);
   }
