@@ -61,7 +61,15 @@ Alvin Bot is an open-source, self-hosted AI agent that lives where you chat. Bui
 
 That's it. No paid subscriptions required — free AI providers available.
 
-### Setup
+### Option 1: npm (recommended)
+
+```bash
+npm install -g alvin-bot
+alvin-bot setup          # Interactive wizard
+alvin-bot start          # Start the bot
+```
+
+### Option 2: From source
 
 ```bash
 git clone https://github.com/alvbln/alvin-bot.git
