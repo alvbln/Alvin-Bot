@@ -694,7 +694,7 @@ async function handleAPI(req: http.IncomingMessage, res: http.ServerResponse, ur
   // ── WhatsApp Group Management API ────────────────────────────────────
 
   // GET /api/whatsapp/groups — list all WhatsApp groups (live from WA)
-  if (urlPath === "/api/whatsapp/groups") {
+  if (urlPath === "/api/whatsapp/groups" && req.method === "GET") {
     try {
       const { getWhatsAppAdapter } = await import("../platforms/whatsapp.js");
       const adapter = getWhatsAppAdapter();
@@ -729,7 +729,7 @@ async function handleAPI(req: http.IncomingMessage, res: http.ServerResponse, ur
   }
 
   // GET /api/whatsapp/group-rules — get all configured group rules
-  if (urlPath === "/api/whatsapp/group-rules") {
+  if (urlPath === "/api/whatsapp/group-rules" && req.method === "GET") {
     const { getGroupRules } = await import("../platforms/whatsapp.js");
     res.end(JSON.stringify({ rules: getGroupRules() }));
     return;
