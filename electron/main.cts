@@ -2,6 +2,7 @@ import { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, dialog, Notificat
 import { ChildProcess, fork } from 'child_process';
 import * as path from 'path';
 import * as fs from 'fs';
+import * as http from 'http';
 import { autoUpdater, UpdateInfo } from 'electron-updater';
 
 // Track quit intent (tray minimize vs real quit)
@@ -110,6 +111,33 @@ function stopBot(): Promise<void> {
   });
 }
 
+// ── Wait for Server ─────────────────────────────────────────────────
+
+function waitForServer(port: string, timeoutMs = 15000): Promise<boolean> {
+  const start = Date.now();
+  return new Promise((resolve) => {
+    const check = () => {
+      if (Date.now() - start > timeoutMs) {
+        sendLog('[electron] Server startup timed out');
+        resolve(false);
+        return;
+      }
+      const req = http.get(`http://localhost:${port}/`, (res) => {
+        res.resume();
+        resolve(true);
+      });
+      req.on('error', () => {
+        setTimeout(check, 300);
+      });
+      req.setTimeout(1000, () => {
+        req.destroy();
+        setTimeout(check, 300);
+      });
+    };
+    check();
+  });
+}
+
 // ── IPC Handlers ────────────────────────────────────────────────────
 
 ipcMain.handle('bot:get-status', () => botStatus);
@@ -122,12 +150,14 @@ ipcMain.handle('bot:restart', async () => {
 
 // ── Window ──────────────────────────────────────────────────────────
 
-function createWindow() {
-  const hasEnv = fs.existsSync(envPath);
-  const startUrl = hasEnv
-    ? `http://localhost:${WEB_PORT}`
-    : `http://localhost:${WEB_PORT}/login.html`;
+function getSetupPagePath(): string {
+  const setupInBuild = isDev
+    ? path.join(projectRoot, 'build', 'setup.html')
+    : path.join(process.resourcesPath, 'build', 'setup.html');
+  return setupInBuild;
+}
 
+function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1280,
     height: 800,
@@ -139,8 +169,7 @@ function createWindow() {
     },
   });
 
-  mainWindow.loadURL(startUrl);
-
+  // Don't load URL yet — app.on('ready') handles that after bot startup
   mainWindow.on('close', (event) => {
     // Minimize to tray instead of quitting
     if (tray && !isQuitting) {
@@ -152,6 +181,53 @@ function createWindow() {
   mainWindow.on('closed', () => {
     mainWindow = null;
   });
+}
+
+async function loadWindowContent() {
+  if (!mainWindow) return;
+
+  const hasEnv = fs.existsSync(envPath);
+
+  if (!hasEnv) {
+    // No .env → show local setup page (no server needed)
+    const setupPath = getSetupPagePath();
+    if (fs.existsSync(setupPath)) {
+      mainWindow.loadFile(setupPath);
+    } else {
+      // Fallback: inline HTML
+      mainWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(`
+        <!DOCTYPE html><html><head><meta charset="utf-8">
+        <style>body{font-family:-apple-system,sans-serif;background:#0f0f0f;color:#e0e0e0;display:flex;align-items:center;justify-content:center;height:100vh;margin:0}
+        .c{text-align:center;max-width:480px;padding:40px}.c h1{margin-bottom:16px}.c p{color:#888;line-height:1.6}
+        code{background:#242424;padding:2px 8px;border-radius:4px;font-size:0.9em}</style></head>
+        <body><div class="c"><h1>🤖 Alvin Bot</h1>
+        <p>No <code>.env</code> file found.<br><br>
+        Create a <code>.env</code> file in the app directory with your bot configuration, then restart the app.<br><br>
+        Run <code>alvin-bot setup</code> in terminal for guided setup.</p></div></body></html>
+      `)}`);
+    }
+    return;
+  }
+
+  // Has .env → bot should be running, wait for server
+  sendLog('[electron] Waiting for web server...');
+  const serverReady = await waitForServer(WEB_PORT);
+
+  if (serverReady) {
+    mainWindow.loadURL(`http://localhost:${WEB_PORT}`);
+  } else {
+    // Server didn't start in time — show error with retry
+    mainWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(`
+      <!DOCTYPE html><html><head><meta charset="utf-8">
+      <style>body{font-family:-apple-system,sans-serif;background:#0f0f0f;color:#e0e0e0;display:flex;align-items:center;justify-content:center;height:100vh;margin:0}
+      .c{text-align:center;max-width:480px;padding:40px}.c h1{margin-bottom:16px}.c p{color:#888;line-height:1.6}
+      button{background:#6c5ce7;color:white;border:none;border-radius:8px;padding:12px 24px;font-size:1em;cursor:pointer;margin-top:16px}
+      button:hover{opacity:0.9}</style></head>
+      <body><div class="c"><h1>⚠️ Server Timeout</h1>
+      <p>The bot server didn't start in time. Check your <code>.env</code> configuration and logs.</p>
+      <button onclick="location.reload()">Retry</button></div></body></html>
+    `)}`);
+  }
 }
 
 // ── Tray ────────────────────────────────────────────────────────────
@@ -364,7 +440,7 @@ app.on('ready', async () => {
   createWindow();
   setupAutoUpdater();
 
-  // Auto-start bot if .env exists
+  // Auto-start bot if .env exists, THEN load window content
   if (fs.existsSync(envPath)) {
     try {
       await startBot();
@@ -372,6 +448,9 @@ app.on('ready', async () => {
       sendLog(`[electron] Failed to auto-start bot: ${err}`);
     }
   }
+
+  // Load content after bot has had a chance to start
+  await loadWindowContent();
 });
 
 app.on('window-all-closed', () => {
