@@ -7,10 +7,13 @@
  * This is the platform-agnostic equivalent of message.ts (which is Telegram-specific).
  */
 
+import fs from "fs";
 import { getSession, addToHistory, trackProviderUsage } from "../services/session.js";
 import { getRegistry } from "../engine.js";
 import { buildSystemPrompt, buildSmartSystemPrompt } from "../services/personality.js";
 import { touchProfile } from "../services/users.js";
+import { transcribeAudio } from "../services/voice.js";
+import { config } from "../config.js";
 import type { QueryOptions } from "../providers/types.js";
 import type { IncomingMessage, PlatformAdapter } from "../platforms/types.js";
 
@@ -22,7 +25,39 @@ export async function handlePlatformMessage(
   msg: IncomingMessage,
   adapter: PlatformAdapter
 ): Promise<void> {
-  const text = msg.text?.trim();
+  let text = msg.text?.trim();
+
+  // ── Voice message: transcribe first ──────────────────────────────────
+  if (msg.media?.type === "voice" && msg.media.path) {
+    if (!config.apiKeys.groq) {
+      await adapter.sendText(msg.chatId, "⚠️ Voice nicht konfiguriert (GROQ_API_KEY fehlt).");
+      return;
+    }
+    try {
+      const transcript = await transcribeAudio(msg.media.path);
+      // Clean up temp file
+      fs.unlink(msg.media.path, () => {});
+
+      if (!transcript.trim()) {
+        await adapter.sendText(msg.chatId, "Konnte die Sprachnachricht nicht verstehen. 🤷");
+        return;
+      }
+
+      // Show what was understood
+      await adapter.sendText(msg.chatId, `🎙️ _"${transcript}"_`);
+
+      // Use transcript as the message text
+      text = transcript;
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : String(err);
+      console.error("Voice transcription error:", errMsg);
+      await adapter.sendText(msg.chatId, `⚠️ Sprachnachricht-Fehler: ${errMsg}`);
+      // Clean up temp file on error too
+      if (msg.media.path) fs.unlink(msg.media.path, () => {});
+      return;
+    }
+  }
+
   if (!text) return;
 
   // Use a numeric hash of the userId for session compatibility

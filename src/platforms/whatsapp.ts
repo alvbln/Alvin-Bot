@@ -255,7 +255,11 @@ export class WhatsAppAdapter implements PlatformAdapter {
     if (!this.handler) return;
 
     const text = msg.body?.trim();
-    if (!text) return;
+    const msgType = msg.type; // "chat", "ptt" (voice), "audio", "image", "video", etc.
+    const isVoice = msgType === "ptt" || msgType === "audio";
+
+    // Must have text OR be a voice message
+    if (!text && !isVoice) return;
 
     const msgId = msg.id?._serialized || "";
 
@@ -266,7 +270,7 @@ export class WhatsAppAdapter implements PlatformAdapter {
       return;
     }
     // Skip if text matches a recent bot response (backup: catches race conditions)
-    if (msg.fromMe && this.botSentTexts.has(text.substring(0, 100))) {
+    if (text && msg.fromMe && this.botSentTexts.has(text.substring(0, 100))) {
       return;
     }
 
@@ -283,8 +287,8 @@ export class WhatsAppAdapter implements PlatformAdapter {
     } else if (isGroup) {
       // Group chat: only if explicitly enabled
       if (!scope.allowGroups) return;
-      // In groups: only respond to @mentions
-      if (!text.includes("@Mr.Levin") && !text.includes("@bot")) return;
+      // In groups: only respond to @mentions (voice in groups always allowed if groups enabled)
+      if (!isVoice && text && !text.includes("@Mr.Levin") && !text.includes("@bot")) return;
       // Skip own messages in groups
       if (msg.fromMe) return;
     } else {
@@ -292,6 +296,35 @@ export class WhatsAppAdapter implements PlatformAdapter {
       if (!scope.allowDMs) return;
       // Skip own outgoing messages to other people
       if (msg.fromMe) return;
+    }
+
+    // ── Handle voice/audio: download media ───────────────────────────────
+    let mediaInfo: IncomingMessage["media"] = undefined;
+    if (isVoice) {
+      try {
+        const media = await msg.downloadMedia();
+        if (media?.data) {
+          // Save to temp file
+          const fs = await import("fs");
+          const path = await import("path");
+          const os = await import("os");
+          const tmpDir = path.join(os.tmpdir(), "alvin-bot");
+          if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true });
+
+          const ext = media.mimetype?.includes("ogg") ? "ogg" : "mp3";
+          const audioPath = path.join(tmpDir, `wa_voice_${Date.now()}.${ext}`);
+          fs.writeFileSync(audioPath, Buffer.from(media.data, "base64"));
+
+          mediaInfo = {
+            type: "voice",
+            path: audioPath,
+            mimeType: media.mimetype || "audio/ogg",
+          };
+          console.log(`📱 WhatsApp: Voice message downloaded → ${audioPath}`);
+        }
+      } catch (err) {
+        console.error("WhatsApp: Failed to download voice message:", err);
+      }
     }
 
     // ── Build incoming message ────────────────────────────────────────────
@@ -306,13 +339,14 @@ export class WhatsAppAdapter implements PlatformAdapter {
       chatId: chat.id._serialized || "",
       userId: isSelf ? "self" : (contact?.id?._serialized || "unknown"),
       userName,
-      text,
+      text: text || "",
       isGroup,
-      isMention: isGroup && (text.includes("@Mr.Levin") || text.includes("@bot")),
+      isMention: isGroup && !!text && (text.includes("@Mr.Levin") || text.includes("@bot")),
       isReplyToBot: false,
       replyToText: msg.hasQuotedMsg
         ? await msg.getQuotedMessage().then((q: any) => q?.body).catch(() => undefined)
         : undefined,
+      media: mediaInfo,
     };
 
     await this.handler(incoming);
