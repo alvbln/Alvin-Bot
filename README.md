@@ -22,9 +22,10 @@ Mr. Levin is an open-source, self-hosted AI agent that lives where you chat. Bui
 
 ### 💬 Multi-Platform
 - **Telegram** — Full-featured with streaming, inline keyboards, voice, photos, documents
-- **WhatsApp** — Via WhatsApp Web (self-chat as AI notepad, group mentions)
-- **Discord** — Server bot with mention/reply detection
-- **Signal** — Via signal-cli REST API
+- **WhatsApp** — Via WhatsApp Web: self-chat as AI notepad, group whitelist with per-contact access control, full media support (photos, docs, audio, video)
+- **WhatsApp Group Approval** — Owner gets approval requests via Telegram (or WhatsApp DM fallback) before the bot responds to group messages. Silent — group members see nothing.
+- **Discord** — Server bot with mention/reply detection, slash commands
+- **Signal** — Via signal-cli REST API with voice transcription
 - **Terminal** — Rich TUI with ANSI colors and streaming (`mr-levin tui`)
 - **Web UI** — Full dashboard with chat, settings, file manager, terminal
 
@@ -41,7 +42,7 @@ Mr. Levin is an open-source, self-hosted AI agent that lives where you chat. Bui
 ### 🖥️ Web Dashboard
 - **Live Chat** — WebSocket streaming, same experience as Telegram
 - **Model Switcher** — Change AI models on the fly
-- **Platform Setup** — Configure all messengers and providers via UI
+- **Platform Setup** — Configure all messengers and providers via UI, WhatsApp group management inline
 - **File Manager** — Browse, edit, create files in the working directory
 - **Memory Editor** — View and edit the agent's knowledge base
 - **Session Browser** — Inspect conversation history
@@ -320,14 +321,19 @@ mr-levin version   # Show version
   - ✅ Platform Manager refactor: all adapters via unified registration system
   - ✅ Cron notifications for all platforms (Telegram, WhatsApp, Discord, Signal)
   - ✅ PM2 auto-refresh on Maintenance page
-- [ ] **Phase 10** — npm publish (security audit, clean git history)
+  - ✅ WhatsApp group whitelist with per-contact access control
+  - ✅ Owner approval gate (Telegram → WhatsApp DM → Discord → Signal fallback)
+  - ✅ Full media processing: photos, documents, audio/voice, video across all platforms
+  - ✅ File Browser: create, edit, delete files with safety guards
+  - ✅ Git history sanitized (personal data removed via git-filter-repo)
+- [ ] **Phase 10** — npm publish (security audit)
 
 ---
 
 ## 🔒 Security
 
 - **User whitelist** — Only `ALLOWED_USERS` can interact with the bot
-- **Group approval** — New groups require admin approval before the bot responds
+- **WhatsApp group approval** — Per-group participant whitelist + owner approval gate via Telegram (with WhatsApp DM / Discord / Signal fallback). Group members never see the approval process.
 - **Self-hosted** — Your data stays on your machine
 - **No telemetry** — Zero tracking, zero analytics, zero phone-home
 - **Web UI auth** — Optional password protection for the dashboard
