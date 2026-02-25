@@ -50,9 +50,9 @@ const PROVIDERS = [
     needsCLI: false,
   },
   {
-    key: "google",
-    name: "Google Gemini",
-    desc: "Gemini 2.5 Flash/Pro, kostenloser Tier verfügbar",
+    key: "gemini-2.5-flash",
+    name: "Google Gemini (2.5 Flash)",
+    desc: "Schnell, kostenloser Tier verfügbar, Vision-Support",
     free: true,
     envKey: "GOOGLE_API_KEY",
     signup: "https://aistudio.google.com",

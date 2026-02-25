@@ -236,6 +236,11 @@ export function createRegistry(config: SimpleConfig): ProviderRegistry {
 
   // Auto-register Gemini if key is available
   if (config.apiKeys?.google) {
+    providers["google"] = {
+      ...PROVIDER_PRESETS["gemini-2.5-flash"],
+      name: "Google Gemini",
+      apiKey: config.apiKeys.google,
+    } as ProviderConfig;
     providers["gemini-2.5-pro"] = {
       ...PROVIDER_PRESETS["gemini-2.5-pro"],
       apiKey: config.apiKeys.google,
