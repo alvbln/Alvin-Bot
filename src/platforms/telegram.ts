@@ -31,6 +31,14 @@ export function getTelegramState(): TelegramState {
   return { ..._telegramState };
 }
 
+/** Called from index.ts when grammy bot connects (since we don't use TelegramAdapter yet) */
+export function setTelegramConnected(botName: string | null, botUsername: string | null): void {
+  _telegramState.status = "connected";
+  _telegramState.botName = botName;
+  _telegramState.botUsername = botUsername;
+  _telegramState.connectedAt = Date.now();
+}
+
 export class TelegramAdapter implements PlatformAdapter {
   readonly platform = "telegram";
   private bot: Bot;

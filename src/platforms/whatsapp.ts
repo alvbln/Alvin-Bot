@@ -47,7 +47,7 @@ export class WhatsAppAdapter implements PlatformAdapter {
   private handler: MessageHandler | null = null;
   private sock: any = null;
   private reconnectAttempts = 0;
-  private maxReconnects = 5;
+  private maxReconnects = 10;
 
   async start(): Promise<void> {
     if (this.reconnectAttempts === 0) {

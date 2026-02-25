@@ -173,9 +173,13 @@ setNotifyCallback(async (target, text) => {
 startScheduler();
 
 // Start
+import { setTelegramConnected } from "./platforms/telegram.js";
+
 await bot.start({
   onStart: () => {
-    console.log(`🤖 Mr. Levin v3.0.0 gestartet`);
+    const me = bot.botInfo;
+    setTelegramConnected(me.first_name, me.username);
+    console.log(`🤖 Mr. Levin v3.0.0 gestartet (@${me.username})`);
     console.log(`   Provider: ${registry.getActiveKey()}`);
     console.log(`   Users: ${config.allowedUsers.length} authorized`);
   },
