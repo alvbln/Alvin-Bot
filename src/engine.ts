@@ -54,6 +54,7 @@ export function initEngine(): ProviderRegistry {
     primary: config.primaryProvider,
     fallbacks: config.fallbackProviders.length > 0 ? config.fallbackProviders : undefined,
     apiKeys: {
+      groq: config.apiKeys.groq || undefined,
       openai: config.apiKeys.openai || undefined,
       google: config.apiKeys.google || undefined,
       nvidia: config.apiKeys.nvidia || undefined,

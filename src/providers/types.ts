@@ -124,6 +124,16 @@ export const PROVIDER_PRESETS: Record<string, Partial<ProviderConfig>> = {
     supportsStreaming: true,
   },
 
+  // Groq (fast inference, free tier)
+  "groq": {
+    type: "openai-compatible",
+    name: "Groq (Llama 3.3 70B)",
+    model: "llama-3.3-70b-versatile",
+    baseUrl: "https://api.groq.com/openai/v1",
+    supportsVision: false,
+    supportsStreaming: true,
+  },
+
   // OpenAI
   "gpt-4o": {
     type: "openai-compatible",

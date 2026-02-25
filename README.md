@@ -49,12 +49,11 @@ Mr. Levin is an open-source, self-hosted AI agent that lives where you chat. Bui
 
 ### Prerequisites
 
-- **Node.js ≥ 18**
+- **Node.js ≥ 18** — [nodejs.org](https://nodejs.org)
 - **A Telegram Bot Token** — Get one from [@BotFather](https://t.me/BotFather)
 - **Your Telegram User ID** — Get it from [@userinfobot](https://t.me/userinfobot)
 
-For full agent capabilities (tool use, file access, web search):
-- **Claude CLI** — `npm i -g @anthropic-ai/claude-code && claude login`
+That's it. No paid subscriptions required — free AI providers available.
 
 ### Setup
 
@@ -66,10 +65,10 @@ node bin/cli.js setup   # Interactive wizard
 npm run dev             # Start in dev mode
 ```
 
-The setup wizard will ask for:
-1. Your Telegram bot token
-2. Your Telegram user ID
-3. Optional API keys (Groq for voice, NVIDIA/Google for fallback models)
+The setup wizard walks you through:
+1. Telegram bot token & user ID
+2. **AI provider choice** — Groq (free), NVIDIA NIM (free), Google Gemini (free), OpenAI, OpenRouter, or Claude SDK
+3. Optional extras (voice, web password, WhatsApp)
 
 ### Docker
 

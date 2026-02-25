@@ -214,6 +214,14 @@ export function createRegistry(config: SimpleConfig): ProviderRegistry {
     } as ProviderConfig;
   }
 
+  // Auto-register Groq if key is available
+  if (config.apiKeys?.groq) {
+    providers["groq"] = {
+      ...PROVIDER_PRESETS["groq"],
+      apiKey: config.apiKeys.groq,
+    } as ProviderConfig;
+  }
+
   // Auto-register OpenAI models if key is available
   if (config.apiKeys?.openai) {
     providers["gpt-4o"] = {
