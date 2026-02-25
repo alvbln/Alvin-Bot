@@ -1227,13 +1227,13 @@ export function registerCommands(bot: Bot): void {
       const jobs = listJobs();
       if (jobs.length === 0) {
         await ctx.reply(
-          "⏰ *Cron Jobs*\n\nKeine Jobs konfiguriert.\n\n" +
+          "⏰ <b>Cron Jobs</b>\n\nKeine Jobs konfiguriert.\n\n" +
           "Erstellen:\n" +
-          "`/cron add 5m reminder Wasser trinken`\n" +
-          "`/cron add \"0 9 * * 1\" shell pm2 status`\n" +
-          "`/cron add 1h http https://api.example.com/health`\n\n" +
-          "_Verwalte Jobs auch im Web UI unter ⏰ Cron._",
-          { parse_mode: "Markdown" }
+          "<code>/cron add 5m reminder Wasser trinken</code>\n" +
+          "<code>/cron add \"0 9 * * 1\" shell pm2 status</code>\n" +
+          "<code>/cron add 1h http https://api.example.com/health</code>\n\n" +
+          "<i>Verwalte Jobs auch im Web UI unter ⏰ Cron.</i>",
+          { parse_mode: "HTML" }
         );
         return;
       }
@@ -1411,7 +1411,7 @@ export function registerCommands(bot: Bot): void {
       return;
     }
 
-    await ctx.reply("Unbekannter Cron-Befehl. Nutze `/cron` für Hilfe.", { parse_mode: "Markdown" });
+    await ctx.reply("Unbekannter Cron-Befehl. Nutze /cron für Hilfe.");
   });
 
   // Inline keyboard callbacks for cron
@@ -1422,12 +1422,14 @@ export function registerCommands(bot: Bot): void {
       await ctx.answerCallbackQuery(`${job.enabled ? "Aktiviert" : "Pausiert"}: ${job.name}`);
       // Refresh the cron list
       (ctx as any).match = "";
-      // Re-render the list message
+      // Re-render the list message (HTML to avoid Markdown * conflicts with cron expressions)
       const jobs = listJobs();
       const lines = jobs.map(j => {
         const status = j.enabled ? "🟢" : "⏸️";
         const next = j.enabled ? formatNextRun(j.nextRunAt) : "pausiert";
-        return `${status} *${j.name}* (${j.schedule})\n   Typ: ${j.type} | Nächst: ${next} | Runs: ${j.runCount}\n   ID: \`${j.id}\``;
+        const readable = humanReadableSchedule(j.schedule);
+        const recur = j.oneShot ? "⚡ Einmalig" : "🔄 " + readable;
+        return `${status} <b>${j.name}</b>\n   📅 ${recur} | Nächst: ${next}\n   Runs: ${j.runCount} | ID: <code>${j.id}</code>`;
       });
       const keyboard = new InlineKeyboard();
       for (const j of jobs) {
@@ -1435,7 +1437,7 @@ export function registerCommands(bot: Bot): void {
         keyboard.text(`🗑`, `cron:delete:${j.id}`);
         keyboard.row();
       }
-      await ctx.editMessageText(`⏰ *Cron Jobs (${jobs.length}):*\n\n${lines.join("\n\n")}`, { parse_mode: "Markdown", reply_markup: keyboard });
+      await ctx.editMessageText(`⏰ <b>Cron Jobs (${jobs.length}):</b>\n\n${lines.join("\n\n")}`, { parse_mode: "HTML", reply_markup: keyboard });
     }
   });
 
@@ -1443,14 +1445,15 @@ export function registerCommands(bot: Bot): void {
     const id = ctx.match![1];
     deleteJob(id);
     await ctx.answerCallbackQuery("Gelöscht");
-    // Refresh
+    // Refresh (HTML parse mode)
     const jobs = listJobs();
     if (jobs.length === 0) {
       await ctx.editMessageText("⏰ Keine Cron Jobs vorhanden.");
     } else {
       const lines = jobs.map(j => {
         const status = j.enabled ? "🟢" : "⏸️";
-        return `${status} *${j.name}* (${j.schedule})\n   ID: \`${j.id}\``;
+        const readable = humanReadableSchedule(j.schedule);
+        return `${status} <b>${j.name}</b>\n   📅 ${readable} | ID: <code>${j.id}</code>`;
       });
       const keyboard = new InlineKeyboard();
       for (const j of jobs) {
@@ -1458,7 +1461,7 @@ export function registerCommands(bot: Bot): void {
         keyboard.text(`🗑`, `cron:delete:${j.id}`);
         keyboard.row();
       }
-      await ctx.editMessageText(`⏰ *Cron Jobs (${jobs.length}):*\n\n${lines.join("\n\n")}`, { parse_mode: "Markdown", reply_markup: keyboard });
+      await ctx.editMessageText(`⏰ <b>Cron Jobs (${jobs.length}):</b>\n\n${lines.join("\n\n")}`, { parse_mode: "HTML", reply_markup: keyboard });
     }
   });
 
