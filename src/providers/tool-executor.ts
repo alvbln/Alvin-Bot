@@ -120,6 +120,73 @@ export const AGENT_TOOLS = [
       },
     },
   },
+  {
+    type: "function" as const,
+    function: {
+      name: "list_directory",
+      description: "List files and directories at a given path. Returns names, types (file/dir), and sizes. Use for: exploring project structures, finding files, checking what exists.",
+      parameters: {
+        type: "object",
+        properties: {
+          path: {
+            type: "string",
+            description: "Directory path to list (default: current working directory)"
+          },
+          recursive: {
+            type: "boolean",
+            description: "List recursively (max 3 levels deep, default: false)"
+          }
+        },
+        required: [],
+      },
+    },
+  },
+  {
+    type: "function" as const,
+    function: {
+      name: "python_execute",
+      description: "Execute a Python 3 script and return stdout/stderr. Use for: data processing, creating Excel/CSV files, complex calculations, JSON/XML transformation, image processing, PDF generation, chart creation, and any task that benefits from Python libraries (openpyxl, pandas, matplotlib, Pillow, etc.).",
+      parameters: {
+        type: "object",
+        properties: {
+          code: {
+            type: "string",
+            description: "Python 3 code to execute. Can use installed pip packages. Use print() for output."
+          },
+          workingDir: {
+            type: "string",
+            description: "Working directory for the script (optional)"
+          }
+        },
+        required: ["code"],
+      },
+    },
+  },
+  {
+    type: "function" as const,
+    function: {
+      name: "edit_file",
+      description: "Make a precise edit to a file by replacing exact text. More surgical than write_file — preserves the rest of the file. Use for: fixing bugs, updating configs, changing specific lines.",
+      parameters: {
+        type: "object",
+        properties: {
+          path: {
+            type: "string",
+            description: "Path to the file to edit"
+          },
+          oldText: {
+            type: "string",
+            description: "Exact text to find (must match exactly including whitespace)"
+          },
+          newText: {
+            type: "string",
+            description: "Replacement text"
+          }
+        },
+        required: ["path", "oldText", "newText"],
+      },
+    },
+  },
 ];
 
 // ── Tool Execution ──────────────────────────────────────────────────────────
@@ -150,6 +217,12 @@ export function executeTool(
         return executeWebFetch(args.url, args.maxChars);
       case "web_search":
         return executeWebSearch(args.query);
+      case "list_directory":
+        return executeListDirectory(args.path || workingDir, args.recursive, workingDir);
+      case "python_execute":
+        return executePython(args.code, args.workingDir || workingDir);
+      case "edit_file":
+        return executeEditFile(args.path, args.oldText, args.newText, workingDir);
       default:
         return { name, result: `Unknown tool: ${name}`, error: true };
     }
@@ -296,5 +369,103 @@ function executeWebSearch(query: string): ToolResult {
     return { name: "web_search", result: results.join("\n") };
   } catch (err) {
     return { name: "web_search", result: `Search failed: ${err instanceof Error ? err.message : err}`, error: true };
+  }
+}
+
+function executeListDirectory(dirPath: string, recursive?: boolean, cwd?: string): ToolResult {
+  const fullPath = dirPath?.startsWith("/") ? dirPath : resolve(cwd || process.cwd(), dirPath || ".");
+  try {
+    if (!fs.existsSync(fullPath)) {
+      return { name: "list_directory", result: `Directory not found: ${fullPath}`, error: true };
+    }
+
+    const entries: string[] = [];
+
+    function listDir(dir: string, depth: number) {
+      const items = fs.readdirSync(dir, { withFileTypes: true });
+      const indent = "  ".repeat(depth);
+      for (const item of items) {
+        if (item.name.startsWith(".") && depth === 0 && items.length > 20) continue; // skip dotfiles in large dirs
+        const itemPath = resolve(dir, item.name);
+        if (item.isDirectory()) {
+          entries.push(`${indent}📁 ${item.name}/`);
+          if (recursive && depth < 3) {
+            listDir(itemPath, depth + 1);
+          }
+        } else {
+          try {
+            const stats = fs.statSync(itemPath);
+            const size = stats.size < 1024 ? `${stats.size}B`
+              : stats.size < 1048576 ? `${(stats.size / 1024).toFixed(1)}KB`
+              : `${(stats.size / 1048576).toFixed(1)}MB`;
+            entries.push(`${indent}📄 ${item.name} (${size})`);
+          } catch {
+            entries.push(`${indent}📄 ${item.name}`);
+          }
+        }
+      }
+    }
+
+    listDir(fullPath, 0);
+    const result = entries.length > 0
+      ? `${fullPath}:\n${entries.join("\n")}`
+      : `${fullPath}: (empty directory)`;
+
+    // Truncate if huge
+    return { name: "list_directory", result: result.length > 8000 ? result.substring(0, 8000) + "\n..." : result };
+  } catch (err) {
+    return { name: "list_directory", result: `Error listing directory: ${err instanceof Error ? err.message : err}`, error: true };
+  }
+}
+
+function executePython(code: string, cwd?: string): ToolResult {
+  try {
+    // Write code to temp file to avoid shell escaping issues
+    const tmpFile = `/tmp/mr-levin-py-${Date.now()}.py`;
+    fs.writeFileSync(tmpFile, code);
+
+    try {
+      const output = execSync(`python3 "${tmpFile}"`, {
+        encoding: "utf-8",
+        cwd: cwd || process.cwd(),
+        timeout: 60_000, // 60s for Python (may need to install packages, process data)
+        maxBuffer: 5 * 1024 * 1024, // 5MB
+        env: { ...process.env, LANG: "en_US.UTF-8", PYTHONIOENCODING: "utf-8" },
+      });
+
+      const truncated = output.length > 10000
+        ? output.substring(0, 10000) + `\n... (truncated, ${output.length} chars total)`
+        : output;
+      return { name: "python_execute", result: truncated || "(no output)" };
+    } finally {
+      // Cleanup temp file
+      try { fs.unlinkSync(tmpFile); } catch { /* ignore */ }
+    }
+  } catch (err: any) {
+    const stderr = err.stderr ? err.stderr.toString().substring(0, 3000) : "";
+    const stdout = err.stdout ? err.stdout.toString().substring(0, 3000) : "";
+    return {
+      name: "python_execute",
+      result: `Python error (exit ${err.status || 1}):\n${stderr}\n${stdout}`.trim(),
+      error: true,
+    };
+  }
+}
+
+function executeEditFile(filePath: string, oldText: string, newText: string, cwd?: string): ToolResult {
+  const fullPath = filePath.startsWith("/") ? filePath : resolve(cwd || process.cwd(), filePath);
+  try {
+    if (!fs.existsSync(fullPath)) {
+      return { name: "edit_file", result: `File not found: ${fullPath}`, error: true };
+    }
+    const content = fs.readFileSync(fullPath, "utf-8");
+    if (!content.includes(oldText)) {
+      return { name: "edit_file", result: `oldText not found in ${fullPath}. Make sure it matches exactly (including whitespace).`, error: true };
+    }
+    const newContent = content.replace(oldText, newText);
+    fs.writeFileSync(fullPath, newContent);
+    return { name: "edit_file", result: `✅ Edited ${fullPath} — replaced ${oldText.length} chars with ${newText.length} chars` };
+  } catch (err) {
+    return { name: "edit_file", result: `Edit failed: ${err instanceof Error ? err.message : err}`, error: true };
   }
 }

@@ -20,6 +20,7 @@ const TOOL_CAPABLE_PROVIDERS = [
   "api.groq.com",
   "generativelanguage.googleapis.com",
   "openrouter.ai",
+  "integrate.api.nvidia.com",
   "api.mistral.ai",
   "api.together.xyz",
   "api.fireworks.ai",

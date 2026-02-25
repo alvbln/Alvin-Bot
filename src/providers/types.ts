@@ -183,6 +183,7 @@ export const PROVIDER_PRESETS: Record<string, Partial<ProviderConfig>> = {
     baseUrl: "https://integrate.api.nvidia.com/v1",
     supportsVision: false,
     supportsStreaming: true,
+    supportsTools: true,
   },
   "nvidia-kimi-k2.5": {
     type: "openai-compatible",
@@ -191,6 +192,7 @@ export const PROVIDER_PRESETS: Record<string, Partial<ProviderConfig>> = {
     baseUrl: "https://integrate.api.nvidia.com/v1",
     supportsVision: true,
     supportsStreaming: true,
+    supportsTools: true,
   },
 
   // Ollama (local models)

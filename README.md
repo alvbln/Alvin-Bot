@@ -143,11 +143,13 @@ pm2 start ecosystem.config.cjs
 
 | Provider | Tool Use | Streaming | Vision | Auth |
 |----------|----------|-----------|--------|------|
-| Claude SDK | ✅ Full (Bash, Read, Write, Web) | ✅ | ✅ | Claude CLI (OAuth) |
-| OpenAI Compatible | ❌ Text only | ✅ | Varies | API Key |
-| Custom Models | ❌ Text only | ✅ | Varies | API Key |
+| Claude SDK | ✅ Full (native Bash, Read, Write, Web) | ✅ | ✅ | Claude CLI (OAuth) |
+| OpenAI, Groq, Gemini | ✅ Full (Shell, Files, Python, Web) | ✅ | Varies | API Key |
+| NVIDIA NIM | ✅ Full (Shell, Files, Python, Web) | ✅ | Varies | API Key (free) |
+| OpenRouter | ✅ Full (Shell, Files, Python, Web) | ✅ | ✅ | API Key |
+| Other OpenAI-compatible | ⚡ Auto-detect | ✅ | Varies | API Key |
 
-> **Note:** Only the Claude SDK provider gives Mr. Levin full agent capabilities (running commands, reading/writing files, web search). Other providers are text-chat only but still useful as fallbacks.
+> **Universal Tool Use:** Mr. Levin gives full agent capabilities to *any* provider that supports function calling — not just Claude. Shell commands, file operations, Python execution, web search, and more work across all major providers. If a provider doesn't support tool calls, Mr. Levin automatically falls back to text-only chat mode.
 
 ### Project Structure
 
@@ -266,6 +268,26 @@ mr-levin update    # Pull latest & rebuild
 mr-levin start     # Start the bot
 mr-levin version   # Show version
 ```
+
+---
+
+## 🗺️ Roadmap
+
+- [x] **Phase 1** — Multi-Model Engine (provider abstraction, fallback chains)
+- [x] **Phase 2** — Memory System (vector search, user profiles, smart context)
+- [x] **Phase 3** — Rich Interactions (video messages, browser automation, email)
+- [x] **Phase 4** — Plugins & Tools (plugin ecosystem, MCP client, custom tools)
+- [x] **Phase 5** — CLI Installer (setup wizard, Docker, health check)
+- [x] **Phase 6** — Web Dashboard (chat, settings, file manager, terminal)
+- [x] **Phase 7** — Multi-Platform (Telegram, Discord, WhatsApp, Signal adapters)
+- [x] **Phase 8** — Universal Tool Use *(NEW)* — All providers get agent powers:
+  - ✅ Shell execution, file read/write/edit, directory listing
+  - ✅ Python execution (Excel, PDF, charts, data processing)
+  - ✅ Web fetch & search
+  - ✅ Auto-detect function calling support per provider
+  - ✅ Graceful fallback to text-only for providers without tool support
+- [ ] **Phase 9** — Skill System (SKILL.md files for specialized tasks like video creation, stock analysis, complex multi-step workflows)
+- [ ] **Phase 10** — npm publish (security audit, clean git history)
 
 ---
 
