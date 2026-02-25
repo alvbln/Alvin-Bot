@@ -27,6 +27,7 @@ import { buildSystemPrompt, reloadSoul, getSoulContent } from "../services/perso
 import { config } from "../config.js";
 import type { QueryOptions, StreamChunk } from "../providers/types.js";
 import { handleSetupAPI } from "./setup-api.js";
+import { handleDoctorAPI } from "./doctor-api.js";
 
 const BOT_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const ENV_FILE = resolve(BOT_ROOT, ".env");
@@ -101,6 +102,10 @@ async function handleAPI(req: http.IncomingMessage, res: http.ServerResponse, ur
   // ── Setup APIs (platforms + models) ─────────────────
   const handled = await handleSetupAPI(req, res, urlPath, body);
   if (handled) return;
+
+  // ── Doctor & Backup APIs ──────────────────────────
+  const doctorHandled = await handleDoctorAPI(req, res, urlPath, body);
+  if (doctorHandled) return;
 
   // GET /api/status
   if (urlPath === "/api/status") {
@@ -333,12 +338,36 @@ async function handleAPI(req: http.IncomingMessage, res: http.ServerResponse, ur
           });
         res.end(JSON.stringify({ path: reqPath || ".", entries }));
       } else {
-        // Read file content (text files only, max 100KB)
-        if (stat.size > 100_000) {
-          res.end(JSON.stringify({ path: reqPath, content: `[File too large: ${(stat.size / 1024).toFixed(1)} KB]`, size: stat.size }));
+        // Read file content — text files up to 500KB
+        const ext = path.extname(basePath).toLowerCase();
+        const textExts = new Set([
+          ".md", ".txt", ".json", ".js", ".ts", ".jsx", ".tsx", ".css", ".html", ".htm",
+          ".xml", ".svg", ".yml", ".yaml", ".toml", ".ini", ".cfg", ".conf", ".env",
+          ".sh", ".bash", ".zsh", ".fish", ".py", ".rb", ".go", ".rs", ".java", ".kt",
+          ".c", ".cpp", ".h", ".hpp", ".cs", ".php", ".sql", ".graphql", ".prisma",
+          ".dockerfile", ".gitignore", ".gitattributes", ".editorconfig", ".prettierrc",
+          ".eslintrc", ".babelrc", ".npmrc", ".nvmrc", ".lock", ".log", ".csv", ".tsv",
+          ".mjs", ".cjs", ".mts", ".cts", ".vue", ".svelte", ".astro",
+        ]);
+        const isText = textExts.has(ext) || !ext || stat.size < 500_000;
+
+        if (stat.size > 500_000) {
+          res.end(JSON.stringify({ path: reqPath, content: `[File too large: ${(stat.size / 1024).toFixed(1)} KB — max 500 KB]`, size: stat.size }));
+        } else if (isText) {
+          try {
+            const content = fs.readFileSync(basePath, "utf-8");
+            // Quick binary check: if >10% null bytes, it's binary
+            const nullCount = [...content.slice(0, 1000)].filter(c => c === "\0").length;
+            if (nullCount > 100) {
+              res.end(JSON.stringify({ path: reqPath, content: null, size: stat.size, binary: true }));
+            } else {
+              res.end(JSON.stringify({ path: reqPath, content, size: stat.size }));
+            }
+          } catch {
+            res.end(JSON.stringify({ path: reqPath, content: null, size: stat.size, binary: true }));
+          }
         } else {
-          const content = fs.readFileSync(basePath, "utf-8");
-          res.end(JSON.stringify({ path: reqPath, content, size: stat.size }));
+          res.end(JSON.stringify({ path: reqPath, content: null, size: stat.size, binary: true }));
         }
       }
     } catch {

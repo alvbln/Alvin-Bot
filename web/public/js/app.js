@@ -730,10 +730,83 @@ async function saveSoul() {
 
 // ── Settings ────────────────────────────────────────────
 async function loadSettings() {
-  const res = await fetch(API + '/api/env');
-  const data = await res.json();
+  const [envRes, doctorRes, backupRes] = await Promise.all([
+    fetch(API + '/api/env'),
+    fetch(API + '/api/doctor'),
+    fetch(API + '/api/backups'),
+  ]);
+  const envData = await envRes.json();
+  const doctorData = await doctorRes.json();
+  const backupData = await backupRes.json();
 
-  const envHtml = data.vars.map(v => `
+  let html = '';
+
+  // ── Doctor / Health ──
+  const healthIcon = doctorData.healthy ? '🟢' : (doctorData.errorCount > 0 ? '🔴' : '🟡');
+  html += `<div class="card" style="margin-bottom:16px">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+      <span style="font-size:1.5em">${healthIcon}</span>
+      <div style="flex:1">
+        <h3 style="font-size:0.95em;text-transform:none;letter-spacing:0">🩺 System-Doktor</h3>
+        <div class="sub">${doctorData.errorCount} Fehler, ${doctorData.warnCount} Warnungen</div>
+      </div>
+      <button class="btn btn-sm btn-outline" onclick="loadSettings()">🔄 Prüfen</button>
+      ${doctorData.errorCount > 0 ? `<button class="btn btn-sm" onclick="repairAll()">🔧 Alles reparieren</button>` : ''}
+    </div>`;
+
+  for (const issue of doctorData.issues) {
+    const icons = { error: '❌', warning: '⚠️', info: 'ℹ️' };
+    const colors = { error: 'var(--red)', warning: 'var(--yellow)', info: 'var(--fg2)' };
+    html += `<div style="display:flex;align-items:center;gap:8px;padding:6px 0;font-size:0.85em;border-top:1px solid var(--bg3)">
+      <span style="color:${colors[issue.severity]}">${icons[issue.severity]}</span>
+      <span style="flex:1"><strong>${issue.category}:</strong> ${issue.message}</span>
+      ${issue.fixAction ? `<button class="btn btn-sm btn-outline" onclick="repairIssue('${issue.fixAction}')" title="${issue.fix || ''}">🔧 Fix</button>` : ''}
+    </div>`;
+  }
+  html += `</div>`;
+
+  // ── Backup & Restore ──
+  html += `<div class="card" style="margin-bottom:16px">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+      <span style="font-size:1.5em">💾</span>
+      <div style="flex:1">
+        <h3 style="font-size:0.95em;text-transform:none;letter-spacing:0">Backup & Wiederherstellung</h3>
+        <div class="sub">Sichere und stelle Config, Memory, Tools, SOUL.md wieder her</div>
+      </div>
+      <button class="btn btn-sm" onclick="createBackup()">📦 Backup erstellen</button>
+    </div>`;
+
+  if (backupData.backups.length > 0) {
+    for (const b of backupData.backups) {
+      const date = new Date(b.createdAt).toLocaleString('de-DE');
+      const size = b.size < 1024 ? b.size + ' B' : (b.size / 1024).toFixed(1) + ' KB';
+      html += `<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-top:1px solid var(--bg3);font-size:0.85em">
+        <span>📦</span>
+        <div style="flex:1">
+          <div style="font-weight:500;font-family:monospace">${b.id}</div>
+          <div style="color:var(--fg2);font-size:0.82em">${date} · ${b.fileCount} Dateien · ${size}</div>
+        </div>
+        <button class="btn btn-sm btn-outline" onclick="showBackupFiles('${b.id}')">📋 Dateien</button>
+        <button class="btn btn-sm btn-outline" onclick="restoreBackup('${b.id}')">♻️ Wiederherstellen</button>
+        <button class="btn btn-sm btn-outline" style="color:var(--red)" onclick="deleteBackup('${b.id}')">🗑</button>
+      </div>`;
+    }
+  } else {
+    html += `<div style="font-size:0.85em;color:var(--fg2);padding:8px 0;border-top:1px solid var(--bg3)">Noch keine Backups vorhanden.</div>`;
+  }
+  html += `<div id="backup-files-area" style="display:none;margin-top:8px;padding:8px;background:var(--bg3);border-radius:6px;font-size:0.82em"></div></div>`;
+
+  // ── Bot Controls ──
+  html += `<div class="card" style="margin-bottom:16px">
+    <h3 style="font-size:0.95em;text-transform:none;letter-spacing:0;margin-bottom:12px">🔧 Bot-Steuerung</h3>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn btn-sm" onclick="restartBot()">🔄 Bot neustarten</button>
+      <button class="btn btn-sm btn-outline" onclick="reconnectBot()">🔌 Reconnect</button>
+    </div>
+  </div>`;
+
+  // ── Environment Variables ──
+  const envHtml = envData.vars.map(v => `
     <div class="list-item">
       <div class="info">
         <div class="name" style="font-family:monospace;font-size:0.85em">${v.key}</div>
@@ -743,16 +816,106 @@ async function loadSettings() {
     </div>
   `).join('');
 
-  document.getElementById('settings-content').innerHTML = `
-    <div class="card" style="margin-bottom:16px">
-      <h3>Environment Variables</h3>
-      ${envHtml}
-      <div style="margin-top:12px;display:flex;gap:8px">
-        <button class="btn btn-sm" onclick="addEnvVar()">+ Variable hinzufügen</button>
-        <button class="btn btn-sm btn-danger" onclick="restartBot()">🔄 Bot neustarten</button>
-      </div>
+  html += `<div class="card" style="margin-bottom:16px">
+    <h3 style="font-size:0.95em;text-transform:none;letter-spacing:0;margin-bottom:8px">⚙️ Environment Variables</h3>
+    ${envHtml}
+    <div style="margin-top:12px;display:flex;gap:8px">
+      <button class="btn btn-sm" onclick="addEnvVar()">+ Variable hinzufügen</button>
     </div>
-  `;
+  </div>`;
+
+  document.getElementById('settings-content').innerHTML = html;
+}
+
+// ── Doctor & Backup ─────────────────────────────────────
+async function repairIssue(action) {
+  const res = await fetch(API + '/api/doctor/repair', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action }),
+  });
+  const data = await res.json();
+  toast(data.ok ? `✅ ${data.message}` : `❌ ${data.message}`, data.ok ? 'success' : 'error');
+  loadSettings();
+}
+
+async function repairAll() {
+  if (!confirm('Alle Probleme automatisch reparieren?')) return;
+  const res = await fetch(API + '/api/doctor/repair-all', { method: 'POST' });
+  const data = await res.json();
+  const ok = data.results.filter(r => r.ok).length;
+  const fail = data.results.filter(r => !r.ok).length;
+  toast(`${ok} repariert${fail > 0 ? `, ${fail} fehlgeschlagen` : ''}`, fail > 0 ? 'error' : 'success');
+  loadSettings();
+}
+
+async function createBackup() {
+  const name = prompt('Backup-Name (optional):', '');
+  toast('📦 Erstelle Backup...');
+  const res = await fetch(API + '/api/backups/create', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: name || undefined }),
+  });
+  const data = await res.json();
+  if (data.ok) {
+    toast(`✅ Backup "${data.id}" erstellt (${data.files.length} Dateien)`);
+    loadSettings();
+  } else {
+    toast('❌ ' + (data.error || 'Fehler'), 'error');
+  }
+}
+
+async function restoreBackup(id) {
+  if (!confirm(`Backup "${id}" wiederherstellen?\n\nAktuelle Config-Dateien werden überschrieben!\nBot-Neustart nötig danach.`)) return;
+  const res = await fetch(API + '/api/backups/restore', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ id }),
+  });
+  const data = await res.json();
+  if (data.ok || data.restored?.length > 0) {
+    toast(`♻️ ${data.restored.length} Dateien wiederhergestellt! Bot-Neustart nötig.`);
+    if (data.errors?.length > 0) toast(`⚠️ ${data.errors.length} Fehler`, 'error');
+    loadSettings();
+  } else {
+    toast('❌ ' + (data.errors?.[0] || 'Fehler'), 'error');
+  }
+}
+
+async function showBackupFiles(id) {
+  const area = document.getElementById('backup-files-area');
+  if (area.style.display !== 'none' && area.dataset.id === id) {
+    area.style.display = 'none';
+    return;
+  }
+  const res = await fetch(API + `/api/backups/${id}/files`);
+  const data = await res.json();
+  area.dataset.id = id;
+  area.style.display = '';
+  area.innerHTML = `<div style="font-weight:500;margin-bottom:6px">📋 Dateien in ${id}:</div>` +
+    data.files.map(f => `<div style="padding:2px 0;color:var(--fg2)">📄 ${f}</div>`).join('') +
+    `<div style="margin-top:8px"><button class="btn btn-sm btn-outline" onclick="document.getElementById('backup-files-area').style.display='none'">Schließen</button></div>`;
+}
+
+async function deleteBackup(id) {
+  if (!confirm(`Backup "${id}" unwiderruflich löschen?`)) return;
+  await fetch(API + '/api/backups/delete', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ id }),
+  });
+  toast('Gelöscht');
+  loadSettings();
+}
+
+async function restartBot() {
+  if (!confirm('Bot wirklich neustarten? Laufende Anfragen werden abgebrochen.')) return;
+  toast('🔄 Bot wird neugestartet...');
+  await fetch(API + '/api/bot/restart', { method: 'POST' });
+  setTimeout(() => { toast('Bot sollte gleich wieder verfügbar sein...'); connectWS(); }, 3000);
+}
+
+async function reconnectBot() {
+  toast('🔌 Reconnecting...');
+  if (ws) ws.close();
+  setTimeout(connectWS, 500);
 }
 
 function editEnvVar(key) {
@@ -819,10 +982,13 @@ async function navigateFiles(dir) {
 async function openFile(filePath) {
   const res = await fetch(API + '/api/files?path=' + encodeURIComponent(filePath));
   const data = await res.json();
-  if (data.content !== undefined) {
+  if (data.error) { toast(data.error, 'error'); return; }
+  if (data.content !== undefined && data.content !== null) {
     document.getElementById('file-editor-area').style.display = '';
     document.getElementById('file-edit-name').textContent = filePath;
     document.getElementById('file-editor').value = data.content;
+  } else {
+    toast('Datei kann nicht geöffnet werden (binär oder zu groß)', 'error');
   }
 }
 
