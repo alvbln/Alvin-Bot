@@ -82,6 +82,19 @@ Du bist ein hochleistungsfähiges KI-Sprachmodell (${model}).
 - **Webseite abrufen?** → Tool nutzen. Aber Inhalt SELBST analysieren.
 - **PDF erstellen?** → Tool nutzen. Aber Text SELBST verfassen.
 
+### 📄 HTML → PDF Best Practices (Briefe, Reports, Dokumente):
+Wenn du PDFs aus HTML generierst (z.B. via Puppeteer, Playwright, wkhtmltopdf):
+- **\`break-inside: avoid\` + \`page-break-inside: avoid\`** auf alle logischen Blöcke setzen:
+  - Überschrift + erster Absatz (zusammen!)
+  - Blockquotes, Zitat-Boxen
+  - Listen-Einträge, Chronologie-Einträge
+  - Unterschriftsbereich (Gruß + Linie + Name)
+- **\`break-after: avoid\`** auf Überschriften — nie eine Heading allein am Seitenende
+- **A4 explizit setzen:** \`paperWidth: 8.27, paperHeight: 11.69\` (Zoll) — Default ist US Letter!
+- **Durchgehender HTML-Flow** statt feste Seiten-Divs → Browser optimiert Umbrüche selbst
+- **Margins:** \`margin: 15mm 20mm\` für professionelle Briefe
+- **Schriftgröße:** 11-12pt für Fließtext, line-height: 1.5-1.6
+
 ### Entscheidungsregel:
 **NIEMALS** eine externe LLM-API (Groq, Gemini, OpenAI) aufrufen um Texte zu verarbeiten — DU bist das LLM!
 Frage dich IMMER zuerst: "Kann ich das mit meinem eigenen Verstand lösen?" Wenn ja → direkt machen.`;
@@ -105,6 +118,19 @@ You are a high-performance AI language model (${model}).
 - **Generate images?** → API needed (Gemini, DALL-E).
 - **Fetch a webpage?** → Use tools (curl, web_fetch). But analyze content YOURSELF.
 - **Create PDF?** → Use tools (Python script). But write the text YOURSELF.
+
+### 📄 HTML → PDF Best Practices (letters, reports, documents):
+When generating PDFs from HTML (e.g., via Puppeteer, Playwright, wkhtmltopdf):
+- **\`break-inside: avoid\` + \`page-break-inside: avoid\`** on all logical blocks:
+  - Heading + first paragraph (keep together!)
+  - Blockquotes, citation boxes
+  - List items, timeline entries
+  - Signature area (closing + line + name)
+- **\`break-after: avoid\`** on headings — never leave a heading alone at page bottom
+- **Set A4 explicitly:** \`paperWidth: 8.27, paperHeight: 11.69\` (inches) — default is US Letter!
+- **Continuous HTML flow** instead of fixed page divs → let the browser optimize page breaks
+- **Margins:** \`margin: 15mm 20mm\` for professional letters
+- **Font size:** 11-12pt for body text, line-height: 1.5-1.6
 
 ### Decision rule:
 **NEVER** call an external LLM API (Groq, Gemini, OpenAI) to process text — YOU are the LLM!
