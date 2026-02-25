@@ -124,7 +124,7 @@ export const PROVIDER_PRESETS: Record<string, Partial<ProviderConfig>> = {
     supportsStreaming: true,
   },
 
-  // Groq (fast inference, free tier)
+  // Groq (fast inference, free tier, supports function calling)
   "groq": {
     type: "openai-compatible",
     name: "Groq (Llama 3.3 70B)",
@@ -132,9 +132,10 @@ export const PROVIDER_PRESETS: Record<string, Partial<ProviderConfig>> = {
     baseUrl: "https://api.groq.com/openai/v1",
     supportsVision: false,
     supportsStreaming: true,
+    supportsTools: true,
   },
 
-  // OpenAI
+  // OpenAI (supports function calling)
   "gpt-4o": {
     type: "openai-compatible",
     name: "GPT-4o",
@@ -142,6 +143,7 @@ export const PROVIDER_PRESETS: Record<string, Partial<ProviderConfig>> = {
     baseUrl: "https://api.openai.com/v1",
     supportsVision: true,
     supportsStreaming: true,
+    supportsTools: true,
   },
   "gpt-4o-mini": {
     type: "openai-compatible",
@@ -150,9 +152,10 @@ export const PROVIDER_PRESETS: Record<string, Partial<ProviderConfig>> = {
     baseUrl: "https://api.openai.com/v1",
     supportsVision: true,
     supportsStreaming: true,
+    supportsTools: true,
   },
 
-  // Google Gemini (via OpenAI-compatible endpoint)
+  // Google Gemini (via OpenAI-compatible endpoint, supports function calling)
   "gemini-2.5-pro": {
     type: "openai-compatible",
     name: "Gemini 2.5 Pro",
@@ -160,6 +163,7 @@ export const PROVIDER_PRESETS: Record<string, Partial<ProviderConfig>> = {
     baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai",
     supportsVision: true,
     supportsStreaming: true,
+    supportsTools: true,
   },
   "gemini-2.5-flash": {
     type: "openai-compatible",
@@ -168,6 +172,7 @@ export const PROVIDER_PRESETS: Record<string, Partial<ProviderConfig>> = {
     baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai",
     supportsVision: true,
     supportsStreaming: true,
+    supportsTools: true,
   },
 
   // NVIDIA NIM (150+ free models)
@@ -198,7 +203,7 @@ export const PROVIDER_PRESETS: Record<string, Partial<ProviderConfig>> = {
     supportsStreaming: true,
   },
 
-  // OpenRouter (any model, one API)
+  // OpenRouter (any model, one API, supports function calling)
   "openrouter": {
     type: "openai-compatible",
     name: "OpenRouter",
@@ -206,5 +211,6 @@ export const PROVIDER_PRESETS: Record<string, Partial<ProviderConfig>> = {
     baseUrl: "https://openrouter.ai/api/v1",
     supportsVision: true,
     supportsStreaming: true,
+    supportsTools: true,
   },
 };
