@@ -414,7 +414,7 @@ alvin-bot version   # Show version
   - [x] macOS `.dmg` build via electron-builder (arm64, 151 MB)
   - [ ] Windows `.exe` (NSIS) via electron-builder
   - [ ] Linux `.AppImage` + `.deb` via electron-builder
-  - [ ] Auto-update mechanism (electron-updater)
+  - [x] Auto-update mechanism (electron-updater)
   - [ ] GUI Setup Wizard (provider selection, Telegram token, first-run experience)
   - [ ] Homebrew formula (`brew install alvin-bot`)
   - [ ] Scoop manifest for Windows

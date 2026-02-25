@@ -7,6 +7,13 @@ export interface AlvinBotAPI {
   restartBot: () => Promise<void>;
   onStatusChange: (callback: (status: string) => void) => () => void;
   onLog: (callback: (line: string) => void) => () => void;
+  // Auto-Update
+  checkForUpdates: () => Promise<{ status: string }>;
+  installUpdate: () => Promise<{ status: string }>;
+  getUpdateStatus: () => Promise<string>;
+  onUpdateAvailable: (callback: (info: { version: string }) => void) => () => void;
+  onUpdateDownloaded: (callback: (info: { version: string }) => void) => () => void;
+  onUpdateStatusChange: (callback: (status: string) => void) => () => void;
 }
 
 contextBridge.exposeInMainWorld('alvinBot', {
@@ -27,5 +34,24 @@ contextBridge.exposeInMainWorld('alvinBot', {
     return () => {
       ipcRenderer.removeListener('bot:log', listener);
     };
+  },
+  // Auto-Update
+  checkForUpdates: () => ipcRenderer.invoke('update:check'),
+  installUpdate: () => ipcRenderer.invoke('update:install'),
+  getUpdateStatus: () => ipcRenderer.invoke('update:get-status'),
+  onUpdateAvailable: (callback: (info: { version: string }) => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, info: { version: string }) => callback(info);
+    ipcRenderer.on('update:available', listener);
+    return () => { ipcRenderer.removeListener('update:available', listener); };
+  },
+  onUpdateDownloaded: (callback: (info: { version: string }) => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, info: { version: string }) => callback(info);
+    ipcRenderer.on('update:downloaded', listener);
+    return () => { ipcRenderer.removeListener('update:downloaded', listener); };
+  },
+  onUpdateStatusChange: (callback: (status: string) => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, status: string) => callback(status);
+    ipcRenderer.on('update:status-changed', listener);
+    return () => { ipcRenderer.removeListener('update:status-changed', listener); };
   },
 } satisfies AlvinBotAPI);

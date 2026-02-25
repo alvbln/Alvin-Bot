@@ -1,7 +1,8 @@
-import { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain } from 'electron';
+import { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, dialog, Notification } from 'electron';
 import { ChildProcess, fork } from 'child_process';
 import * as path from 'path';
 import * as fs from 'fs';
+import { autoUpdater, UpdateInfo } from 'electron-updater';
 
 // Track quit intent (tray minimize vs real quit)
 let isQuitting = false;
@@ -205,6 +206,23 @@ function updateTrayMenu() {
     },
     { type: 'separator' },
     {
+      label: updateStatus === 'checking' ? 'Checking for Updates...' :
+             updateStatus === 'available' || updateStatus === 'downloading' ? 'Update Downloading...' :
+             updateStatus === 'ready' ? '⬆ Install Update & Restart' :
+             updateStatus === 'up-to-date' ? '✓ Up to Date' :
+             'Check for Updates',
+      enabled: updateStatus !== 'checking' && updateStatus !== 'downloading',
+      click: () => {
+        if (updateStatus === 'ready') {
+          isQuitting = true;
+          autoUpdater.quitAndInstall();
+        } else if (app.isPackaged) {
+          autoUpdater.checkForUpdatesAndNotify();
+        }
+      },
+    },
+    { type: 'separator' },
+    {
       label: 'Quit',
       click: () => {
         isQuitting = true;
@@ -233,11 +251,118 @@ function createTray() {
   });
 }
 
+// ── Auto-Update ─────────────────────────────────────────────────────
+
+type UpdateStatus = 'idle' | 'checking' | 'available' | 'downloading' | 'ready' | 'up-to-date' | 'error';
+let updateStatus: UpdateStatus = 'idle';
+let updateCheckInterval: ReturnType<typeof setInterval> | null = null;
+
+function setUpdateStatus(status: UpdateStatus) {
+  updateStatus = status;
+  mainWindow?.webContents.send('update:status-changed', status);
+  updateTrayMenu();
+}
+
+function setupAutoUpdater() {
+  // Disable auto-update in dev mode
+  if (!app.isPackaged) {
+    sendLog('[electron] Auto-update disabled in dev mode');
+    return;
+  }
+
+  autoUpdater.autoDownload = true;
+  autoUpdater.autoInstallOnAppQuit = true;
+
+  autoUpdater.on('checking-for-update', () => {
+    sendLog('[electron] Checking for updates...');
+    setUpdateStatus('checking');
+  });
+
+  autoUpdater.on('update-available', (info: UpdateInfo) => {
+    sendLog(`[electron] Update available: v${info.version}`);
+    setUpdateStatus('available');
+    mainWindow?.webContents.send('update:available', { version: info.version });
+    if (Notification.isSupported()) {
+      new Notification({
+        title: 'Update Available',
+        body: `Alvin Bot v${info.version} is available and downloading...`,
+      }).show();
+    }
+  });
+
+  autoUpdater.on('update-not-available', () => {
+    sendLog('[electron] App is up to date');
+    setUpdateStatus('up-to-date');
+    // Reset to idle after 10s
+    setTimeout(() => { if (updateStatus === 'up-to-date') setUpdateStatus('idle'); }, 10000);
+  });
+
+  autoUpdater.on('download-progress', (progress) => {
+    setUpdateStatus('downloading');
+    sendLog(`[electron] Download progress: ${Math.round(progress.percent)}%`);
+  });
+
+  autoUpdater.on('update-downloaded', (info: UpdateInfo) => {
+    sendLog(`[electron] Update downloaded: v${info.version}`);
+    setUpdateStatus('ready');
+    mainWindow?.webContents.send('update:downloaded', { version: info.version });
+    if (mainWindow && mainWindow.isVisible()) {
+      dialog.showMessageBox(mainWindow, {
+        type: 'info',
+        title: 'Update Ready',
+        message: `Alvin Bot v${info.version} has been downloaded.`,
+        detail: 'Restart now to install the update?',
+        buttons: ['Restart Now', 'Later'],
+        defaultId: 0,
+      }).then(({ response }) => {
+        if (response === 0) {
+          isQuitting = true;
+          autoUpdater.quitAndInstall();
+        }
+      });
+    }
+  });
+
+  autoUpdater.on('error', (err) => {
+    sendLog(`[electron] Auto-update error: ${err.message}`);
+    setUpdateStatus('error');
+    // Reset to idle after 30s
+    setTimeout(() => { if (updateStatus === 'error') setUpdateStatus('idle'); }, 30000);
+  });
+
+  // Initial check
+  autoUpdater.checkForUpdatesAndNotify();
+
+  // Check every 4 hours
+  updateCheckInterval = setInterval(() => {
+    autoUpdater.checkForUpdatesAndNotify();
+  }, 4 * 60 * 60 * 1000);
+}
+
+// ── Update IPC Handlers ─────────────────────────────────────────────
+
+ipcMain.handle('update:check', () => {
+  if (!app.isPackaged) return { status: 'dev-mode' };
+  autoUpdater.checkForUpdatesAndNotify();
+  return { status: 'checking' };
+});
+
+ipcMain.handle('update:install', () => {
+  if (updateStatus === 'ready') {
+    isQuitting = true;
+    autoUpdater.quitAndInstall();
+  }
+  return { status: updateStatus };
+});
+
+ipcMain.handle('update:get-status', () => updateStatus);
+
 // ── App Lifecycle ───────────────────────────────────────────────────
 
 app.on('ready', async () => {
   createTray();
   createWindow();
+  setupAutoUpdater();
 
   // Auto-start bot if .env exists
   if (fs.existsSync(envPath)) {
