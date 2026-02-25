@@ -11,6 +11,7 @@ import { fileURLToPath } from "url";
 import { buildMemoryContext } from "./memory.js";
 import { searchMemory } from "./embeddings.js";
 import { getToolSummary } from "./tool-discovery.js";
+import { buildSkillContext } from "./skills.js";
 
 // Resolve display name for the active provider
 function getActiveProviderLabel(): string {

@@ -11,6 +11,7 @@ import fs from "fs";
 import { getSession, addToHistory, trackProviderUsage } from "../services/session.js";
 import { getRegistry } from "../engine.js";
 import { buildSystemPrompt, buildSmartSystemPrompt } from "../services/personality.js";
+import { buildSkillContext } from "../services/skills.js";
 import { touchProfile } from "../services/users.js";
 import { trackAndAdapt } from "../services/language-detect.js";
 import { transcribeAudio } from "../services/voice.js";
@@ -105,9 +106,11 @@ export async function handlePlatformMessage(
     const activeProvider = registry.getActive();
     const isSDK = activeProvider.config.type === "claude-sdk";
 
-    const systemPrompt = isSDK
+    const skillContext = buildSkillContext(fullText);
+    const systemPrompt = (isSDK
       ? buildSystemPrompt(isSDK, session.language, msg.chatId)
-      : await buildSmartSystemPrompt(isSDK, session.language, fullText, msg.chatId);
+      : await buildSmartSystemPrompt(isSDK, session.language, fullText, msg.chatId)
+    ) + skillContext;
 
     const queryOpts: QueryOptions = {
       prompt: fullText,

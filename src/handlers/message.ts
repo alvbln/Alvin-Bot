@@ -7,6 +7,7 @@ import { getRegistry } from "../engine.js";
 import { textToSpeech } from "../services/voice.js";
 import type { QueryOptions } from "../providers/types.js";
 import { buildSystemPrompt, buildSmartSystemPrompt } from "../services/personality.js";
+import { buildSkillContext } from "../services/skills.js";
 import { isForwardingAllowed } from "../services/access.js";
 import { touchProfile } from "../services/users.js";
 import { trackAndAdapt } from "../services/language-detect.js";
@@ -104,11 +105,13 @@ export async function handleMessage(ctx: Context): Promise<void> {
     const activeProvider = registry.getActive();
     const isSDK = activeProvider.config.type === "claude-sdk";
 
-    // Build query options (with semantic memory search for non-SDK)
+    // Build query options (with semantic memory search for non-SDK + skill injection)
     const chatIdStr = String(ctx.chat!.id);
-    const systemPrompt = isSDK
+    const skillContext = buildSkillContext(text);
+    const systemPrompt = (isSDK
       ? buildSystemPrompt(isSDK, session.language, chatIdStr)
-      : await buildSmartSystemPrompt(isSDK, session.language, text, chatIdStr);
+      : await buildSmartSystemPrompt(isSDK, session.language, text, chatIdStr)
+    ) + skillContext;
 
     const queryOpts: QueryOptions & { _sessionState?: { messageCount: number; toolUseCount: number } } = {
       prompt: text,

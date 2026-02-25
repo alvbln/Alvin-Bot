@@ -1969,8 +1969,13 @@ async function loadMaintenance() {
 
   document.getElementById('maintenance-content').innerHTML = html;
 
-  // Auto-load PM2 status
+  // Auto-load PM2 status + auto-refresh every 10s while on maintenance page
   refreshPM2Status();
+  if (window._pm2RefreshInterval) clearInterval(window._pm2RefreshInterval);
+  window._pm2RefreshInterval = setInterval(() => {
+    if (document.getElementById('pm2-status')) refreshPM2Status();
+    else clearInterval(window._pm2RefreshInterval);
+  }, 10_000);
 }
 
 // ── Theme Toggle ────────────────────────────────────────

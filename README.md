@@ -286,7 +286,15 @@ mr-levin version   # Show version
   - ✅ Web fetch & search
   - ✅ Auto-detect function calling support per provider
   - ✅ Graceful fallback to text-only for providers without tool support
-- [ ] **Phase 9** — Skill System (SKILL.md files for specialized tasks like video creation, stock analysis, complex multi-step workflows)
+- [x] **Phase 9** — Skill System + Self-Awareness + Language Adaptation:
+  - ✅ SKILL.md files for specialized domain knowledge (email, data analysis, code, docs, research, sysadmin)
+  - ✅ Auto-matching: skill triggers activate contextual expertise on demand
+  - ✅ Self-Awareness Core: agent knows it IS the AI (no external LLM calls for text tasks)
+  - ✅ Automatic language detection and adaptation (EN default, learns user preference)
+  - ✅ Human-readable cron schedules + visual schedule builder in WebUI
+  - ✅ Platform Manager refactor: all adapters via unified registration system
+  - ✅ Cron notifications for all platforms (Telegram, WhatsApp, Discord, Signal)
+  - ✅ PM2 auto-refresh on Maintenance page
 - [ ] **Phase 10** — npm publish (security audit, clean git history)
 
 ---

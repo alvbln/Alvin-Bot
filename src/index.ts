@@ -15,9 +15,13 @@ import { startScheduler, stopScheduler, setNotifyCallback } from "./services/cro
 
 import { discoverTools } from "./services/tool-discovery.js";
 import { startHeartbeat } from "./services/heartbeat.js";
+import { loadSkills } from "./services/skills.js";
 
 // Discover available system tools (cached for prompt injection)
 discoverTools();
+
+// Load skill files
+loadSkills();
 
 // Initialize multi-model engine
 const registry = initEngine();
@@ -109,52 +113,20 @@ process.on("unhandledRejection", (reason) => {
   console.error("Unhandled rejection:", reason);
 });
 
-// Start optional platform adapters (WhatsApp, Discord, Signal)
+// Start optional platform adapters via Platform Manager
 async function startOptionalPlatforms() {
   const { handlePlatformMessage } = await import("./handlers/platform-message.js");
+  const { autoLoadPlatforms, startAllAdapters, getAllAdapters } = await import("./platforms/index.js");
 
-  // WhatsApp
-  if (process.env.WHATSAPP_ENABLED === "true") {
-    try {
-      const { WhatsAppAdapter } = await import("./platforms/whatsapp.js");
-      const wa = new WhatsAppAdapter();
-      wa.onMessage(async (msg) => {
-        await handlePlatformMessage(msg, wa);
-      });
-      await wa.start();
-      console.log("📱 WhatsApp platform started");
-    } catch (err) {
-      console.error("WhatsApp start failed:", err instanceof Error ? err.message : err);
-    }
-  }
-
-  // Discord
-  if (process.env.DISCORD_TOKEN) {
-    try {
-      const { DiscordAdapter } = await import("./platforms/discord.js");
-      const discord = new DiscordAdapter(process.env.DISCORD_TOKEN);
-      discord.onMessage(async (msg) => {
-        await handlePlatformMessage(msg, discord);
-      });
-      await discord.start();
-      console.log("🎮 Discord platform started");
-    } catch (err) {
-      console.error("Discord start failed:", err instanceof Error ? err.message : err);
-    }
-  }
-
-  // Signal
-  if (process.env.SIGNAL_API_URL && process.env.SIGNAL_NUMBER) {
-    try {
-      const { SignalAdapter } = await import("./platforms/signal.js");
-      const signal = new SignalAdapter(process.env.SIGNAL_API_URL, process.env.SIGNAL_NUMBER);
-      signal.onMessage(async (msg) => {
-        await handlePlatformMessage(msg, signal);
-      });
-      await signal.start();
-      console.log("🔒 Signal platform started");
-    } catch (err) {
-      console.error("Signal start failed:", err instanceof Error ? err.message : err);
+  const loaded = await autoLoadPlatforms();
+  if (loaded.length > 0) {
+    await startAllAdapters(async (msg) => {
+      const adapter = getAllAdapters().find(a => a.platform === msg.platform);
+      if (adapter) await handlePlatformMessage(msg, adapter);
+    });
+    const icons: Record<string, string> = { whatsapp: "📱", discord: "🎮", signal: "🔒" };
+    for (const p of loaded) {
+      console.log(`${icons[p] || "📡"} ${p.charAt(0).toUpperCase() + p.slice(1)} platform started`);
     }
   }
 }
@@ -166,16 +138,31 @@ const webServer = startWebServer();
 
 // Start Cron Scheduler
 setNotifyCallback(async (target, text) => {
-  if (target.platform === "telegram" && target.chatId) {
-    try {
+  try {
+    if (target.platform === "telegram" && target.chatId) {
       await bot.api.sendMessage(Number(target.chatId), text, { parse_mode: "Markdown" }).catch(() =>
-        bot.api.sendMessage(Number(target.chatId), text) // Fallback without markdown
+        bot.api.sendMessage(Number(target.chatId), text)
       );
-    } catch (err) {
-      console.error("Cron notify error:", err);
+    } else if (["whatsapp", "discord", "signal"].includes(target.platform) && target.chatId) {
+      // Route through platform adapters
+      const { getAdapter } = await import("./platforms/index.js");
+      const adapter = getAdapter(target.platform);
+      if (adapter) {
+        await adapter.sendText(target.chatId, text);
+      } else {
+        console.warn(`Cron notify: ${target.platform} adapter not loaded, falling back to Telegram`);
+        // Fallback: send to first allowed Telegram user
+        if (config.allowedUsers.length > 0) {
+          await bot.api.sendMessage(config.allowedUsers[0], `[${target.platform}] ${text}`).catch(() => {});
+        }
+      }
+    } else if (target.platform === "web") {
+      // Web notifications are handled by the WebSocket clients polling cron status
+      // Nothing to do here
     }
+  } catch (err) {
+    console.error(`Cron notify error (${target.platform}):`, err);
   }
-  // TODO: Add Discord/WhatsApp/Signal notify when adapters are wired
 });
 startScheduler();
 

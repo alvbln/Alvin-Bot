@@ -598,6 +598,23 @@ export async function handleSetupAPI(
     return true;
   }
 
+  // ── Skills ────────────────────────────────────────────
+
+  // GET /api/skills — list all loaded skills
+  if (urlPath === "/api/skills") {
+    const { getSkills } = await import("../services/skills.js");
+    const skills = getSkills().map(s => ({
+      id: s.id,
+      name: s.name,
+      description: s.description,
+      triggers: s.triggers,
+      priority: s.priority,
+      category: s.category,
+    }));
+    res.end(JSON.stringify({ skills }));
+    return true;
+  }
+
   // ── Cron Jobs ───────────────────────────────────────
 
   // GET /api/cron — list all jobs

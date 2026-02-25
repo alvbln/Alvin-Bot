@@ -1085,6 +1085,21 @@ export function registerCommands(bot: Bot): void {
     await ctx.reply(`🔌 *Geladene Plugins (${plugins.length}):*\n\n${lines.join("\n\n")}`, { parse_mode: "Markdown" });
   });
 
+  // ── Skills ─────────────────────────────────────────────
+
+  bot.command("skills", async (ctx) => {
+    const { getSkills } = await import("../services/skills.js");
+    const skills = getSkills();
+    if (skills.length === 0) {
+      await ctx.reply("🎯 No skills installed.\n\nAdd SKILL.md files to the `skills/` directory.", { parse_mode: "HTML" });
+      return;
+    }
+    const lines = skills.map(s =>
+      `🎯 <b>${s.name}</b> (${s.category})\n   ${s.description || "(no description)"}\n   Triggers: ${s.triggers.slice(0, 5).join(", ")}`
+    );
+    await ctx.reply(`🎯 <b>Skills (${skills.length}):</b>\n\n${lines.join("\n\n")}`, { parse_mode: "HTML" });
+  });
+
   // ── User Profiles ─────────────────────────────────────
 
   bot.command("users", async (ctx) => {
