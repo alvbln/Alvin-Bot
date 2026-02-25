@@ -32,3 +32,4 @@ data/wa-media/
 release/
 .prod-node-modules/
 .electron-prod/
+CLAUDE.md
