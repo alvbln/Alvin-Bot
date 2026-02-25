@@ -57,7 +57,7 @@ document.querySelectorAll('.nav-item').forEach(item => {
     const loaders = { dashboard: loadDashboard, memory: loadMemory, models: loadModels,
       sessions: loadSessions, plugins: loadPlugins, tools: loadTools, cron: loadCron,
       files: () => navigateFiles('.'), users: loadUsers, settings: loadSettings,
-      platforms: loadPlatforms, personality: loadPersonality };
+      platforms: loadPlatforms, personality: loadPersonality, maintenance: loadMaintenance };
     if (loaders[page]) loaders[page]();
   });
 });
@@ -1359,6 +1359,160 @@ document.getElementById('terminal-input').addEventListener('keydown', (e) => {
   if (e.key === 'ArrowUp') { e.preventDefault(); if (termIdx < termHist.length-1) e.target.value = termHist[++termIdx]; }
   if (e.key === 'ArrowDown') { e.preventDefault(); termIdx > 0 ? e.target.value = termHist[--termIdx] : (termIdx=-1, e.target.value=''); }
 });
+
+// ── Maintenance ─────────────────────────────────────────
+function loadMaintenance() { runDoctor(); loadBackups(); }
+
+async function runDoctor() {
+  const el = document.getElementById('doctor-results');
+  el.innerHTML = '<em>Scanne...</em>';
+  try {
+    const res = await fetch(API + '/api/doctor');
+    const data = await res.json();
+    const icons = { error: '🔴', warning: '🟡', info: '🔵' };
+    if (data.issues.length === 0) {
+      el.innerHTML = '✅ Alles in Ordnung!';
+      return;
+    }
+    el.innerHTML = data.issues.map(i =>
+      `<div style="display:flex;align-items:flex-start;gap:8px;padding:8px 0;border-bottom:1px solid var(--bg3)">
+        <span>${icons[i.severity] || '⚪'}</span>
+        <div style="flex:1">
+          <div><strong>${escapeHtml(i.category)}</strong> — ${escapeHtml(i.message)}</div>
+          ${i.fix ? `<div style="color:var(--fg3);font-size:0.9em;margin-top:2px">💡 ${escapeHtml(i.fix)}</div>` : ''}
+        </div>
+        ${i.fixAction ? `<button class="btn btn-sm btn-outline" onclick="repairIssue('${escapeHtml(i.fixAction)}')">🔧 Fix</button>` : ''}
+      </div>`
+    ).join('');
+    const summary = [];
+    if (data.errorCount) summary.push(`${data.errorCount} Fehler`);
+    if (data.warnCount) summary.push(`${data.warnCount} Warnungen`);
+    if (summary.length) el.innerHTML = `<div style="margin-bottom:8px;font-weight:600">${data.healthy ? '✅' : '⚠️'} ${summary.join(', ')}</div>` + el.innerHTML;
+  } catch (err) { el.innerHTML = `<span style="color:var(--danger,#e74c3c)">Fehler: ${err.message}</span>`; }
+}
+
+async function repairIssue(action) {
+  try {
+    const res = await fetch(API + '/api/doctor/repair', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action }),
+    });
+    const data = await res.json();
+    toast(data.ok ? data.message : (data.error || 'Fehlgeschlagen'), data.ok ? 'success' : 'error');
+    runDoctor();
+  } catch (err) { toast('Fehler: ' + err.message, 'error'); }
+}
+
+async function repairAll() {
+  try {
+    const res = await fetch(API + '/api/doctor/repair-all', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: '{}',
+    });
+    const data = await res.json();
+    const ok = data.results.filter(r => r.ok).length;
+    const fail = data.results.filter(r => !r.ok).length;
+    toast(fail ? `${ok} repariert, ${fail} fehlgeschlagen` : `${ok} Probleme behoben!`, fail ? 'error' : 'success');
+    runDoctor();
+  } catch (err) { toast('Fehler: ' + err.message, 'error'); }
+}
+
+async function loadBackups() {
+  const el = document.getElementById('backup-list');
+  try {
+    const res = await fetch(API + '/api/backups');
+    const data = await res.json();
+    if (!data.backups || data.backups.length === 0) {
+      el.innerHTML = '<div style="color:var(--fg3);padding:8px 0">Keine Backups vorhanden.</div>';
+      return;
+    }
+    el.innerHTML = data.backups.map(b => {
+      const date = new Date(b.createdAt).toLocaleString('de-DE');
+      const size = b.size < 1024 ? b.size + ' B' : b.size < 1048576 ? (b.size/1024).toFixed(1) + ' KB' : (b.size/1048576).toFixed(1) + ' MB';
+      return `<div style="display:flex;align-items:center;gap:8px;padding:10px 0;border-bottom:1px solid var(--bg3)">
+        <div style="flex:1">
+          <div style="font-weight:500">${escapeHtml(b.id)}</div>
+          <div style="color:var(--fg3);font-size:0.85em">${date} · ${b.fileCount} Dateien · ${size}</div>
+        </div>
+        <button class="btn btn-sm btn-outline" onclick="viewBackup('${escapeHtml(b.id)}')">📋 Details</button>
+        <button class="btn btn-sm" onclick="restoreBackup('${escapeHtml(b.id)}')">♻️ Restore</button>
+        <button class="btn btn-sm btn-outline" onclick="deleteBackup('${escapeHtml(b.id)}')" style="color:var(--danger,#e74c3c)">🗑️</button>
+      </div>`;
+    }).join('');
+  } catch (err) { el.innerHTML = `<span style="color:var(--danger,#e74c3c)">Fehler: ${err.message}</span>`; }
+}
+
+async function createBackup() {
+  const nameInput = document.getElementById('backup-name');
+  const name = nameInput.value.trim() || undefined;
+  try {
+    const res = await fetch(API + '/api/backups/create', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name }),
+    });
+    const data = await res.json();
+    if (data.ok) {
+      toast(`Backup "${data.id}" erstellt (${data.files.length} Dateien)`);
+      nameInput.value = '';
+      loadBackups();
+    } else { toast(data.error || 'Fehlgeschlagen', 'error'); }
+  } catch (err) { toast('Fehler: ' + err.message, 'error'); }
+}
+
+async function viewBackup(id) {
+  try {
+    const res = await fetch(API + `/api/backups/${encodeURIComponent(id)}/files`);
+    const data = await res.json();
+    const fileList = data.files.map(f => `  📄 ${f}`).join('\n');
+    alert(`Backup: ${id}\n\nDateien:\n${fileList}`);
+  } catch (err) { toast('Fehler: ' + err.message, 'error'); }
+}
+
+async function restoreBackup(id) {
+  if (!confirm(`Backup "${id}" wiederherstellen?\n\nAktuelle Konfiguration wird überschrieben!`)) return;
+  try {
+    // Let user choose specific files
+    const filesRes = await fetch(API + `/api/backups/${encodeURIComponent(id)}/files`);
+    const filesData = await filesRes.json();
+
+    const res = await fetch(API + '/api/backups/restore', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id }),
+    });
+    const data = await res.json();
+    if (data.ok || data.restored.length > 0) {
+      toast(`${data.restored.length} Dateien wiederhergestellt!`);
+      if (data.errors.length) toast(`${data.errors.length} Fehler: ${data.errors[0]}`, 'error');
+    } else { toast('Restore fehlgeschlagen: ' + (data.errors[0] || 'Unbekannter Fehler'), 'error'); }
+  } catch (err) { toast('Fehler: ' + err.message, 'error'); }
+}
+
+async function deleteBackup(id) {
+  if (!confirm(`Backup "${id}" endgültig löschen?`)) return;
+  try {
+    const res = await fetch(API + '/api/backups/delete', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id }),
+    });
+    const data = await res.json();
+    toast(data.ok ? 'Backup gelöscht' : 'Fehlgeschlagen', data.ok ? 'success' : 'error');
+    loadBackups();
+  } catch (err) { toast('Fehler: ' + err.message, 'error'); }
+}
+
+async function restartBot() {
+  if (!confirm('Bot wirklich neustarten? Verbindung wird kurz unterbrochen.')) return;
+  try {
+    await fetch(API + '/api/restart', { method: 'POST' });
+    toast('Bot wird neugestartet...', 'success');
+    document.getElementById('bot-status').innerHTML = '<span class="status-dot offline"></span> Restarting...';
+    // Reconnect after delay
+    setTimeout(() => {
+      if (ws) ws.close();
+      connectWS();
+    }, 3000);
+  } catch (err) { toast('Fehler: ' + err.message, 'error'); }
+}
 
 // ── Theme Toggle ────────────────────────────────────────
 function toggleTheme() {
