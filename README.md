@@ -247,6 +247,49 @@ Add any OpenAI-compatible model via `docs/custom-models.json`:
 
 Edit `SOUL.md` to customize the bot's personality. Changes apply on `/reload` or bot restart.
 
+### WhatsApp Setup
+
+WhatsApp uses [whatsapp-web.js](https://github.com/nicholascui/whatsapp-web.js) — the bot runs as **your own WhatsApp account** (not a separate business account). Chrome/Chromium is required.
+
+**1. Enable WhatsApp**
+
+Set `WHATSAPP_ENABLED=true` in `.env` (or toggle via Web UI → Platforms → WhatsApp). Restart the bot.
+
+**2. Scan QR Code**
+
+On first start, a QR code appears in the terminal (and in the Web UI). Scan it with WhatsApp on your phone (Settings → Linked Devices → Link a Device). The session persists across restarts.
+
+**3. Chat Modes**
+
+| Mode | Env Variable | Description |
+|------|-------------|-------------|
+| **Self-Chat** | *(always on)* | Send yourself messages → bot responds. Your AI notepad. |
+| **Groups** | `WHATSAPP_ALLOW_GROUPS=true` | Bot responds in whitelisted groups. |
+| **DMs** | `WHATSAPP_ALLOW_DMS=true` | Bot responds to private messages from others. |
+| **Self-Chat Only** | `WHATSAPP_SELF_CHAT_ONLY=true` | Disables groups and DMs — only self-chat works. |
+
+All toggles are also available in the Web UI (Platforms → WhatsApp). Changes apply instantly — no restart needed.
+
+**4. Group Whitelist**
+
+Groups must be explicitly enabled. In the Web UI → Platforms → WhatsApp → Group Management:
+
+- **Enable** a group to let the bot listen
+- **Allowed Contacts** — Select who can trigger the bot (empty = everyone)
+- **@ Mention Required** — Bot only responds when mentioned (voice/media bypass this)
+- **Process Media** — Allow photos, documents, audio, video
+- **Approval Required** — Owner must approve each message via Telegram before the bot responds. Group members see nothing — completely transparent.
+
+> **Note:** Your own messages in groups are never processed (you ARE the bot on WhatsApp). The bot only responds to other participants. In self-chat, your messages are always processed normally.
+
+**5. Approval Flow** (when enabled per group)
+
+1. Someone writes in a whitelisted group
+2. You get a Telegram notification with the message preview + ✅ Approve / ❌ Deny buttons
+3. Approve → bot processes and responds in WhatsApp. Deny → silently dropped.
+4. Fallback channels if Telegram is unavailable: WhatsApp self-chat → Discord → Signal
+5. Unapproved messages expire after 30 minutes.
+
 ---
 
 ## 🔌 Plugins
