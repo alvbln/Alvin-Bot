@@ -135,6 +135,9 @@ const PLATFORMS: PlatformDef[] = [
     description: "WhatsApp Web Verbindung via whatsapp-web.js. QR-Code Scan beim ersten Start.",
     envVars: [
       { key: "WHATSAPP_ENABLED", label: "Aktivieren", placeholder: "true", type: "toggle" },
+      { key: "WHATSAPP_SELF_CHAT_ONLY", label: "Nur Self-Chat (empfohlen)", placeholder: "true", type: "toggle" },
+      { key: "WHATSAPP_ALLOW_GROUPS", label: "In Gruppen antworten (bei @Mention)", placeholder: "", type: "toggle" },
+      { key: "WHATSAPP_ALLOW_DMS", label: "Auf private Nachrichten antworten", placeholder: "", type: "toggle" },
     ],
     npmPackages: ["whatsapp-web.js"],
     setupSteps: [

@@ -76,6 +76,23 @@ function findChrome(): string | undefined {
   return CHROME_PATHS.find(p => fs.existsSync(p));
 }
 
+// ── Scope Settings ──────────────────────────────────────────────────────────
+// Controls where the bot responds. Defaults: self-chat only (safest).
+
+interface WhatsAppScope {
+  selfChatOnly: boolean;  // Only respond in self-chat (default: true)
+  allowGroups: boolean;   // Respond in groups when @mentioned (default: false)
+  allowDMs: boolean;      // Respond to DMs from other people (default: false)
+}
+
+function loadScope(): WhatsAppScope {
+  return {
+    selfChatOnly: process.env.WHATSAPP_SELF_CHAT_ONLY !== "false", // default true
+    allowGroups: process.env.WHATSAPP_ALLOW_GROUPS === "true",      // default false
+    allowDMs: process.env.WHATSAPP_ALLOW_DMS === "true",            // default false
+  };
+}
+
 // ── Adapter ─────────────────────────────────────────────────────────────────
 
 export class WhatsAppAdapter implements PlatformAdapter {
@@ -254,28 +271,44 @@ export class WhatsAppAdapter implements PlatformAdapter {
     }
 
     const chat = await msg.getChat();
+
+    // ── Scope filtering — where should the bot respond? ──────────────────
+    const scope = loadScope();
     const isGroup = chat.isGroup;
+    const isSelf = this.isSelfChat(chat);
 
-    // ── WhatsApp runs as YOUR account — only respond in self-chat ────────
-    // CRITICAL: Never respond anywhere else. Not in private chats,
-    // not in groups (even with mentions). This is YOUR WhatsApp account,
-    // not a separate bot. Responding elsewhere would be creepy/confusing.
-    if (!this.isSelfChat(chat)) return;
-
-    // Skip bot's own responses (loop prevention already handled above,
-    // but double-check: only process fromMe messages in self-chat)
-    // fromMe in self-chat = user typing from phone = process it
+    // Self-chat: always allowed (that's the whole point)
+    if (isSelf) {
+      // OK — proceed
+    } else if (isGroup) {
+      // Group chat: only if explicitly enabled
+      if (!scope.allowGroups) return;
+      // In groups: only respond to @mentions
+      if (!text.includes("@Mr.Levin") && !text.includes("@bot")) return;
+      // Skip own messages in groups
+      if (msg.fromMe) return;
+    } else {
+      // Private chat with someone else: only if explicitly enabled
+      if (!scope.allowDMs) return;
+      // Skip own outgoing messages to other people
+      if (msg.fromMe) return;
+    }
 
     // ── Build incoming message ────────────────────────────────────────────
+    const contact = isSelf ? null : await msg.getContact().catch(() => null);
+    const userName = isSelf
+      ? (this.client?.info?.pushname || "User")
+      : (contact?.pushname || contact?.name || contact?.number || "Unknown");
+
     const incoming: IncomingMessage = {
       platform: "whatsapp",
       messageId: msgId,
       chatId: chat.id._serialized || "",
-      userId: "self",
-      userName: this.client?.info?.pushname || "User",
+      userId: isSelf ? "self" : (contact?.id?._serialized || "unknown"),
+      userName,
       text,
-      isGroup: false,
-      isMention: false,
+      isGroup,
+      isMention: isGroup && (text.includes("@Mr.Levin") || text.includes("@bot")),
       isReplyToBot: false,
       replyToText: msg.hasQuotedMsg
         ? await msg.getQuotedMessage().then((q: any) => q?.body).catch(() => undefined)
