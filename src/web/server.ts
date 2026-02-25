@@ -784,8 +784,24 @@ function handleWebSocket(wss: WebSocketServer): void {
         const msg = JSON.parse(data.toString());
 
         if (msg.type === "chat") {
-          const { text, effort } = msg;
+          let { text, effort, file } = msg;
           const userId = config.allowedUsers[0] || 0;
+
+          // Handle file upload — save to temp and reference in prompt
+          if (file?.dataUrl && file?.name) {
+            try {
+              const dataDir = resolve(BOT_ROOT, "data", "web-uploads");
+              if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
+              const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+              const filePath = resolve(dataDir, `${Date.now()}_${safeName}`);
+              const base64Data = file.dataUrl.split(",")[1] || file.dataUrl;
+              fs.writeFileSync(filePath, Buffer.from(base64Data, "base64"));
+              // Replace placeholder with actual file path
+              text = text.replace(/\[Datei angehängt:.*?\]/, `[Datei gespeichert: ${filePath}]`);
+            } catch (err) {
+              console.error("WebUI file upload error:", err);
+            }
+          }
 
           const registry = getRegistry();
           const activeProvider = registry.getActive();

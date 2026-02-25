@@ -210,10 +210,85 @@ function timeStr() {
   return new Date().toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
 }
 
+// ── Reply State ─────────────────────────────────────────
+let _replyTo = null; // { msgIndex, text, role }
+
+function setReply(msgIndex, text, role) {
+  _replyTo = { msgIndex, text, role };
+  const preview = document.getElementById('reply-preview');
+  const previewText = document.getElementById('reply-preview-text');
+  previewText.textContent = `↩️ ${role === 'user' ? 'Du' : 'Mr. Levin'}: ${text.substring(0, 120)}${text.length > 120 ? '…' : ''}`;
+  preview.style.display = 'flex';
+  document.getElementById('chat-input').focus();
+}
+
+function clearReply() {
+  _replyTo = null;
+  document.getElementById('reply-preview').style.display = 'none';
+}
+
+// ── File Upload State ───────────────────────────────────
+let _pendingFile = null; // { name, type, dataUrl }
+
+function handleFileSelect(files) {
+  if (!files || !files.length) return;
+  const file = files[0];
+  const reader = new FileReader();
+  reader.onload = () => {
+    _pendingFile = { name: file.name, type: file.type, size: file.size, dataUrl: reader.result };
+    const preview = document.getElementById('file-preview');
+    const previewText = document.getElementById('file-preview-text');
+    const sizeKb = (file.size / 1024).toFixed(1);
+    previewText.textContent = `📎 ${file.name} (${sizeKb} KB)`;
+    preview.style.display = 'flex';
+  };
+  reader.readAsDataURL(file);
+}
+
+function clearFileUpload() {
+  _pendingFile = null;
+  document.getElementById('file-preview').style.display = 'none';
+  document.getElementById('file-upload').value = '';
+}
+
+// ── Drag & Drop ─────────────────────────────────────────
+(function initDragDrop() {
+  const msgs = document.getElementById('messages');
+  let dragCounter = 0;
+  msgs.addEventListener('dragenter', (e) => { e.preventDefault(); dragCounter++; msgs.classList.add('drag-over'); });
+  msgs.addEventListener('dragleave', (e) => { e.preventDefault(); dragCounter--; if (dragCounter <= 0) { dragCounter = 0; msgs.classList.remove('drag-over'); } });
+  msgs.addEventListener('dragover', (e) => { e.preventDefault(); });
+  msgs.addEventListener('drop', (e) => {
+    e.preventDefault(); dragCounter = 0; msgs.classList.remove('drag-over');
+    if (e.dataTransfer?.files?.length) handleFileSelect(e.dataTransfer.files);
+  });
+})();
+
 // ── Chat ────────────────────────────────────────────────
+let _msgCounter = 0;
+
 function addMessage(role, text, customTime, skipSave) {
+  const msgIdx = _msgCounter++;
   const el = document.createElement('div');
   el.className = 'msg ' + role;
+  el.dataset.msgIndex = msgIdx;
+
+  // Reply quote (if this message was sent with a reply)
+  if (role === 'user' && _replyTo && !skipSave) {
+    const quote = document.createElement('div');
+    quote.className = 'reply-quote';
+    quote.textContent = `${_replyTo.role === 'user' ? 'Du' : 'Mr. Levin'}: ${_replyTo.text.substring(0, 100)}`;
+    el.appendChild(quote);
+  }
+
+  // File badge
+  if (role === 'user' && _pendingFile && !skipSave) {
+    const badge = document.createElement('div');
+    badge.className = 'file-badge';
+    badge.textContent = `📎 ${_pendingFile.name}`;
+    el.appendChild(badge);
+  }
+
   const textEl = document.createElement('span');
   textEl.className = 'msg-text';
   if (role === 'assistant') {
@@ -228,6 +303,14 @@ function addMessage(role, text, customTime, skipSave) {
     time.className = 'time';
     time.textContent = customTime || timeStr();
     el.appendChild(time);
+
+    // Reply button
+    const replyBtn = document.createElement('button');
+    replyBtn.className = 'msg-reply-btn';
+    replyBtn.textContent = '↩️';
+    replyBtn.title = 'Antworten';
+    replyBtn.onclick = () => setReply(msgIdx, text, role);
+    el.appendChild(replyBtn);
   }
 
   const container = document.getElementById('messages');
@@ -244,18 +327,39 @@ function scrollToBottom() {
 function sendMessage() {
   const input = document.getElementById('chat-input');
   const text = input.value.trim();
-  if (!text || !ws || ws.readyState !== 1) return;
+  if ((!text && !_pendingFile) || !ws || ws.readyState !== 1) return;
 
-  const model = document.getElementById('chat-model')?.value;
   const effort = document.getElementById('chat-effort')?.value;
 
+  // Build context-enriched prompt
+  let fullText = text || '';
+  let replyContext = null;
+  if (_replyTo) {
+    replyContext = { role: _replyTo.role, text: _replyTo.text };
+    fullText = `[Antwort auf ${_replyTo.role === 'user' ? 'meine' : 'deine'} Nachricht: "${_replyTo.text.substring(0, 300)}"]\n\n${fullText}`;
+  }
+  let fileInfo = null;
+  if (_pendingFile) {
+    fileInfo = { name: _pendingFile.name, type: _pendingFile.type, size: _pendingFile.size };
+    const fileRef = `[Datei angehängt: ${_pendingFile.name} (${_pendingFile.type}, ${(_pendingFile.size/1024).toFixed(1)} KB)]`;
+    fullText = fullText ? `${fileRef}\n\n${fullText}` : fileRef;
+  }
+
   const t = timeStr();
-  addMessage('user', text, t);
-  chatMessages.push({ role: 'user', text, time: t });
+  addMessage('user', text || `📎 ${_pendingFile?.name || 'Datei'}`, t);
+  chatMessages.push({ role: 'user', text: fullText, time: t, replyTo: replyContext, file: fileInfo });
   saveChatToStorage();
-  ws.send(JSON.stringify({ type: 'chat', text, effort }));
+
+  // Send via WebSocket
+  const payload = { type: 'chat', text: fullText, effort };
+  if (_pendingFile) payload.file = { name: _pendingFile.name, type: _pendingFile.type, dataUrl: _pendingFile.dataUrl };
+  ws.send(JSON.stringify(payload));
+
+  // Reset state
   input.value = '';
   input.style.height = 'auto';
+  clearReply();
+  clearFileUpload();
   document.getElementById('send-btn').disabled = true;
   document.getElementById('typing-indicator').classList.add('visible');
   scrollToBottom();
