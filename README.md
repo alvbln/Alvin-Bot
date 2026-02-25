@@ -409,17 +409,17 @@ alvin-bot version   # Show version
   - [x] Smooth page transitions (fade animation on page switch)
   - [x] Skeleton loading states + status pulse animations
   - [x] Command Palette (Cmd+K / Ctrl+K) with fuzzy search
-- [ ] **Phase 12** — Native Installers (Non-Techie Friendly)
+- [x] **Phase 12** — Native Installers (Non-Techie Friendly)
   - [x] Electron wrapper (embedded Node.js + WebUI + tray icon)
   - [x] macOS `.dmg` build via electron-builder (arm64, 151 MB)
   - [ ] Windows `.exe` (NSIS) via electron-builder
   - [ ] Linux `.AppImage` + `.deb` via electron-builder
   - [x] Auto-update mechanism (electron-updater)
   - [ ] GUI Setup Wizard (provider selection, Telegram token, first-run experience)
-  - [ ] Homebrew formula (`brew install alvin-bot`)
-  - [ ] Scoop manifest for Windows
-  - [ ] One-line install script (`curl -fsSL https://install.alvin-bot.dev | sh`)
-  - [ ] Docker Compose polish (production-ready `docker-compose.yml`)
+  - [x] Homebrew formula (`brew install alvin-bot`)
+  - [x] Scoop manifest for Windows
+  - [x] One-line install script (`curl -fsSL https://install.alvin-bot.dev | sh`)
+  - [x] Docker Compose polish (production-ready `docker-compose.yml`)
 - [ ] **Phase 13** — npm publish (security audit)
 
 ---

@@ -1,0 +1,46 @@
+# ─────────────────────────────────────────────────────────────
+# Alvin Bot — Docker Compose Example
+#
+# Copy this file and .env.example to get started:
+#   cp docker-compose.example.yml docker-compose.yml
+#   cp .env.example .env
+#   # Edit .env with your API keys
+#   docker compose up -d
+# ─────────────────────────────────────────────────────────────
+
+services:
+  alvin-bot:
+    build: .
+    container_name: alvin-bot
+    restart: unless-stopped
+    env_file: .env
+
+    volumes:
+      # Persistent data (memory, sessions, cron jobs)
+      - ./data:/app/data
+      # Memory / docs
+      - ./docs:/app/docs
+      # Personality files (read-only, optional)
+      - ./SOUL.md:/app/SOUL.md:ro
+      - ./CLAUDE.md:/app/CLAUDE.md:ro
+
+    environment:
+      - NODE_ENV=production
+      # All other env vars should be in .env file:
+      #
+      # TELEGRAM_BOT_TOKEN=       # Required: from @BotFather
+      # ALLOWED_USERS=            # Required: comma-separated Telegram user IDs
+      # ANTHROPIC_API_KEY=        # AI provider: Anthropic Claude
+      # OPENAI_API_KEY=           # AI provider: OpenAI (alternative)
+      # GOOGLE_API_KEY=           # AI provider: Google Gemini (alternative)
+      # WEB_UI_PORT=3100          # Web UI port (default: 3100)
+
+    ports:
+      - "3100:3100"
+
+    healthcheck:
+      test: ["CMD", "node", "-e", "process.exit(0)"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3

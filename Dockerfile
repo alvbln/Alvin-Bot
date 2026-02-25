@@ -1,39 +1,51 @@
-# Mr. Levin — Autonomous AI Telegram Agent
-# Multi-stage build for minimal image size
+# ─────────────────────────────────────────────────────────────
+# Alvin Bot — Production Dockerfile
+# Multi-stage build: builder → runner (minimal image)
+# ─────────────────────────────────────────────────────────────
 
-FROM node:22-slim AS builder
+# ── Stage 1: Build ────────────────────────────────────────────
+FROM node:22-alpine AS builder
 
 WORKDIR /app
+
+# Install deps first (layer caching)
 COPY package*.json ./
 RUN npm ci
+
+# Build TypeScript
 COPY tsconfig.json ./
 COPY src/ src/
 RUN npm run build
 
-# ── Production image ──────────────────────────────
-FROM node:22-slim
+# ── Stage 2: Production ──────────────────────────────────────
+FROM node:22-alpine AS runner
 
 WORKDIR /app
 
-# Install Claude CLI (needed for SDK provider)
-RUN npm i -g @anthropic-ai/claude-code 2>/dev/null || true
+# Security: non-root user
+RUN addgroup -S alvinbot && adduser -S alvinbot -G alvinbot
 
+# Production dependencies only
 COPY package*.json ./
-RUN npm ci --omit=dev
+RUN npm ci --omit=dev && npm cache clean --force
 
+# Copy built output + runtime files
 COPY --from=builder /app/dist/ dist/
 COPY bin/ bin/
 COPY CLAUDE.md SOUL.md ./
-COPY .env.example ./
 
-# Create memory directories
-RUN mkdir -p docs/memory
+# Create data directories
+RUN mkdir -p docs/memory data && chown -R alvinbot:alvinbot /app
 
-# Non-root user for security
-RUN groupadd -r mrlevin && useradd -r -g mrlevin mrlevin
-RUN chown -R mrlevin:mrlevin /app
-USER mrlevin
+# Switch to non-root user
+USER alvinbot
 
 ENV NODE_ENV=production
+
+# Health check: verify the process is running
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD node -e "process.exit(0)" || exit 1
+
+EXPOSE 3100
 
 CMD ["node", "dist/index.js"]

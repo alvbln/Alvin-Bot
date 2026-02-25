@@ -1,10 +1,35 @@
+# Dependencies & build output
 node_modules
 dist
+
+# Environment (secrets)
 .env
+
+# Git
 .git
+.gitignore
+
+# Development files
 *.md
 !CLAUDE.md
 !SOUL.md
 !README.md
+
+# Memory (user data — mount as volume instead)
 docs/memory/*.md
 docs/MEMORY.md
+
+# Electron (not needed in Docker)
+electron/
+release/
+
+# IDE / OS
+.vscode
+.idea
+.DS_Store
+*.swp
+
+# Tests
+__tests__
+*.test.ts
+coverage

@@ -1,21 +1,60 @@
-# Mr. Levin — Docker Compose
+# ─────────────────────────────────────────────────────────────
+# Alvin Bot — Docker Compose (Production)
 #
-# Usage:
-#   cp .env.example .env   # Edit with your tokens
+# Quick start:
+#   cp .env.example .env   # Edit with your API keys
 #   docker compose up -d   # Start in background
-#   docker compose logs -f  # View logs
+#   docker compose logs -f # View logs
+# ─────────────────────────────────────────────────────────────
 
 services:
-  mr-levin:
+  alvin-bot:
     build: .
-    container_name: mr-levin
+    container_name: alvin-bot
     restart: unless-stopped
     env_file: .env
+
+    # ── Volumes ───────────────────────────────────────────────
     volumes:
-      # Persist memory across restarts
+      # Persistent data (memory, sessions, cron jobs)
+      - ./data:/app/data
+      # Memory / docs
       - ./docs:/app/docs
-      # Custom personality (optional)
+      # Personality files (read-only)
       - ./SOUL.md:/app/SOUL.md:ro
       - ./CLAUDE.md:/app/CLAUDE.md:ro
+
+    # ── Environment ───────────────────────────────────────────
     environment:
       - NODE_ENV=production
+
+    # ── Ports ─────────────────────────────────────────────────
+    # Web UI
+    ports:
+      - "3100:3100"
+
+    # ── Health Check ──────────────────────────────────────────
+    healthcheck:
+      test: ["CMD", "node", "-e", "process.exit(0)"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+
+  # ── Development profile ───────────────────────────────────
+  alvin-bot-dev:
+    build:
+      context: .
+      target: builder
+    container_name: alvin-bot-dev
+    profiles: ["dev"]
+    env_file: .env
+    volumes:
+      - ./src:/app/src
+      - ./docs:/app/docs
+      - ./data:/app/data
+    environment:
+      - NODE_ENV=development
+    ports:
+      - "3100:3100"
+    command: ["npx", "tsx", "src/index.ts"]
