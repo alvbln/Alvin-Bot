@@ -249,6 +249,42 @@ export function createRegistry(config: SimpleConfig): ProviderRegistry {
       ...PROVIDER_PRESETS["gemini-2.5-flash"],
       apiKey: config.apiKeys.google,
     } as ProviderConfig;
+    providers["gemini-3-pro"] = {
+      ...PROVIDER_PRESETS["gemini-3-pro"],
+      apiKey: config.apiKeys.google,
+    } as ProviderConfig;
+    providers["gemini-3-flash"] = {
+      ...PROVIDER_PRESETS["gemini-3-flash"],
+      apiKey: config.apiKeys.google,
+    } as ProviderConfig;
+  }
+
+  // Auto-register OpenAI newer models
+  if (config.apiKeys?.openai) {
+    providers["gpt-4.1"] = {
+      ...PROVIDER_PRESETS["gpt-4.1"],
+      apiKey: config.apiKeys.openai,
+    } as ProviderConfig;
+    providers["gpt-4.1-mini"] = {
+      ...PROVIDER_PRESETS["gpt-4.1-mini"],
+      apiKey: config.apiKeys.openai,
+    } as ProviderConfig;
+    providers["o3-mini"] = {
+      ...PROVIDER_PRESETS["o3-mini"],
+      apiKey: config.apiKeys.openai,
+    } as ProviderConfig;
+  }
+
+  // Auto-register Groq additional models
+  if (config.apiKeys?.groq) {
+    providers["groq-llama-3.1-8b"] = {
+      ...PROVIDER_PRESETS["groq-llama-3.1-8b"],
+      apiKey: config.apiKeys.groq,
+    } as ProviderConfig;
+    providers["groq-mixtral"] = {
+      ...PROVIDER_PRESETS["groq-mixtral"],
+      apiKey: config.apiKeys.groq,
+    } as ProviderConfig;
   }
 
   // Auto-register NVIDIA NIM if key is available

@@ -174,6 +174,73 @@ export const PROVIDER_PRESETS: Record<string, Partial<ProviderConfig>> = {
     supportsStreaming: true,
     supportsTools: true,
   },
+  "gemini-3-pro": {
+    type: "openai-compatible",
+    name: "Gemini 3 Pro (Preview)",
+    model: "gemini-3-pro-preview",
+    baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai",
+    supportsVision: true,
+    supportsStreaming: true,
+    supportsTools: true,
+  },
+  "gemini-3-flash": {
+    type: "openai-compatible",
+    name: "Gemini 3 Flash (Preview)",
+    model: "gemini-3-flash-preview",
+    baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai",
+    supportsVision: true,
+    supportsStreaming: true,
+    supportsTools: true,
+  },
+
+  // OpenAI newer models
+  "gpt-4.1": {
+    type: "openai-compatible",
+    name: "GPT-4.1",
+    model: "gpt-4.1",
+    baseUrl: "https://api.openai.com/v1",
+    supportsVision: true,
+    supportsStreaming: true,
+    supportsTools: true,
+  },
+  "gpt-4.1-mini": {
+    type: "openai-compatible",
+    name: "GPT-4.1 Mini",
+    model: "gpt-4.1-mini",
+    baseUrl: "https://api.openai.com/v1",
+    supportsVision: true,
+    supportsStreaming: true,
+    supportsTools: true,
+  },
+  "o3-mini": {
+    type: "openai-compatible",
+    name: "o3 Mini",
+    model: "o3-mini",
+    baseUrl: "https://api.openai.com/v1",
+    supportsVision: false,
+    supportsStreaming: true,
+    supportsTools: true,
+  },
+
+  // Groq additional models
+  "groq-llama-3.1-8b": {
+    type: "openai-compatible",
+    name: "Llama 3.1 8B (Groq)",
+    model: "llama-3.1-8b-instant",
+    baseUrl: "https://api.groq.com/openai/v1",
+    supportsVision: false,
+    supportsStreaming: true,
+    supportsTools: true,
+  },
+  "groq-mixtral": {
+    type: "openai-compatible",
+    name: "Mixtral 8x7B (Groq)",
+    model: "mixtral-8x7b-32768",
+    baseUrl: "https://api.groq.com/openai/v1",
+    supportsVision: false,
+    supportsStreaming: true,
+    supportsTools: true,
+  },
 
   // NVIDIA NIM (150+ free models)
   "nvidia-llama-3.3-70b": {
