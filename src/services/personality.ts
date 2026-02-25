@@ -10,6 +10,7 @@ import { resolve, dirname } from "path";
 import { fileURLToPath } from "url";
 import { buildMemoryContext } from "./memory.js";
 import { searchMemory } from "./embeddings.js";
+import { getToolSummary } from "./tool-discovery.js";
 
 const BOT_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 
@@ -51,6 +52,8 @@ export function buildSystemPrompt(isSDK: boolean, language: "de" | "en" = "de", 
 
   if (isSDK) {
     parts.push(SDK_ADDON);
+    // SDK providers have bash access — inject discovered tools so they know what's available
+    parts.push(getToolSummary());
   }
 
   // Inject chat context for cron job creation

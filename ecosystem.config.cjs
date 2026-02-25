@@ -3,7 +3,7 @@ module.exports = {
     {
       name: "alvin-bot",
       script: "dist/index.js",
-      cwd: "/home/user/projects/alvin-bot",
+      cwd: __dirname,
       watch: false,
       autorestart: true,
       max_restarts: 10,

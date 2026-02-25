@@ -13,6 +13,11 @@ import { initMCP, disconnectMCP, hasMCPConfig } from "./services/mcp.js";
 import { startWebServer } from "./web/server.js";
 import { startScheduler, stopScheduler, setNotifyCallback } from "./services/cron.js";
 
+import { discoverTools } from "./services/tool-discovery.js";
+
+// Discover available system tools (cached for prompt injection)
+discoverTools();
+
 // Initialize multi-model engine
 const registry = initEngine();
 console.log(`Engine initialized. Primary: ${registry.getActiveKey()}`);

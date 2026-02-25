@@ -8,5 +8,20 @@ docs/memory/*.md
 docs/MEMORY.md
 !docs/memory/.gitkeep
 
+# User profiles (contain Telegram IDs, usernames)
+docs/users/
+
+# Cron jobs (may contain personal chat IDs)
+docs/cron-jobs.json
+
+# Backups (contain personal data snapshots)
+backups/
+
+# Scripts with personal config
+scripts/
+
 # Access control data (contains group IDs, approvals)
 data/
+
+# WhatsApp auth
+data/whatsapp-auth/
