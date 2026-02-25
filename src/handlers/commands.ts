@@ -1207,7 +1207,9 @@ export function registerCommands(bot: Bot): void {
         const status = j.enabled ? "🟢" : "⏸️";
         const next = j.enabled ? formatNextRun(j.nextRunAt) : "pausiert";
         const lastErr = j.lastError ? " ⚠️" : "";
-        return `${status} *${j.name}* (${j.schedule})\n   Typ: ${j.type} | Nächst: ${next} | Runs: ${j.runCount}${lastErr}\n   ID: \`${j.id}\``;
+        const sched = j.schedule.replace(/\*/g, "✱");
+        const recur = j.oneShot ? "⚡einmalig" : "🔄";
+        return `${status} <b>${j.name}</b> (${sched}) ${recur}\n   Typ: ${j.type} | Nächst: ${next} | Runs: ${j.runCount}${lastErr}\n   ID: <code>${j.id}</code>`;
       });
 
       const keyboard = new InlineKeyboard();
@@ -1219,9 +1221,9 @@ export function registerCommands(bot: Bot): void {
       }
 
       await ctx.reply(
-        `⏰ *Cron Jobs (${jobs.length}):*\n\n${lines.join("\n\n")}\n\n` +
+        `⏰ <b>Cron Jobs (${jobs.length}):</b>\n\n${lines.join("\n\n")}\n\n` +
         `Befehle: /cron add · delete · toggle · run · info`,
-        { parse_mode: "Markdown", reply_markup: keyboard }
+        { parse_mode: "HTML", reply_markup: keyboard }
       );
       return;
     }
