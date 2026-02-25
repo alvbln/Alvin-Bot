@@ -1,96 +1,56 @@
 <!DOCTYPE html>
-<html lang="de">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Alvin Bot — Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/css/style.css">
 </head>
 <body>
 
-<div class="drop-overlay" id="drop-overlay">📎 Datei hier ablegen</div>
+<div class="drop-overlay" id="drop-overlay"></div>
 
 <div class="sidebar">
   <div class="sidebar-header">
-    <h1>🤖 <span>Alvin Bot</span></h1>
-    <div class="status" id="bot-status"><span class="status-dot offline"></span> Connecting...</div>
+    <h1 id="sidebar-title"></h1>
+    <div class="status" id="bot-status"></div>
   </div>
-  <div class="nav">
-    <div class="nav-section">Main</div>
-    <div class="nav-item active" data-page="chat">💬 <span>Chat</span></div>
-    <div class="nav-item" data-page="dashboard">📊 <span>Dashboard</span></div>
-
-    <div class="nav-section">AI</div>
-    <div class="nav-item" data-page="models">🤖 <span>Models</span></div>
-    <div class="nav-item" data-page="personality">🎭 <span>Personality</span></div>
-
-    <div class="nav-section">Data</div>
-    <div class="nav-item" data-page="memory">🧠 <span>Memory</span></div>
-    <div class="nav-item" data-page="sessions">📋 <span>Sessions</span></div>
-    <div class="nav-item" data-page="files">📁 <span>Files</span></div>
-
-    <div class="nav-section">System</div>
-    <div class="nav-item" data-page="cron">⏰ <span>Cron</span></div>
-    <div class="nav-item" data-page="tools">🛠️ <span>Tools</span></div>
-    <div class="nav-item" data-page="plugins">🔌 <span>Plugins</span></div>
-    <div class="nav-item" data-page="platforms">📱 <span>Platforms</span></div>
-    <div class="nav-item" data-page="users">👥 <span>Users</span></div>
-    <div class="nav-item" data-page="terminal">💻 <span>Terminal</span></div>
-    <div class="nav-item" data-page="maintenance">🩺 <span>Maintenance</span></div>
-    <div class="nav-item" data-page="settings">⚙️ <span>Settings</span></div>
-  </div>
-  <div class="sidebar-footer">
-    <button onclick="toggleTheme()" title="Theme wechseln">🌓 <span>Theme</span></button>
-    <button onclick="resetChat()" title="Neue Session (⌘N)">🔄 <span>Reset</span></button>
-  </div>
+  <div class="nav" id="nav-container"></div>
+  <div class="sidebar-footer" id="sidebar-footer"></div>
 </div>
 
 <div class="main">
   <div class="topbar">
-    <h2 id="page-title">💬 Chat</h2>
+    <h2 id="page-title"></h2>
     <div class="topbar-right">
+      <span class="topbar-kbd" id="cmd-k-hint" onclick="openCommandPalette()"></span>
       <span class="badge badge-accent" id="model-badge">loading...</span>
     </div>
   </div>
 
   <!-- Chat Page -->
   <div class="page chat-container active" id="page-chat">
-    <div class="chat-header">
-      <span style="color:var(--fg2);font-size:0.8em">Model:</span>
-      <select id="chat-model" onchange="switchModel(this.value)"></select>
-      <span style="color:var(--fg2);font-size:0.8em;margin-left:8px">Effort:</span>
-      <select id="chat-effort">
-        <option value="low">Low</option>
-        <option value="medium">Medium</option>
-        <option value="high" selected>High</option>
-        <option value="max">Max</option>
-      </select>
-      <div style="flex:1"></div>
-      <button class="btn btn-sm btn-outline" onclick="exportChat('markdown')" title="⌘⇧E">📥 Export</button>
-      <button class="btn btn-sm btn-outline" onclick="exportChat('json')">JSON</button>
-    </div>
+    <div class="chat-header" id="chat-header"></div>
     <div class="messages" id="messages">
-      <div class="msg system">Willkommen bei Alvin Bot! Schreib etwas um zu beginnen. 🤖</div>
+      <div class="msg system" id="chat-welcome"></div>
       <div class="typing-indicator" id="typing-indicator">
         <div class="typing-dot"></div>
         <div class="typing-dot"></div>
         <div class="typing-dot"></div>
       </div>
     </div>
-    <div id="reply-preview" style="display:none;padding:6px 12px;background:var(--bg3);border-left:3px solid var(--accent2);margin:0 12px;border-radius:0 6px 6px 0;font-size:0.82em;color:var(--fg2);display:none;align-items:center;gap:8px">
+    <div id="reply-preview" style="display:none;padding:6px 12px;background:var(--bg3);border-left:3px solid var(--accent2);margin:0 12px;border-radius:0 6px 6px 0;font-size:0.82em;color:var(--fg2);align-items:center;gap:8px">
       <span id="reply-preview-text" style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span>
-      <button onclick="clearReply()" style="background:none;border:none;color:var(--fg2);cursor:pointer;font-size:1.1em;padding:0 4px">✕</button>
+      <button onclick="clearReply()" style="background:none;border:none;color:var(--fg2);cursor:pointer;font-size:1.1em;padding:0 4px" id="reply-close-btn"></button>
     </div>
     <div id="file-preview" style="display:none;padding:6px 12px;background:var(--bg3);border-radius:6px;margin:0 12px;font-size:0.82em;color:var(--fg2);align-items:center;gap:8px">
       <span id="file-preview-text" style="flex:1"></span>
-      <button onclick="clearFileUpload()" style="background:none;border:none;color:var(--fg2);cursor:pointer;font-size:1.1em;padding:0 4px">✕</button>
+      <button onclick="clearFileUpload()" style="background:none;border:none;color:var(--fg2);cursor:pointer;font-size:1.1em;padding:0 4px" id="file-close-btn"></button>
     </div>
-    <div class="input-area">
-      <label for="file-upload" style="cursor:pointer;font-size:1.3em;padding:4px 8px;opacity:0.6;transition:opacity 0.2s" title="Datei anhängen">📎</label>
-      <input type="file" id="file-upload" style="display:none" onchange="handleFileSelect(this.files)">
-      <textarea id="chat-input" placeholder="Nachricht eingeben... (Enter = senden, Shift+Enter = Zeile)" rows="1"></textarea>
-      <button class="btn-send" id="send-btn" onclick="sendMessage()">Senden ↵</button>
-    </div>
+    <div class="input-area" id="chat-input-area"></div>
   </div>
 
   <!-- Dashboard -->
@@ -105,24 +65,16 @@
 
   <!-- Personality -->
   <div class="page content" id="page-personality">
-    <div class="card" style="max-width:700px">
-      <h3>🎭 Persönlichkeit (SOUL.md)</h3>
-      <div class="sub" style="margin-bottom:12px">Definiert wie Alvin Bot spricht und sich verhält. Änderungen werden sofort aktiv.</div>
-      <textarea class="editor" id="soul-editor" style="min-height:300px" placeholder="SOUL.md laden..."></textarea>
-      <div style="margin-top:12px;display:flex;gap:8px">
-        <button class="btn" onclick="saveSoul()">💾 Speichern & Aktivieren</button>
-        <button class="btn btn-outline" onclick="loadPersonality()">↻ Neu laden</button>
-      </div>
-    </div>
+    <div class="card" style="max-width:700px" id="personality-card"></div>
   </div>
 
   <!-- Memory -->
   <div class="page content" id="page-memory">
     <div class="editor-toolbar">
       <select id="memory-file" onchange="loadMemoryFile()"></select>
-      <button class="btn btn-sm" onclick="saveMemoryFile()">💾 Speichern</button>
+      <button class="btn btn-sm" onclick="saveMemoryFile()" id="memory-save-btn"></button>
     </div>
-    <textarea class="editor" id="memory-editor" placeholder="Datei auswählen..."></textarea>
+    <textarea class="editor" id="memory-editor"></textarea>
   </div>
 
   <!-- Sessions -->
@@ -133,17 +85,17 @@
   <!-- Files -->
   <div class="page content" id="page-files">
     <div class="editor-toolbar">
-      <span id="file-breadcrumb" style="flex:1;color:var(--fg2);font-size:0.85em">📁 /</span>
-      <button class="btn btn-sm btn-outline" onclick="createNewFile()">📝 Neue Datei</button>
-      <button class="btn btn-sm btn-outline" onclick="navigateFiles('..')">⬆️ Hoch</button>
+      <span id="file-breadcrumb" style="flex:1;color:var(--fg2);font-size:0.85em"></span>
+      <button class="btn btn-sm btn-outline" onclick="createNewFile()" id="file-new-btn"></button>
+      <button class="btn btn-sm btn-outline" onclick="navigateFiles('..')" id="file-up-btn"></button>
     </div>
     <div id="file-list"></div>
     <div id="file-editor-area" style="display:none;margin-top:16px">
       <div class="editor-toolbar">
         <span id="file-edit-name" style="flex:1;color:var(--accent2);font-family:monospace;font-size:0.85em"></span>
-        <button class="btn btn-sm" onclick="saveFile()">💾 Speichern</button>
-        <button class="btn btn-sm btn-outline" style="color:var(--red)" onclick="deleteFile(document.getElementById('file-edit-name').textContent)">🗑️</button>
-        <button class="btn btn-sm btn-outline" onclick="document.getElementById('file-editor-area').style.display='none'">✕</button>
+        <button class="btn btn-sm" onclick="saveFile()" id="file-save-btn"></button>
+        <button class="btn btn-sm btn-outline" style="color:var(--red)" onclick="deleteFile(document.getElementById('file-edit-name').textContent)" id="file-delete-btn"></button>
+        <button class="btn btn-sm btn-outline" onclick="document.getElementById('file-editor-area').style.display='none'" id="file-close-editor-btn"></button>
       </div>
       <textarea class="editor" id="file-editor"></textarea>
     </div>
@@ -151,32 +103,17 @@
 
   <!-- Cron -->
   <div class="page content" id="page-cron">
-    <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
-      <div style="flex:1">
-        <h3 style="font-size:1em;margin-bottom:4px">⏰ Cron Jobs</h3>
-        <div class="sub">Geplante wiederkehrende oder einmalige Aufgaben.</div>
-      </div>
-      <button class="btn btn-sm" onclick="showCreateCron()">+ Job erstellen</button>
-    </div>
-    <div id="cron-create-form" style="display:none;margin-bottom:16px;padding:16px;background:var(--bg2);border:1px solid var(--bg3);border-radius:var(--radius)">
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px" id="cron-header"></div>
+    <div id="cron-create-form" style="display:none;margin-bottom:16px;padding:16px;background:var(--bg2);border:1px solid var(--glass-border);border-radius:var(--radius)">
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">
-        <input id="cron-name" placeholder="Name (z.B. Health Check)" class="input">
-        <select id="cron-type" class="input">
-          <option value="reminder">⏰ Reminder</option>
-          <option value="shell">⚡ Shell Command</option>
-          <option value="http">🌐 HTTP Request</option>
-          <option value="message">💬 Nachricht</option>
-          <option value="ai-query">🤖 AI Query</option>
-        </select>
+        <input id="cron-name" class="input">
+        <select id="cron-type" class="input"></select>
       </div>
       <div id="cron-create-schedule-builder"></div>
       <div style="margin-bottom:8px">
-        <input id="cron-payload" placeholder="Payload (Text, Command, URL, Prompt)" class="input" style="width:100%">
+        <input id="cron-payload" class="input" style="width:100%">
       </div>
-      <div style="display:flex;gap:8px">
-        <button class="btn btn-sm" onclick="createCronJob()">💾 Erstellen</button>
-        <button class="btn btn-sm btn-outline" onclick="document.getElementById('cron-create-form').style.display='none'">Abbrechen</button>
-      </div>
+      <div style="display:flex;gap:8px" id="cron-form-buttons"></div>
     </div>
     <div id="cron-list"></div>
   </div>
@@ -184,7 +121,7 @@
   <!-- Tools -->
   <div class="page content" id="page-tools">
     <div style="margin-bottom:16px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-      <input type="text" id="tools-search" placeholder="🔍 Tool suchen..." style="flex:1;min-width:200px;background:var(--bg3);border:1px solid var(--bg3);border-radius:var(--radius-sm);padding:8px 12px;color:var(--fg);font:inherit;font-size:0.85em;outline:none" oninput="filterTools()">
+      <input type="text" id="tools-search" style="flex:1;min-width:200px;background:var(--bg3);border:1px solid var(--glass-border);border-radius:var(--radius-sm);padding:8px 12px;color:var(--fg);font:inherit;font-size:0.85em;outline:none" oninput="filterTools()">
       <span class="badge badge-accent" id="tools-count">0 Tools</span>
     </div>
     <div id="tools-list"></div>
@@ -211,15 +148,15 @@
       <div class="terminal-output" id="terminal-output" style="flex:1"></div>
       <div style="display:flex;gap:8px;margin-top:12px;align-items:center">
         <span style="color:var(--accent);font-family:monospace;font-weight:bold">$</span>
-        <textarea id="terminal-input" placeholder="Befehl eingeben..." rows="1" style="flex:1;background:var(--bg3);border:1px solid transparent;border-radius:8px;padding:10px;color:var(--fg);font-family:'SF Mono',Monaco,monospace;font-size:0.85em;resize:none;outline:none;min-height:40px" ></textarea>
-        <button class="btn" onclick="runCommand()">Run</button>
+        <textarea id="terminal-input" rows="1" style="flex:1;background:var(--bg3);border:1px solid transparent;border-radius:8px;padding:10px;color:var(--fg);font-family:'SF Mono',Monaco,monospace;font-size:0.85em;resize:none;outline:none;min-height:40px"></textarea>
+        <button class="btn" onclick="runCommand()" id="terminal-run-btn"></button>
       </div>
     </div>
   </div>
 
   <!-- Maintenance -->
   <div class="page content" id="page-maintenance">
-    <div id="maintenance-content"><div style="color:var(--fg2)">Lade...</div></div>
+    <div id="maintenance-content"><div style="color:var(--fg2)" id="maint-loading"></div></div>
   </div>
 
   <!-- Settings -->
@@ -228,6 +165,16 @@
   </div>
 </div>
 
+<!-- Command Palette -->
+<div class="cmd-palette-overlay" id="cmd-palette-overlay" style="display:none" onclick="if(event.target===this)closeCommandPalette()">
+  <div class="cmd-palette">
+    <input class="cmd-palette-input" id="cmd-palette-input" type="text" autocomplete="off">
+    <div class="cmd-palette-results" id="cmd-palette-results"></div>
+  </div>
+</div>
+
+<script src="/js/icons.js"></script>
+<script src="/js/i18n.js"></script>
 <script src="/js/app.js"></script>
 </body>
 </html>

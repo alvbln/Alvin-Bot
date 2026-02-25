@@ -1,20 +1,191 @@
 /**
  * Alvin Bot Web UI — Client-side application
+ * Professional redesign with Lucide icons, i18n, command palette
  */
 
 const API = '';
 let ws = null;
 let currentAssistantMsg = null;
-let chatMessages = []; // For export
+let chatMessages = [];
 let isTyping = false;
 let notifySound = true;
 const CHAT_STORAGE_KEY = 'alvinbot_chat_history';
 
+// ── UI Init (icons, i18n, static elements) ──────────────
+function initUI() {
+  // Sidebar title
+  document.getElementById('sidebar-title').innerHTML = `${icon('bot', 20)} <span>${t('app.title')}</span>`;
+  document.getElementById('bot-status').innerHTML = `<span class="status-dot offline"></span> ${t('connecting')}`;
+
+  // Nav
+  const NAV = [
+    { section: 'nav.main', items: [
+      { page: 'chat', icon: 'message-square', label: 'nav.chat' },
+      { page: 'dashboard', icon: 'layout-dashboard', label: 'nav.dashboard' },
+    ]},
+    { section: 'nav.ai', items: [
+      { page: 'models', icon: 'bot', label: 'nav.models' },
+      { page: 'personality', icon: 'palette', label: 'nav.personality' },
+    ]},
+    { section: 'nav.data', items: [
+      { page: 'memory', icon: 'brain', label: 'nav.memory' },
+      { page: 'sessions', icon: 'clipboard', label: 'nav.sessions' },
+      { page: 'files', icon: 'folder', label: 'nav.files' },
+    ]},
+    { section: 'nav.system', items: [
+      { page: 'cron', icon: 'timer', label: 'nav.cron' },
+      { page: 'tools', icon: 'hammer', label: 'nav.tools' },
+      { page: 'plugins', icon: 'plug', label: 'nav.plugins' },
+      { page: 'platforms', icon: 'smartphone', label: 'nav.platforms' },
+      { page: 'users', icon: 'users', label: 'nav.users' },
+      { page: 'terminal', icon: 'terminal', label: 'nav.terminal' },
+      { page: 'maintenance', icon: 'stethoscope', label: 'nav.maintenance' },
+      { page: 'settings', icon: 'settings', label: 'nav.settings' },
+    ]},
+  ];
+
+  let navHtml = '';
+  for (const section of NAV) {
+    navHtml += `<div class="nav-section">${t(section.section)}</div>`;
+    for (const item of section.items) {
+      const active = item.page === 'chat' ? ' active' : '';
+      navHtml += `<div class="nav-item${active}" data-page="${item.page}" data-icon="${item.icon}" data-label="${item.label}">${icon(item.icon, 16)} <span>${t(item.label)}</span></div>`;
+    }
+  }
+  document.getElementById('nav-container').innerHTML = navHtml;
+
+  // Sidebar footer
+  const langDe = getLang() === 'de' ? 'lang-active' : '';
+  const langEn = getLang() === 'en' ? 'lang-active' : '';
+  document.getElementById('sidebar-footer').innerHTML = `
+    <button onclick="toggleTheme()" title="${t('sidebar.theme')}">${icon('sun', 14)} <span>${t('sidebar.theme')}</span></button>
+    <button onclick="resetChat()" title="${t('chat.new.session')}">${icon('refresh-cw', 14)} <span>${t('sidebar.reset')}</span></button>
+    <button class="lang-toggle" onclick="toggleLang()" title="${t('sidebar.lang')}">
+      ${icon('languages', 14)}
+      <span><span class="${langDe}">DE</span> | <span class="${langEn}">EN</span></span>
+    </button>
+  `;
+
+  // Page title
+  document.getElementById('page-title').innerHTML = `${icon('message-square', 18)} ${t('nav.chat')}`;
+
+  // Cmd+K hint
+  document.getElementById('cmd-k-hint').textContent = navigator.platform?.includes('Mac') ? '⌘K' : 'Ctrl+K';
+
+  // Chat header
+  document.getElementById('chat-header').innerHTML = `
+    <label>${t('chat.model')}:</label>
+    <select id="chat-model" onchange="switchModel(this.value)"></select>
+    <label style="margin-left:8px">${t('chat.effort')}:</label>
+    <select id="chat-effort">
+      <option value="low">${t('chat.effort.low')}</option>
+      <option value="medium">${t('chat.effort.medium')}</option>
+      <option value="high" selected>${t('chat.effort.high')}</option>
+      <option value="max">${t('chat.effort.max')}</option>
+    </select>
+    <div style="flex:1"></div>
+    <button class="btn btn-sm btn-outline" onclick="exportChat('markdown')" title="⌘⇧E">${icon('download', 14)} ${t('chat.export')}</button>
+    <button class="btn btn-sm btn-outline" onclick="exportChat('json')">JSON</button>
+  `;
+
+  // Chat welcome
+  document.getElementById('chat-welcome').textContent = t('chat.welcome');
+
+  // Chat input area
+  document.getElementById('chat-input-area').innerHTML = `
+    <label for="file-upload" style="cursor:pointer;padding:4px 8px;opacity:0.6;transition:opacity 0.2s;display:flex;align-items:center" title="${t('chat.file.attach')}">
+      ${icon('paperclip', 20)}
+    </label>
+    <input type="file" id="file-upload" style="display:none" onchange="handleFileSelect(this.files)">
+    <textarea id="chat-input" placeholder="${t('chat.placeholder')}" rows="1"></textarea>
+    <button class="btn-send" id="send-btn" onclick="sendMessage()">${icon('send', 16)} ${t('chat.send')}</button>
+  `;
+
+  // Reply/file close buttons
+  document.getElementById('reply-close-btn').innerHTML = icon('x', 16);
+  document.getElementById('file-close-btn').innerHTML = icon('x', 16);
+
+  // Drop overlay
+  document.getElementById('drop-overlay').innerHTML = `${icon('paperclip', 24)} ${t('chat.file.drop')}`;
+
+  // Memory save button
+  document.getElementById('memory-save-btn').innerHTML = `${icon('save', 14)} ${t('save')}`;
+
+  // File buttons
+  document.getElementById('file-new-btn').innerHTML = `${icon('file-text', 14)} ${t('files.new')}`;
+  document.getElementById('file-up-btn').innerHTML = `${icon('arrow-up', 14)} ${t('files.up')}`;
+  document.getElementById('file-save-btn').innerHTML = `${icon('save', 14)} ${t('save')}`;
+  document.getElementById('file-delete-btn').innerHTML = `${icon('trash-2', 14)}`;
+  document.getElementById('file-close-editor-btn').innerHTML = icon('x', 14);
+  document.getElementById('file-breadcrumb').innerHTML = `${icon('folder', 14)} /`;
+
+  // Cron header
+  document.getElementById('cron-header').innerHTML = `
+    <div style="flex:1">
+      <h3 style="font-size:1em;margin-bottom:4px;display:flex;align-items:center;gap:6px">${icon('timer', 18)} ${t('cron.title')}</h3>
+      <div class="sub">${t('cron.desc')}</div>
+    </div>
+    <button class="btn btn-sm" onclick="showCreateCron()">${icon('plus', 14)} ${t('cron.create')}</button>
+  `;
+
+  // Cron type selector
+  document.getElementById('cron-name').placeholder = t('cron.name.placeholder');
+  const cronType = document.getElementById('cron-type');
+  cronType.innerHTML = `
+    <option value="reminder">${icon('timer', 14)} ${t('cron.type.reminder')}</option>
+    <option value="shell">${icon('zap', 14)} ${t('cron.type.shell')}</option>
+    <option value="http">${icon('globe', 14)} ${t('cron.type.http')}</option>
+    <option value="message">${icon('message-square', 14)} ${t('cron.type.message')}</option>
+    <option value="ai-query">${icon('bot', 14)} ${t('cron.type.ai')}</option>
+  `;
+  document.getElementById('cron-payload').placeholder = t('cron.payload.placeholder');
+  document.getElementById('cron-form-buttons').innerHTML = `
+    <button class="btn btn-sm" onclick="createCronJob()">${icon('save', 14)} ${t('cron.create')}</button>
+    <button class="btn btn-sm btn-outline" onclick="document.getElementById('cron-create-form').style.display='none'">${t('cancel')}</button>
+  `;
+
+  // Tools search
+  document.getElementById('tools-search').placeholder = `${t('tools.search.placeholder')}`;
+
+  // Terminal
+  document.getElementById('terminal-input').placeholder = t('terminal.placeholder');
+  document.getElementById('terminal-run-btn').innerHTML = `${icon('play', 14)} ${t('terminal.run')}`;
+
+  // Maintenance loading
+  document.getElementById('maint-loading').textContent = t('loading');
+
+  // Command palette
+  document.getElementById('cmd-palette-input').placeholder = t('cmd.placeholder');
+
+  // Personality card
+  document.getElementById('personality-card').innerHTML = `
+    <h3 style="display:flex;align-items:center;gap:8px">${icon('palette', 18)} ${t('personality.title')}</h3>
+    <div class="sub" style="margin-bottom:12px">${t('personality.desc')}</div>
+    <textarea class="editor" id="soul-editor" style="min-height:300px" placeholder="${t('personality.placeholder')}"></textarea>
+    <div style="margin-top:12px;display:flex;gap:8px">
+      <button class="btn" onclick="saveSoul()">${icon('save', 14)} ${t('personality.save')}</button>
+      <button class="btn btn-outline" onclick="loadPersonality()">${icon('refresh-cw', 14)} ${t('personality.reload')}</button>
+    </div>
+  `;
+
+  // Rebind nav events
+  bindNavEvents();
+  bindChatEvents();
+}
+
+// Called by i18n when language changes
+function refreshUI() {
+  // Save current page
+  const activePage = document.querySelector('.nav-item.active')?.dataset?.page || 'chat';
+  initUI();
+  // Restore active page
+  const navItem = document.querySelector(`.nav-item[data-page="${activePage}"]`);
+  if (navItem) navItem.click();
+}
+
 // ── Chat Persistence ────────────────────────────────────
 function saveChatToStorage() {
-  try {
-    localStorage.setItem(CHAT_STORAGE_KEY, JSON.stringify(chatMessages));
-  } catch { /* quota exceeded — ignore */ }
+  try { localStorage.setItem(CHAT_STORAGE_KEY, JSON.stringify(chatMessages)); } catch { }
 }
 
 function restoreChatFromStorage() {
@@ -24,80 +195,75 @@ function restoreChatFromStorage() {
     const messages = JSON.parse(stored);
     if (!Array.isArray(messages) || messages.length === 0) return;
     chatMessages = messages;
-    // Rebuild DOM
     for (const msg of messages) {
-      addMessage(msg.role, msg.text, msg.time, true /* skipSave */);
+      addMessage(msg.role, msg.text, msg.time, true);
     }
-  } catch { /* corrupted — ignore */ }
+  } catch { }
 }
 
-function clearChatStorage() {
-  localStorage.removeItem(CHAT_STORAGE_KEY);
-}
+function clearChatStorage() { localStorage.removeItem(CHAT_STORAGE_KEY); }
 
 // ── Toast Notifications ─────────────────────────────────
 function toast(message, type = 'success') {
   const el = document.createElement('div');
   el.className = `toast ${type}`;
-  el.textContent = message;
+  const ic = type === 'success' ? icon('circle-check', 16) : icon('circle-alert', 16);
+  el.innerHTML = `${ic} <span>${escapeHtml(message)}</span>`;
   document.body.appendChild(el);
   setTimeout(() => el.remove(), 3000);
 }
 
 // ── Navigation ──────────────────────────────────────────
-document.querySelectorAll('.nav-item').forEach(item => {
-  item.addEventListener('click', () => {
-    document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
-    item.classList.add('active');
-    const page = item.dataset.page;
-    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-    document.getElementById('page-' + page).classList.add('active');
-    document.getElementById('page-title').textContent = item.textContent.trim();
+function bindNavEvents() {
+  document.querySelectorAll('.nav-item').forEach(item => {
+    item.addEventListener('click', () => {
+      document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
+      item.classList.add('active');
+      const page = item.dataset.page;
+      document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+      const pageEl = document.getElementById('page-' + page);
+      if (pageEl) pageEl.classList.add('active');
+      document.getElementById('page-title').innerHTML = `${icon(item.dataset.icon, 18)} ${t(item.dataset.label)}`;
 
-    const loaders = { dashboard: loadDashboard, memory: loadMemory, models: loadModels,
-      sessions: loadSessions, plugins: loadPlugins, tools: loadTools, cron: loadCron,
-      files: () => navigateFiles('.'), users: loadUsers, settings: loadSettings,
-      platforms: loadPlatforms, personality: loadPersonality, maintenance: loadMaintenance };
-    if (loaders[page]) loaders[page]();
+      const loaders = { dashboard: loadDashboard, memory: loadMemory, models: loadModels,
+        sessions: loadSessions, plugins: loadPlugins, tools: loadTools, cron: loadCron,
+        files: () => navigateFiles('.'), users: loadUsers, settings: loadSettings,
+        platforms: loadPlatforms, personality: loadPersonality, maintenance: loadMaintenance };
+      if (loaders[page]) loaders[page]();
+    });
   });
-});
+}
 
 // ── WebSocket ───────────────────────────────────────────
 function connectWS() {
   const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
   ws = new WebSocket(`${proto}//${location.host}`);
   ws.onopen = () => {
-    document.getElementById('bot-status').innerHTML = '<span class="status-dot online"></span> Connected';
+    document.getElementById('bot-status').innerHTML = `<span class="status-dot online"></span> ${t('connected')}`;
   };
   ws.onclose = () => {
-    document.getElementById('bot-status').innerHTML = '<span class="status-dot offline"></span> Reconnecting...';
+    document.getElementById('bot-status').innerHTML = `<span class="status-dot offline"></span> ${t('reconnecting')}`;
     setTimeout(connectWS, 3000);
   };
   ws.onmessage = (e) => handleWSMessage(JSON.parse(e.data));
 }
 
-let pendingTools = []; // Collect tool calls before assistant text
-let currentToolGroup = null; // DOM element for grouped tools
+let pendingTools = [];
+let currentToolGroup = null;
 
 function handleWSMessage(msg) {
   const typing = document.getElementById('typing-indicator');
-
   switch (msg.type) {
     case 'text':
       typing.classList.remove('visible');
-      // Flush any pending tools BEFORE the assistant text
       flushToolGroup();
-      if (!currentAssistantMsg) {
-        currentAssistantMsg = addMessage('assistant', '');
-      }
+      if (!currentAssistantMsg) currentAssistantMsg = addMessage('assistant', '');
       currentAssistantMsg.querySelector('.msg-text').innerHTML = renderMarkdown(msg.text || '');
       scrollToBottom();
       break;
     case 'tool':
       typing.classList.add('visible');
-      // Collect tools — they'll be flushed before the next text
       pendingTools.push({ name: msg.name, input: msg.input });
-      // Show live tool indicator
       updateToolIndicator();
       break;
     case 'done':
@@ -119,17 +285,17 @@ function handleWSMessage(msg) {
       break;
     case 'error':
       flushToolGroup();
-      addMessage('system', `❌ ${msg.error}`);
+      addMessage('system', `${msg.error}`);
       currentAssistantMsg = null;
       document.getElementById('send-btn').disabled = false;
       typing.classList.remove('visible');
       break;
     case 'fallback':
-      addMessage('system', `⚡ ${msg.from} → ${msg.to}`);
+      addMessage('system', `${icon('zap', 14)} ${t('chat.fallback')}: ${msg.from} → ${msg.to}`);
       break;
     case 'reset':
-      document.getElementById('messages').innerHTML = '<div class="typing-indicator" id="typing-indicator"><div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div></div>';
-      addMessage('system', 'Session zurückgesetzt.');
+      document.getElementById('messages').innerHTML = `<div class="msg system">${t('chat.welcome')}</div><div class="typing-indicator" id="typing-indicator"><div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div></div>`;
+      addMessage('system', t('chat.session.reset'));
       chatMessages = [];
       pendingTools = [];
       currentToolGroup = null;
@@ -139,21 +305,18 @@ function handleWSMessage(msg) {
 }
 
 function updateToolIndicator() {
-  // Show a live "working..." indicator while tools run
   const typing = document.getElementById('typing-indicator');
   if (pendingTools.length > 0) {
     typing.classList.add('visible');
-    typing.innerHTML = `<span style="font-size:0.75em;color:var(--fg2)">🔧 ${pendingTools[pendingTools.length - 1].name}...</span>`;
+    typing.innerHTML = `<span style="font-size:0.75em;color:var(--fg2);display:flex;align-items:center;gap:4px">${icon('wrench', 14)} ${pendingTools[pendingTools.length - 1].name}...</span>`;
   }
 }
 
 function flushToolGroup() {
   if (pendingTools.length === 0) return;
-  // Reset typing indicator to dots
   const typing = document.getElementById('typing-indicator');
   typing.innerHTML = '<div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div>';
 
-  // Create a grouped, collapsible tool block
   const group = document.createElement('div');
   group.className = 'msg tool-group';
   const count = pendingTools.length;
@@ -162,10 +325,10 @@ function flushToolGroup() {
 
   group.innerHTML = `
     <div class="tool-group-header" onclick="this.parentElement.classList.toggle('expanded')">
-      <span class="tool-group-icon">🔧</span>
-      <span class="tool-group-label">${count} Tool${count > 1 ? 's' : ''} verwendet</span>
+      <span class="tool-group-icon">${icon('wrench', 14)}</span>
+      <span class="tool-group-label">${t('chat.tools.used', { count })}</span>
       <span class="tool-group-names">${summary}</span>
-      <span class="tool-group-chevron">▸</span>
+      <span class="tool-group-chevron">${icon('chevron-right', 14)}</span>
     </div>
     <div class="tool-group-details">
       ${pendingTools.map(t => `<div class="tool-group-item"><span class="tool-item-name">${escapeHtml(t.name)}</span>${t.input ? `<pre class="tool-item-input">${escapeHtml(typeof t.input === 'string' ? t.input : JSON.stringify(t.input, null, 2))}</pre>` : ''}</div>`).join('')}
@@ -187,7 +350,7 @@ function playNotifySound() {
     osc.connect(gain); gain.connect(ctx.destination);
     osc.frequency.value = 800; gain.gain.value = 0.1;
     osc.start(); osc.stop(ctx.currentTime + 0.1);
-  } catch { /* no audio context */ }
+  } catch { }
 }
 
 // ── Markdown Rendering ──────────────────────────────────
@@ -203,21 +366,25 @@ function renderMarkdown(text) {
 }
 
 function escapeHtml(s) {
-  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  if (!s) return '';
+  const div = document.createElement('div');
+  div.textContent = s;
+  return div.innerHTML;
 }
 
 function timeStr() {
-  return new Date().toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+  return new Date().toLocaleTimeString(getLang() === 'de' ? 'de-DE' : 'en-US', { hour: '2-digit', minute: '2-digit' });
 }
 
 // ── Reply State ─────────────────────────────────────────
-let _replyTo = null; // { msgIndex, text, role }
+let _replyTo = null;
 
 function setReply(msgIndex, text, role) {
   _replyTo = { msgIndex, text, role };
   const preview = document.getElementById('reply-preview');
   const previewText = document.getElementById('reply-preview-text');
-  previewText.textContent = `↩️ ${role === 'user' ? 'Du' : 'Alvin Bot'}: ${text.substring(0, 120)}${text.length > 120 ? '…' : ''}`;
+  const sender = role === 'user' ? t('chat.reply.you') : t('chat.reply.bot');
+  previewText.textContent = `↩ ${sender}: ${text.substring(0, 120)}${text.length > 120 ? '…' : ''}`;
   preview.style.display = 'flex';
   document.getElementById('chat-input').focus();
 }
@@ -228,7 +395,7 @@ function clearReply() {
 }
 
 // ── File Upload State ───────────────────────────────────
-let _pendingFile = null; // { name, type, dataUrl }
+let _pendingFile = null;
 
 function handleFileSelect(files) {
   if (!files || !files.length) return;
@@ -239,7 +406,7 @@ function handleFileSelect(files) {
     const preview = document.getElementById('file-preview');
     const previewText = document.getElementById('file-preview-text');
     const sizeKb = (file.size / 1024).toFixed(1);
-    previewText.textContent = `📎 ${file.name} (${sizeKb} KB)`;
+    previewText.innerHTML = `${icon('paperclip', 14)} ${file.name} (${sizeKb} KB)`;
     preview.style.display = 'flex';
   };
   reader.readAsDataURL(file);
@@ -252,9 +419,11 @@ function clearFileUpload() {
 }
 
 // ── Drag & Drop ─────────────────────────────────────────
-(function initDragDrop() {
+function initDragDrop() {
   const msgs = document.getElementById('messages');
+  if (!msgs) return;
   let dragCounter = 0;
+  msgs.setAttribute('data-drop-text', `${t('chat.file.drop')}`);
   msgs.addEventListener('dragenter', (e) => { e.preventDefault(); dragCounter++; msgs.classList.add('drag-over'); });
   msgs.addEventListener('dragleave', (e) => { e.preventDefault(); dragCounter--; if (dragCounter <= 0) { dragCounter = 0; msgs.classList.remove('drag-over'); } });
   msgs.addEventListener('dragover', (e) => { e.preventDefault(); });
@@ -262,7 +431,7 @@ function clearFileUpload() {
     e.preventDefault(); dragCounter = 0; msgs.classList.remove('drag-over');
     if (e.dataTransfer?.files?.length) handleFileSelect(e.dataTransfer.files);
   });
-})();
+}
 
 // ── Chat ────────────────────────────────────────────────
 let _msgCounter = 0;
@@ -273,19 +442,18 @@ function addMessage(role, text, customTime, skipSave) {
   el.className = 'msg ' + role;
   el.dataset.msgIndex = msgIdx;
 
-  // Reply quote (if this message was sent with a reply)
   if (role === 'user' && _replyTo && !skipSave) {
     const quote = document.createElement('div');
     quote.className = 'reply-quote';
-    quote.textContent = `${_replyTo.role === 'user' ? 'Du' : 'Alvin Bot'}: ${_replyTo.text.substring(0, 100)}`;
+    const sender = _replyTo.role === 'user' ? t('chat.reply.you') : t('chat.reply.bot');
+    quote.textContent = `${sender}: ${_replyTo.text.substring(0, 100)}`;
     el.appendChild(quote);
   }
 
-  // File badge
   if (role === 'user' && _pendingFile && !skipSave) {
     const badge = document.createElement('div');
     badge.className = 'file-badge';
-    badge.textContent = `📎 ${_pendingFile.name}`;
+    badge.innerHTML = `${icon('paperclip', 12)} ${escapeHtml(_pendingFile.name)}`;
     el.appendChild(badge);
   }
 
@@ -304,11 +472,10 @@ function addMessage(role, text, customTime, skipSave) {
     time.textContent = customTime || timeStr();
     el.appendChild(time);
 
-    // Reply button
     const replyBtn = document.createElement('button');
     replyBtn.className = 'msg-reply-btn';
-    replyBtn.textContent = '↩️';
-    replyBtn.title = 'Antworten';
+    replyBtn.innerHTML = `${icon('chevron-right', 12)} ${t('chat.reply')}`;
+    replyBtn.title = t('chat.reply');
     replyBtn.onclick = () => setReply(msgIdx, text, role);
     el.appendChild(replyBtn);
   }
@@ -330,32 +497,29 @@ function sendMessage() {
   if ((!text && !_pendingFile) || !ws || ws.readyState !== 1) return;
 
   const effort = document.getElementById('chat-effort')?.value;
-
-  // Build context-enriched prompt
   let fullText = text || '';
   let replyContext = null;
   if (_replyTo) {
     replyContext = { role: _replyTo.role, text: _replyTo.text };
-    fullText = `[Antwort auf ${_replyTo.role === 'user' ? 'meine' : 'deine'} Nachricht: "${_replyTo.text.substring(0, 300)}"]\n\n${fullText}`;
+    const replyLabel = _replyTo.role === 'user' ? 'my' : 'your';
+    fullText = `[Reply to ${replyLabel} message: "${_replyTo.text.substring(0, 300)}"]\n\n${fullText}`;
   }
   let fileInfo = null;
   if (_pendingFile) {
     fileInfo = { name: _pendingFile.name, type: _pendingFile.type, size: _pendingFile.size };
-    const fileRef = `[Datei angehängt: ${_pendingFile.name} (${_pendingFile.type}, ${(_pendingFile.size/1024).toFixed(1)} KB)]`;
+    const fileRef = `[File attached: ${_pendingFile.name} (${_pendingFile.type}, ${(_pendingFile.size/1024).toFixed(1)} KB)]`;
     fullText = fullText ? `${fileRef}\n\n${fullText}` : fileRef;
   }
 
-  const t = timeStr();
-  addMessage('user', text || `📎 ${_pendingFile?.name || 'Datei'}`, t);
-  chatMessages.push({ role: 'user', text: fullText, time: t, replyTo: replyContext, file: fileInfo });
+  const tm = timeStr();
+  addMessage('user', text || `${_pendingFile?.name || 'File'}`, tm);
+  chatMessages.push({ role: 'user', text: fullText, time: tm, replyTo: replyContext, file: fileInfo });
   saveChatToStorage();
 
-  // Send via WebSocket
   const payload = { type: 'chat', text: fullText, effort };
   if (_pendingFile) payload.file = { name: _pendingFile.name, type: _pendingFile.type, dataUrl: _pendingFile.dataUrl };
   ws.send(JSON.stringify(payload));
 
-  // Reset state
   input.value = '';
   input.style.height = 'auto';
   clearReply();
@@ -366,46 +530,49 @@ function sendMessage() {
 }
 
 function resetChat() {
-  if (ws && ws.readyState === 1) {
-    ws.send(JSON.stringify({ type: 'reset' }));
-  }
+  if (ws && ws.readyState === 1) ws.send(JSON.stringify({ type: 'reset' }));
   chatMessages = [];
   clearChatStorage();
 }
 
 function exportChat(format = 'markdown') {
-  if (chatMessages.length === 0) { toast('Kein Chat zum Exportieren', 'error'); return; }
-
+  if (chatMessages.length === 0) { toast(t('chat.no.export'), 'error'); return; }
   fetch(API + '/api/chat/export', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ messages: chatMessages, format }),
-  })
-  .then(res => res.text())
-  .then(text => {
+  }).then(res => res.text()).then(text => {
     const ext = format === 'json' ? 'json' : 'md';
     const blob = new Blob([text], { type: 'text/plain' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
     a.download = `alvin-bot-chat-${new Date().toISOString().slice(0,10)}.${ext}`;
     a.click();
-    toast('Chat exportiert!');
+    toast(t('chat.exported'));
   });
 }
 
-// Keyboard shortcuts
-document.getElementById('chat-input').addEventListener('keydown', (e) => {
-  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
-});
-document.getElementById('chat-input').addEventListener('input', function() {
-  this.style.height = 'auto';
-  this.style.height = Math.min(this.scrollHeight, 140) + 'px';
-});
+function bindChatEvents() {
+  const chatInput = document.getElementById('chat-input');
+  if (!chatInput) return;
+
+  // Remove existing listeners by replacing element (clean slate)
+  const newInput = chatInput.cloneNode(true);
+  chatInput.parentNode.replaceChild(newInput, chatInput);
+
+  newInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+  });
+  newInput.addEventListener('input', function() {
+    this.style.height = 'auto';
+    this.style.height = Math.min(this.scrollHeight, 140) + 'px';
+  });
+}
 
 // Global keyboard shortcuts
 document.addEventListener('keydown', (e) => {
   if (e.key === 'n' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); resetChat(); }
   if (e.key === 'e' && (e.metaKey || e.ctrlKey) && e.shiftKey) { e.preventDefault(); exportChat(); }
+  if (e.key === 'k' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); openCommandPalette(); }
 });
 
 // ── Dashboard ───────────────────────────────────────────
@@ -413,19 +580,18 @@ async function loadDashboard() {
   const res = await fetch(API + '/api/status');
   const data = await res.json();
   document.getElementById('dashboard-cards').innerHTML = `
-    <div class="card"><h3>🤖 Model</h3><div class="value">${data.model.name}</div><div class="sub">${data.model.model}</div></div>
-    <div class="card"><h3>⏱ Uptime</h3><div class="value">${Math.floor(data.bot.uptime/3600)}h ${Math.floor(data.bot.uptime%3600/60)}m</div><div class="sub">v${data.bot.version}</div></div>
-    <div class="card"><h3>🧠 Memory</h3><div class="value">${data.memory.dailyLogs} Tage</div><div class="sub">${data.memory.vectors} Vektoren · ${data.memory.todayEntries} heute</div></div>
-    <div class="card"><h3>🔌 Plugins</h3><div class="value">${data.plugins}</div><div class="sub">geladen</div></div>
-    <div class="card"><h3>🔧 MCP</h3><div class="value">${data.mcp}</div><div class="sub">Server</div></div>
-    <div class="card"><h3>👥 Users</h3><div class="value">${data.users}</div><div class="sub">Profile</div></div>
+    <div class="card"><h3>${icon('bot', 14)} ${t('dashboard.model')}</h3><div class="value">${data.model.name}</div><div class="sub">${data.model.model}</div></div>
+    <div class="card"><h3>${icon('clock', 14)} ${t('dashboard.uptime')}</h3><div class="value">${Math.floor(data.bot.uptime/3600)}h ${Math.floor(data.bot.uptime%3600/60)}m</div><div class="sub">v${data.bot.version}</div></div>
+    <div class="card"><h3>${icon('brain', 14)} ${t('dashboard.memory')}</h3><div class="value">${data.memory.dailyLogs} ${t('dashboard.memory.days')}</div><div class="sub">${data.memory.vectors} ${t('dashboard.memory.vectors')} · ${data.memory.todayEntries} ${t('dashboard.memory.today')}</div></div>
+    <div class="card"><h3>${icon('plug', 14)} ${t('dashboard.plugins')}</h3><div class="value">${data.plugins}</div><div class="sub">${t('dashboard.plugins.loaded')}</div></div>
+    <div class="card"><h3>${icon('wrench', 14)} ${t('dashboard.mcp')}</h3><div class="value">${data.mcp}</div><div class="sub">${t('dashboard.mcp.servers')}</div></div>
+    <div class="card"><h3>${icon('users', 14)} ${t('dashboard.users')}</h3><div class="value">${data.users}</div><div class="sub">${t('dashboard.users.profiles')}</div></div>
   `;
   document.getElementById('model-badge').textContent = data.model.name;
 }
 
 // ── Models / Providers ──────────────────────────────────
 async function loadModels() {
-  // Load both the quick model list (for chat selector) and the full setup view
   const [modelsRes, setupRes] = await Promise.all([
     fetch(API + '/api/models'),
     fetch(API + '/api/providers/setup'),
@@ -433,7 +599,6 @@ async function loadModels() {
   const modelsData = await modelsRes.json();
   const setupData = await setupRes.json();
 
-  // Update chat model selector
   const sel = document.getElementById('chat-model');
   if (sel) {
     sel.innerHTML = modelsData.models.map(m =>
@@ -441,13 +606,12 @@ async function loadModels() {
     ).join('');
   }
 
-  // Render full provider setup cards
-  let html = '<div style="margin-bottom:20px"><h3 style="font-size:1em;margin-bottom:4px">🤖 KI-Modelle & Provider</h3><div class="sub">API Keys einrichten, Modelle aktivieren und Custom Models hinzufügen.</div></div>';
+  let html = `<div style="margin-bottom:20px"><h3 style="font-size:1em;margin-bottom:4px;display:flex;align-items:center;gap:8px">${icon('bot', 20)} ${t('models.title')}</h3><div class="sub">${t('models.desc')}</div></div>`;
 
   for (const p of setupData.providers) {
     const statusBadge = p.hasKey
-      ? '<span class="badge badge-green">✅ Key gesetzt</span>'
-      : (p.free ? '<span class="badge badge-yellow">⚡ Gratis verfügbar</span>' : '<span class="badge badge-red">❌ Kein Key</span>');
+      ? `<span class="badge badge-green">${icon('circle-check', 12)} ${t('models.key.set')}</span>`
+      : (p.free ? `<span class="badge badge-yellow">${icon('zap', 12)} ${t('models.free')}</span>` : `<span class="badge badge-red">${icon('circle-x', 12)} ${t('models.key.none')}</span>`);
 
     html += `<div class="card setup-card" style="margin-bottom:16px">
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
@@ -459,40 +623,34 @@ async function loadModels() {
         ${statusBadge}
       </div>`;
 
-    // Setup steps (collapsible)
-    html += `<details style="margin-bottom:12px"><summary style="cursor:pointer;color:var(--accent2);font-size:0.82em;font-weight:500">📋 Setup-Anleitung</summary><ol style="margin:8px 0 0 16px;color:var(--fg2);font-size:0.82em;line-height:1.6">`;
-    for (const step of p.setupSteps) {
-      html += `<li>${step}</li>`;
-    }
+    html += `<details style="margin-bottom:12px"><summary style="cursor:pointer;color:var(--accent2);font-size:0.82em;font-weight:500;display:flex;align-items:center;gap:4px">${icon('clipboard', 14)} ${t('models.setup.guide')}</summary><ol style="margin:8px 0 0 16px;color:var(--fg2);font-size:0.82em;line-height:1.6">`;
+    for (const step of p.setupSteps) html += `<li>${step}</li>`;
     if (p.signupUrl) html += `<li><a href="${p.signupUrl}" target="_blank" style="color:var(--accent2)">${p.signupUrl}</a></li>`;
     html += `</ol></details>`;
 
-    // API Key input (if applicable)
     if (p.envKey) {
       html += `<div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
-        <input type="password" id="key-${p.id}" placeholder="API Key eingeben..." value="${p.keyPreview}" style="flex:1;background:var(--bg3);border:1px solid var(--bg3);border-radius:6px;padding:8px 12px;color:var(--fg);font:inherit;font-size:0.85em;font-family:monospace;outline:none">
-        <button class="btn btn-sm" onclick="saveProviderKey('${p.id}')">💾 Speichern</button>
-        <button class="btn btn-sm btn-outline" onclick="testProviderKey('${p.id}')">🧪 Testen</button>
+        <input type="password" id="key-${p.id}" placeholder="${t('models.key.placeholder')}" value="${p.keyPreview}" style="flex:1;background:var(--bg3);border:1px solid var(--glass-border);border-radius:6px;padding:8px 12px;color:var(--fg);font:inherit;font-size:0.85em;font-family:monospace;outline:none">
+        <button class="btn btn-sm" onclick="saveProviderKey('${p.id}')">${icon('save', 12)} ${t('models.key.save')}</button>
+        <button class="btn btn-sm btn-outline" onclick="testProviderKey('${p.id}')">${icon('test-tube', 12)} ${t('models.key.test')}</button>
       </div>
       <div id="key-result-${p.id}" style="font-size:0.78em;margin-bottom:8px"></div>`;
     }
 
-    // Live models button (for providers with API keys)
     if (p.hasKey && p.id !== 'claude-sdk' && p.id !== 'ollama') {
       html += `<details id="live-models-${p.id}" style="margin-bottom:8px">
-        <summary onclick="loadLiveModels('${p.id}')" style="cursor:pointer;color:var(--accent2);font-size:0.82em;font-weight:500">🔍 Verfügbare Modelle (live von API laden)</summary>
-        <div id="live-models-list-${p.id}" style="margin-top:8px;max-height:300px;overflow-y:auto;font-size:0.82em">⏳ Lade...</div>
+        <summary onclick="loadLiveModels('${p.id}')" style="cursor:pointer;color:var(--accent2);font-size:0.82em;font-weight:500;display:flex;align-items:center;gap:4px">${icon('search', 14)} ${t('models.live.title')}</summary>
+        <div id="live-models-list-${p.id}" style="margin-top:8px;max-height:300px;overflow-y:auto;font-size:0.82em">${t('models.live.loading')}</div>
       </details>`;
     }
 
-    // Model list with activate buttons
-    html += `<div style="border-top:1px solid var(--bg3);padding-top:8px;margin-top:4px">`;
+    html += `<div style="border-top:1px solid var(--glass-border);padding-top:8px;margin-top:4px">`;
     for (const m of p.modelsActive) {
       const isActive = m.active;
       html += `<div style="display:flex;align-items:center;gap:8px;padding:6px 0;font-size:0.85em">
-        <span style="width:20px;text-align:center">${isActive ? '✅' : (m.registered ? '⬜' : '⚪')}</span>
+        <span style="width:20px;text-align:center">${isActive ? icon('circle-check', 14, 'style="color:var(--green)"') : (m.registered ? icon('circle-dot', 14) : icon('circle-dot', 14, 'style="opacity:0.3"'))}</span>
         <span style="flex:1;font-family:monospace">${m.name} <span style="color:var(--fg2)">(${m.model})</span></span>
-        ${isActive ? '<span class="badge badge-green">Aktiv</span>' : `<button class="btn btn-sm btn-outline" onclick="switchModel('${m.key}')">Aktivieren</button>`}
+        ${isActive ? `<span class="badge badge-green">${t('active')}</span>` : `<button class="btn btn-sm btn-outline" onclick="switchModel('${m.key}')">${t('models.activate')}</button>`}
       </div>`;
     }
     html += `</div></div>`;
@@ -501,46 +659,46 @@ async function loadModels() {
   // Custom Models section
   html += `<div class="card" style="margin-bottom:16px">
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
-      <span style="font-size:1.5em">🔧</span>
+      <span style="display:flex">${icon('wrench', 24)}</span>
       <div style="flex:1">
-        <h3 style="font-size:0.95em;text-transform:none;letter-spacing:0">Custom Models</h3>
-        <div class="sub">Eigene OpenAI-kompatible Endpunkte hinzufügen (LM Studio, vLLM, Together AI, etc.)</div>
+        <h3 style="font-size:0.95em;text-transform:none;letter-spacing:0">${t('models.custom')}</h3>
+        <div class="sub">${t('models.custom.desc')}</div>
       </div>
     </div>`;
 
   if (setupData.customModels.length > 0) {
     for (const cm of setupData.customModels) {
-      html += `<div style="display:flex;align-items:center;gap:8px;padding:6px 0;font-size:0.85em;border-bottom:1px solid var(--bg3)">
+      html += `<div style="display:flex;align-items:center;gap:8px;padding:6px 0;font-size:0.85em;border-bottom:1px solid var(--glass-border)">
         <span style="font-family:monospace;flex:1">${cm.name} <span style="color:var(--fg2)">(${cm.model})</span></span>
         <span class="badge">${cm.baseUrl}</span>
-        <button class="btn btn-sm btn-outline" onclick="switchModel('${cm.key}')">Aktivieren</button>
-        <button class="btn btn-sm btn-outline" style="color:var(--red)" onclick="removeCustomModel('${cm.key}')">✕</button>
+        <button class="btn btn-sm btn-outline" onclick="switchModel('${cm.key}')">${t('models.activate')}</button>
+        <button class="btn btn-sm btn-outline" style="color:var(--red)" onclick="removeCustomModel('${cm.key}')">${icon('x', 12)}</button>
       </div>`;
     }
   }
 
-  html += `<button class="btn btn-sm" style="margin-top:12px" onclick="showAddCustomModel()">+ Custom Model hinzufügen</button>
+  html += `<button class="btn btn-sm" style="margin-top:12px" onclick="showAddCustomModel()">${icon('plus', 14)} ${t('models.custom.add')}</button>
     <div id="custom-model-form" style="display:none;margin-top:12px;padding:12px;background:var(--bg3);border-radius:8px">
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
-        <input id="cm-key" placeholder="Eindeutiger Key (z.B. my-llama)" style="background:var(--bg);border:1px solid var(--bg4);border-radius:6px;padding:8px;color:var(--fg);font:inherit;font-size:0.82em">
-        <input id="cm-name" placeholder="Anzeigename (z.B. My Llama 3)" style="background:var(--bg);border:1px solid var(--bg4);border-radius:6px;padding:8px;color:var(--fg);font:inherit;font-size:0.82em">
-        <input id="cm-model" placeholder="Model ID (z.B. meta-llama/Llama-3-70b)" style="background:var(--bg);border:1px solid var(--bg4);border-radius:6px;padding:8px;color:var(--fg);font:inherit;font-size:0.82em">
-        <input id="cm-url" placeholder="Base URL (z.B. http://localhost:1234/v1)" style="background:var(--bg);border:1px solid var(--bg4);border-radius:6px;padding:8px;color:var(--fg);font:inherit;font-size:0.82em">
-        <input id="cm-apikey-env" placeholder="API Key Env-Var (optional, z.B. CUSTOM_API_KEY)" style="background:var(--bg);border:1px solid var(--bg4);border-radius:6px;padding:8px;color:var(--fg);font:inherit;font-size:0.82em">
-        <input id="cm-apikey" type="password" placeholder="API Key (optional)" style="background:var(--bg);border:1px solid var(--bg4);border-radius:6px;padding:8px;color:var(--fg);font:inherit;font-size:0.82em">
+        <input id="cm-key" placeholder="${t('models.custom.key')}" style="background:var(--bg);border:1px solid var(--bg4);border-radius:6px;padding:8px;color:var(--fg);font:inherit;font-size:0.82em">
+        <input id="cm-name" placeholder="${t('models.custom.name')}" style="background:var(--bg);border:1px solid var(--bg4);border-radius:6px;padding:8px;color:var(--fg);font:inherit;font-size:0.82em">
+        <input id="cm-model" placeholder="${t('models.custom.model')}" style="background:var(--bg);border:1px solid var(--bg4);border-radius:6px;padding:8px;color:var(--fg);font:inherit;font-size:0.82em">
+        <input id="cm-url" placeholder="${t('models.custom.url')}" style="background:var(--bg);border:1px solid var(--bg4);border-radius:6px;padding:8px;color:var(--fg);font:inherit;font-size:0.82em">
+        <input id="cm-apikey-env" placeholder="${t('models.custom.envkey')}" style="background:var(--bg);border:1px solid var(--bg4);border-radius:6px;padding:8px;color:var(--fg);font:inherit;font-size:0.82em">
+        <input id="cm-apikey" type="password" placeholder="${t('models.custom.apikey')}" style="background:var(--bg);border:1px solid var(--bg4);border-radius:6px;padding:8px;color:var(--fg);font:inherit;font-size:0.82em">
       </div>
       <div style="display:flex;gap:8px">
-        <button class="btn btn-sm" onclick="addCustomModel()">💾 Hinzufügen</button>
-        <button class="btn btn-sm btn-outline" onclick="document.getElementById('custom-model-form').style.display='none'">Abbrechen</button>
+        <button class="btn btn-sm" onclick="addCustomModel()">${icon('save', 12)} ${t('save')}</button>
+        <button class="btn btn-sm btn-outline" onclick="document.getElementById('custom-model-form').style.display='none'">${t('cancel')}</button>
       </div>
     </div>
   </div>`;
 
-  // Fallback chain — interactive
+  // Fallback chain
   html += `<div class="card">
-    <h3 style="font-size:0.85em;text-transform:none;margin-bottom:8px">⛓️ Fallback-Reihenfolge</h3>
-    <div class="sub" style="margin-bottom:12px">Wenn der primäre Provider fehlschlägt, werden diese der Reihe nach probiert. Per ⬆️/⬇️ umsortieren.</div>
-    <div id="fallback-list" style="font-size:0.85em">⏳ Lade...</div>
+    <h3 style="font-size:0.85em;text-transform:none;margin-bottom:8px;display:flex;align-items:center;gap:6px">${icon('layers', 16)} ${t('models.fallback')}</h3>
+    <div class="sub" style="margin-bottom:12px">${t('models.fallback.desc')}</div>
+    <div id="fallback-list" style="font-size:0.85em">${t('loading')}</div>
   </div>`;
 
   document.getElementById('models-setup').innerHTML = html;
@@ -554,53 +712,51 @@ async function loadFallbackOrder() {
     const container = document.getElementById('fallback-list');
     if (!container) return;
 
-    const primary = data.order?.primary || data.activeProvider || '(nicht gesetzt)';
+    const primary = data.order?.primary || data.activeProvider || '(not set)';
     const chain = data.order?.fallbacks || [];
-    // Build health map by key
     const healthArr = data.health || [];
     const health = {};
     healthArr.forEach(h => { health[h.key] = h; });
 
     let html = `<div style="display:flex;align-items:center;gap:8px;padding:8px 12px;background:var(--bg3);border-radius:6px;margin-bottom:6px">
-      <span style="font-size:1.1em">👑</span>
+      ${icon('crown', 16)}
       <span style="flex:1;font-family:monospace;font-weight:600">${primary}</span>
-      <span class="badge badge-green">Primär</span>
-      ${health[primary] ? `<span style="font-size:0.78em;color:${health[primary].healthy ? 'var(--green)' : 'var(--red)'}">${health[primary].healthy ? '● Healthy' : '● Unhealthy'}</span>` : ''}
+      <span class="badge badge-green">${t('models.fallback.primary')}</span>
+      ${health[primary] ? `<span style="font-size:0.78em;color:${health[primary].healthy ? 'var(--green)' : 'var(--red)'}">● ${health[primary].healthy ? t('models.fallback.healthy') : t('models.fallback.unhealthy')}</span>` : ''}
     </div>`;
 
     if (chain.length === 0) {
-      html += `<div style="padding:8px 12px;color:var(--fg2);font-style:italic">Keine Fallback-Provider konfiguriert.</div>`;
+      html += `<div style="padding:8px 12px;color:var(--fg2);font-style:italic">${t('models.fallback.none')}</div>`;
     }
 
     chain.forEach((key, i) => {
       const h = health[key];
-      const healthDot = h ? `<span style="font-size:0.78em;color:${h.healthy ? 'var(--green)' : 'var(--red)'}">${h.healthy ? '● Healthy' : '● Unhealthy'}</span>` : '';
+      const healthDot = h ? `<span style="font-size:0.78em;color:${h.healthy ? 'var(--green)' : 'var(--red)'}">● ${h.healthy ? t('models.fallback.healthy') : t('models.fallback.unhealthy')}</span>` : '';
       html += `<div style="display:flex;align-items:center;gap:8px;padding:6px 12px;background:var(--bg2);border-radius:6px;margin-bottom:4px">
         <span style="color:var(--fg2);min-width:20px;text-align:center">${i + 1}.</span>
         <span style="flex:1;font-family:monospace">${key}</span>
         ${healthDot}
-        <button class="btn btn-sm btn-outline" style="padding:2px 8px;font-size:0.8em" onclick="moveFallback('${key}','up')" ${i === 0 ? 'disabled style="opacity:0.3;padding:2px 8px;font-size:0.8em"' : ''}>⬆️</button>
-        <button class="btn btn-sm btn-outline" style="padding:2px 8px;font-size:0.8em" onclick="moveFallback('${key}','down')" ${i === chain.length - 1 ? 'disabled style="opacity:0.3;padding:2px 8px;font-size:0.8em"' : ''}>⬇️</button>
-        <button class="btn btn-sm btn-outline" style="padding:2px 8px;font-size:0.8em;color:var(--red)" onclick="removeFallback('${key}')">✕</button>
+        <button class="btn btn-sm btn-outline" style="padding:2px 8px;font-size:0.8em" onclick="moveFallback('${key}','up')" ${i === 0 ? 'disabled style="opacity:0.3;padding:2px 8px;font-size:0.8em"' : ''}>${icon('arrow-up', 12)}</button>
+        <button class="btn btn-sm btn-outline" style="padding:2px 8px;font-size:0.8em" onclick="moveFallback('${key}','down')" ${i === chain.length - 1 ? 'disabled style="opacity:0.3;padding:2px 8px;font-size:0.8em"' : ''}>${icon('arrow-down', 12)}</button>
+        <button class="btn btn-sm btn-outline" style="padding:2px 8px;font-size:0.8em;color:var(--red)" onclick="removeFallback('${key}')">${icon('x', 12)}</button>
       </div>`;
     });
 
-    // Add fallback button
     const allProviders = ['claude-sdk','groq','openai','google','nvidia-llama-3.3-70b','nvidia-kimi-k2.5','openrouter'];
     const available = allProviders.filter(p => p !== primary && !chain.includes(p));
     if (available.length > 0) {
       html += `<div style="margin-top:8px;display:flex;gap:8px;align-items:center">
-        <select id="fallback-add-select" style="flex:1;background:var(--bg3);border:1px solid var(--bg3);border-radius:6px;padding:6px 10px;color:var(--fg);font:inherit;font-size:0.85em">
+        <select id="fallback-add-select" style="flex:1;background:var(--bg3);border:1px solid var(--glass-border);border-radius:6px;padding:6px 10px;color:var(--fg);font:inherit;font-size:0.85em">
           ${available.map(p => `<option value="${p}">${p}</option>`).join('')}
         </select>
-        <button class="btn btn-sm" onclick="addFallback()">+ Hinzufügen</button>
+        <button class="btn btn-sm" onclick="addFallback()">${icon('plus', 12)} ${t('models.fallback.add')}</button>
       </div>`;
     }
 
     container.innerHTML = html;
   } catch (err) {
     const container = document.getElementById('fallback-list');
-    if (container) container.innerHTML = `<span style="color:var(--red)">Fehler: ${err.message}</span>`;
+    if (container) container.innerHTML = `<span style="color:var(--red)">${t('error')}: ${err.message}</span>`;
   }
 }
 
@@ -621,7 +777,7 @@ async function removeFallback(key) {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ primary, fallbacks: newChain }),
   });
-  toast(`${key} entfernt`);
+  toast(t('models.fallback.removed', { key }));
   loadFallbackOrder();
 }
 
@@ -637,48 +793,42 @@ async function addFallback() {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ primary, fallbacks: newChain }),
   });
-  toast(`${key} hinzugefügt`, 'success');
+  toast(t('models.fallback.added', { key }));
   loadFallbackOrder();
-
-  document.getElementById('models-setup').innerHTML = html;
 }
 
 const _liveModelsCache = {};
 async function loadLiveModels(providerId) {
   const container = document.getElementById('live-models-list-' + providerId);
   if (!container) return;
-  
-  // Use cache if loaded within last 60s
   if (_liveModelsCache[providerId] && Date.now() - _liveModelsCache[providerId].ts < 60000) {
     renderLiveModels(providerId, _liveModelsCache[providerId].models, container);
     return;
   }
-  
-  container.innerHTML = '<span style="color:var(--fg2)">⏳ Modelle werden geladen...</span>';
+  container.innerHTML = `<span style="color:var(--fg2)">${t('models.live.loading')}</span>`;
   try {
     const res = await fetch(API + '/api/providers/live-models?id=' + providerId);
     const data = await res.json();
     if (!data.ok || !data.models?.length) {
-      container.innerHTML = '<span style="color:var(--fg2)">Keine Modelle gefunden oder Key nicht gesetzt.</span>';
+      container.innerHTML = `<span style="color:var(--fg2)">${t('models.live.none')}</span>`;
       return;
     }
     _liveModelsCache[providerId] = { models: data.models, ts: Date.now() };
     renderLiveModels(providerId, data.models, container);
   } catch (err) {
-    container.innerHTML = `<span style="color:var(--red)">Fehler: ${err.message}</span>`;
+    container.innerHTML = `<span style="color:var(--red)">${t('error')}: ${err.message}</span>`;
   }
 }
 
 function renderLiveModels(providerId, models, container) {
-  // Group hint for large lists
-  const countInfo = models.length > 20 ? ` <span style="color:var(--fg2)">(${models.length} Modelle)</span>` : '';
-  let html = `<div style="margin-bottom:6px;font-weight:500">Verfügbare Modelle${countInfo}:</div>`;
+  const countInfo = models.length > 20 ? ` <span style="color:var(--fg2)">(${t('models.live.count', { count: models.length })})</span>` : '';
+  let html = `<div style="margin-bottom:6px;font-weight:500">${t('models.live.available')}${countInfo}:</div>`;
   html += '<div style="display:flex;flex-direction:column;gap:2px">';
   for (const m of models) {
     html += `<div style="display:flex;align-items:center;gap:8px;padding:4px 8px;border-radius:4px;background:var(--bg2)">
       <span style="flex:1;font-family:monospace;font-size:0.9em" title="${m.name}">${m.id}</span>
       ${m.name !== m.id ? `<span style="color:var(--fg2);font-size:0.85em">${m.name}</span>` : ''}
-      <button class="btn btn-sm btn-outline" style="padding:1px 8px;font-size:0.78em" onclick="activateLiveModel('${providerId}','${m.id}','${(m.name||m.id).replace(/'/g,"\\'")}')">Aktivieren</button>
+      <button class="btn btn-sm btn-outline" style="padding:1px 8px;font-size:0.78em" onclick="activateLiveModel('${providerId}','${m.id}','${(m.name||m.id).replace(/'/g,"\\'")}')"> ${t('models.activate')}</button>
     </div>`;
   }
   html += '</div>';
@@ -686,88 +836,65 @@ function renderLiveModels(providerId, models, container) {
 }
 
 async function activateLiveModel(providerId, modelId, modelName) {
-  // Map provider to base URL
   const baseUrls = {
-    anthropic: 'https://api.anthropic.com/v1/',
-    openai: 'https://api.openai.com/v1',
-    google: 'https://generativelanguage.googleapis.com/v1beta/openai',
-    groq: 'https://api.groq.com/openai/v1',
-    nvidia: 'https://integrate.api.nvidia.com/v1',
-    openrouter: 'https://openrouter.ai/api/v1',
+    anthropic: 'https://api.anthropic.com/v1/', openai: 'https://api.openai.com/v1',
+    google: 'https://generativelanguage.googleapis.com/v1beta/openai', groq: 'https://api.groq.com/openai/v1',
+    nvidia: 'https://integrate.api.nvidia.com/v1', openrouter: 'https://openrouter.ai/api/v1',
   };
   const apiKeyEnvs = {
-    anthropic: 'ANTHROPIC_API_KEY',
-    openai: 'OPENAI_API_KEY',
-    google: 'GOOGLE_API_KEY',
-    groq: 'GROQ_API_KEY',
-    nvidia: 'NVIDIA_API_KEY',
-    openrouter: 'OPENROUTER_API_KEY',
+    anthropic: 'ANTHROPIC_API_KEY', openai: 'OPENAI_API_KEY', google: 'GOOGLE_API_KEY',
+    groq: 'GROQ_API_KEY', nvidia: 'NVIDIA_API_KEY', openrouter: 'OPENROUTER_API_KEY',
   };
-  
   const key = modelId.replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-');
-  const baseUrl = baseUrls[providerId] || '';
-  const apiKeyEnv = apiKeyEnvs[providerId] || '';
-  
-  // Add as custom model so it persists
   const res = await fetch(API + '/api/providers/add-custom', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ key, name: modelName || modelId, model: modelId, baseUrl, apiKeyEnv, type: 'openai-compatible' }),
+    body: JSON.stringify({ key, name: modelName || modelId, model: modelId, baseUrl: baseUrls[providerId] || '', apiKeyEnv: apiKeyEnvs[providerId] || '', type: 'openai-compatible' }),
   });
   const data = await res.json();
   if (data.ok) {
-    // Switch to it
-    await fetch(API + '/api/models/switch', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ key }),
-    });
-    toast(`${modelName || modelId} aktiviert!`, 'success');
+    await fetch(API + '/api/models/switch', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key }) });
+    toast(`${modelName || modelId} ${t('models.activated')}`);
     loadModels();
   } else {
-    toast(data.error || 'Fehler beim Aktivieren', 'error');
+    toast(data.error || t('models.activate.error'), 'error');
   }
 }
 
 async function switchModel(key) {
-  await fetch(API + '/api/models/switch', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ key }),
-  });
+  await fetch(API + '/api/models/switch', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key }) });
   loadModels(); loadDashboard();
-  toast('Model gewechselt');
+  toast(t('models.switched'));
 }
 
 async function saveProviderKey(providerId) {
   const input = document.getElementById('key-' + providerId);
   const apiKey = input.value.trim();
-  if (!apiKey || apiKey.includes('...')) { toast('Bitte einen vollständigen Key eingeben', 'error'); return; }
+  if (!apiKey || apiKey.includes('...')) { toast(t('models.key.fill'), 'error'); return; }
   const res = await fetch(API + '/api/providers/set-key', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ providerId, apiKey }),
   });
   const data = await res.json();
-  toast(data.ok ? '🔑 Key gespeichert! Bot-Neustart nötig.' : data.error, data.ok ? 'success' : 'error');
+  toast(data.ok ? t('models.key.saved') : data.error, data.ok ? 'success' : 'error');
 }
 
 async function testProviderKey(providerId) {
   const input = document.getElementById('key-' + providerId);
   const apiKey = input?.value?.trim() || '';
-  // Allow testing with stored key (empty input but key already configured)
   const useStored = !apiKey || apiKey.includes('...');
   const resultDiv = document.getElementById('key-result-' + providerId);
-  resultDiv.innerHTML = '<span style="color:var(--fg2)">⏳ Teste...</span>';
+  resultDiv.innerHTML = `<span style="color:var(--fg2)">${t('models.key.testing')}</span>`;
   const res = await fetch(API + '/api/providers/test-key', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ providerId, apiKey: useStored ? '__USE_STORED__' : apiKey }),
   });
   const data = await res.json();
   resultDiv.innerHTML = data.ok
-    ? `<span style="color:var(--green)">✅ Key funktioniert!</span>`
-    : `<span style="color:var(--red)">❌ ${data.error}</span>`;
+    ? `<span style="color:var(--green)">${icon('circle-check', 12)} ${t('models.key.works')}</span>`
+    : `<span style="color:var(--red)">${icon('circle-x', 12)} ${data.error}</span>`;
 }
 
-function showAddCustomModel() {
-  document.getElementById('custom-model-form').style.display = '';
-}
+function showAddCustomModel() { document.getElementById('custom-model-form').style.display = ''; }
 
 async function addCustomModel() {
   const model = {
@@ -777,20 +904,15 @@ async function addCustomModel() {
     baseUrl: document.getElementById('cm-url').value.trim(),
     apiKeyEnv: document.getElementById('cm-apikey-env').value.trim(),
     apiKey: document.getElementById('cm-apikey').value.trim(),
-    type: 'openai-compatible',
-    supportsStreaming: true,
+    type: 'openai-compatible', supportsStreaming: true,
   };
   if (!model.key || !model.name || !model.model || !model.baseUrl) {
-    toast('Bitte alle Pflichtfelder ausfüllen', 'error');
-    return;
+    toast(t('models.custom.fill'), 'error'); return;
   }
-  const res = await fetch(API + '/api/providers/add-custom', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(model),
-  });
+  const res = await fetch(API + '/api/providers/add-custom', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(model) });
   const data = await res.json();
   if (data.ok) {
-    toast('Custom Model hinzugefügt! Neustart nötig.');
+    toast(t('models.custom.added'));
     document.getElementById('custom-model-form').style.display = 'none';
     loadModels();
   } else {
@@ -799,12 +921,9 @@ async function addCustomModel() {
 }
 
 async function removeCustomModel(key) {
-  if (!confirm(`Custom Model "${key}" entfernen?`)) return;
-  await fetch(API + '/api/providers/remove-custom', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ key }),
-  });
-  toast('Entfernt');
+  if (!confirm(t('models.custom.remove', { key }))) return;
+  await fetch(API + '/api/providers/remove-custom', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key }) });
+  toast(t('models.custom.removed'));
   loadModels();
 }
 
@@ -813,8 +932,8 @@ async function loadMemory() {
   const res = await fetch(API + '/api/memory');
   const data = await res.json();
   const sel = document.getElementById('memory-file');
-  sel.innerHTML = '<option value="MEMORY.md">📝 MEMORY.md (Langzeit)</option>';
-  data.dailyFiles.forEach(f => { sel.innerHTML += `<option value="${f}">📅 ${f}</option>`; });
+  sel.innerHTML = `<option value="MEMORY.md">${icon('file-text', 14)} ${t('memory.longterm')}</option>`;
+  data.dailyFiles.forEach(f => { sel.innerHTML += `<option value="${f}">${icon('calendar', 14)} ${f}</option>`; });
   document.getElementById('memory-editor').value = data.longTermMemory;
 }
 
@@ -834,7 +953,7 @@ async function saveMemoryFile() {
     body: JSON.stringify({ file, content }),
   });
   const data = await res.json();
-  toast(data.ok ? 'Gespeichert!' : data.error, data.ok ? 'success' : 'error');
+  toast(data.ok ? t('memory.saved') : data.error, data.ok ? 'success' : 'error');
 }
 
 // ── Sessions ────────────────────────────────────────────
@@ -843,15 +962,15 @@ async function loadSessions() {
   const data = await res.json();
   const list = document.getElementById('sessions-list');
   if (data.sessions.length === 0) {
-    list.innerHTML = '<div class="card"><h3>Keine Sessions</h3><div class="sub">Sessions werden erstellt wenn User chatten.</div></div>';
+    list.innerHTML = `<div class="card"><h3>${t('sessions.none')}</h3><div class="sub">${t('sessions.none.desc')}</div></div>`;
     return;
   }
   list.innerHTML = data.sessions.map(s => {
     const dur = Math.floor((s.lastActivity - s.startedAt) / 60000);
-    return `<div class="list-item"><div class="icon">💬</div><div class="info">
+    return `<div class="list-item"><div class="icon">${icon('message-circle', 18)}</div><div class="info">
       <div class="name">${s.name}${s.username ? ' @'+s.username : ''}</div>
-      <div class="desc">${s.messageCount} msgs · ${s.toolUseCount} tools · $${s.totalCost.toFixed(4)} · ${dur}min</div>
-    </div><span class="badge ${s.isProcessing ? 'badge-yellow' : 'badge-green'}">${s.isProcessing ? 'Active' : 'Idle'}</span></div>`;
+      <div class="desc">${s.messageCount} ${t('sessions.msgs')} · ${s.toolUseCount} ${t('sessions.tools')} · $${s.totalCost.toFixed(4)} · ${dur}min</div>
+    </div><span class="badge ${s.isProcessing ? 'badge-yellow' : 'badge-green'}">${s.isProcessing ? t('sessions.active') : t('sessions.idle')}</span></div>`;
   }).join('');
 }
 
@@ -860,23 +979,23 @@ async function loadPlugins() {
   const res = await fetch(API + '/api/plugins');
   const data = await res.json();
   document.getElementById('plugins-list').innerHTML = data.plugins.length === 0
-    ? '<div class="card"><h3>Keine Plugins</h3><div class="sub">Plugins in plugins/ ablegen.</div></div>'
-    : data.plugins.map(p => `<div class="list-item"><div class="icon">🔌</div><div class="info">
+    ? `<div class="card"><h3>${t('plugins.none')}</h3><div class="sub">${t('plugins.none.desc')}</div></div>`
+    : data.plugins.map(p => `<div class="list-item"><div class="icon">${icon('plug', 18)}</div><div class="info">
         <div class="name">${p.name} <span class="badge">${p.version}</span></div>
         <div class="desc">${p.description}${p.commands.length ? ' · '+p.commands.join(', ') : ''}</div>
       </div></div>`).join('');
 }
 
 // ── Users ───────────────────────────────────────────────
-const PLATFORM_ICONS = { telegram: '✈️', whatsapp: '💬', discord: '🎮', signal: '🔒', webui: '🌐', web: '🌐' };
+const PLATFORM_ICONS = { telegram: 'send', whatsapp: 'message-circle', discord: 'signal', signal: 'shield', webui: 'globe', web: 'globe' };
 
 function timeAgo(ts) {
   if (!ts) return '—';
   const diff = Date.now() - ts;
-  if (diff < 60000) return 'gerade eben';
-  if (diff < 3600000) return `vor ${Math.floor(diff/60000)} Min`;
-  if (diff < 86400000) return `vor ${Math.floor(diff/3600000)} Std`;
-  return new Date(ts).toLocaleDateString('de-DE', { day:'numeric', month:'short', year:'numeric' });
+  if (diff < 60000) return t('users.just.now');
+  if (diff < 3600000) return t('users.min.ago', { n: Math.floor(diff/60000) });
+  if (diff < 86400000) return t('users.hrs.ago', { n: Math.floor(diff/3600000) });
+  return new Date(ts).toLocaleDateString(getLang() === 'de' ? 'de-DE' : 'en-US', { day:'numeric', month:'short', year:'numeric' });
 }
 
 async function loadUsers() {
@@ -885,40 +1004,40 @@ async function loadUsers() {
   const el = document.getElementById('users-list');
 
   if (data.users.length === 0) {
-    el.innerHTML = '<div class="card"><h3>Keine User</h3><div class="sub">Werden automatisch erfasst sobald jemand schreibt.</div></div>';
+    el.innerHTML = `<div class="card"><h3>${t('users.none')}</h3><div class="sub">${t('users.none.desc')}</div></div>`;
     return;
   }
 
   el.innerHTML = data.users.map(u => {
-    const platformIcon = PLATFORM_ICONS[u.lastPlatform] || '❓';
-    const platformName = u.lastPlatform ? u.lastPlatform.charAt(0).toUpperCase() + u.lastPlatform.slice(1) : 'Unbekannt';
+    const platformIconName = PLATFORM_ICONS[u.lastPlatform] || 'globe';
+    const platformName = u.lastPlatform ? u.lastPlatform.charAt(0).toUpperCase() + u.lastPlatform.slice(1) : t('users.platform.unknown');
     const lastMsg = u.lastMessage ? `<div class="user-last-msg">"${escapeHtml(u.lastMessage)}"</div>` : '';
     const sessionInfo = u.session ? `
       <div class="user-session-info">
-        ${u.session.isProcessing ? '<span class="badge badge-yellow">⏳ Verarbeitet...</span>' : ''}
-        ${u.session.hasActiveQuery ? '<span class="badge badge-yellow">🔄 Query aktiv</span>' : ''}
-        ${u.session.queuedMessages > 0 ? `<span class="badge badge-blue">📨 ${u.session.queuedMessages} in Queue</span>` : ''}
-        <span title="Kosten">💰 $${u.session.totalCost.toFixed(4)}</span>
-        <span title="Nachrichten in Session">💬 ${u.session.messageCount}</span>
-        <span title="Tool-Aufrufe">🔧 ${u.session.toolUseCount}</span>
-        <span title="History-Länge">📜 ${u.session.historyLength}</span>
-        <span title="Effort-Level">🧠 ${u.session.effort}</span>
-      </div>` : '<div class="user-session-info"><span class="sub">Keine aktive Session</span></div>';
+        ${u.session.isProcessing ? `<span class="badge badge-yellow">${icon('clock', 10)} ${t('users.processing')}</span>` : ''}
+        ${u.session.hasActiveQuery ? `<span class="badge badge-yellow">${icon('refresh-cw', 10)} ${t('users.query.active')}</span>` : ''}
+        ${u.session.queuedMessages > 0 ? `<span class="badge badge-blue">${icon('mail', 10)} ${t('users.in.queue', { count: u.session.queuedMessages })}</span>` : ''}
+        <span title="${t('users.cost')}">${icon('zap', 10)} $${u.session.totalCost.toFixed(4)}</span>
+        <span title="${t('users.msgs')}">${icon('message-square', 10)} ${u.session.messageCount}</span>
+        <span title="${t('users.tools')}">${icon('wrench', 10)} ${u.session.toolUseCount}</span>
+        <span title="${t('users.history')}">${icon('list', 10)} ${u.session.historyLength}</span>
+        <span title="${t('users.effort')}">${icon('brain', 10)} ${u.session.effort}</span>
+      </div>` : `<div class="user-session-info"><span class="sub">${t('users.no.session')}</span></div>`;
 
-    const killBtn = u.isOwner ? '' : `<button class="btn btn-danger btn-sm" onclick="killUser(${u.userId}, '${escapeHtml(u.name)}')" title="Session & Daten löschen">🗑️</button>`;
+    const killBtn = u.isOwner ? '' : `<button class="btn btn-danger btn-sm" onclick="killUser(${u.userId}, '${escapeHtml(u.name)}')" title="${t('delete')}">${icon('trash-2', 12)}</button>`;
 
     return `<div class="card user-card" style="margin-bottom:12px">
       <div style="display:flex;align-items:flex-start;gap:12px">
-        <div class="icon" style="font-size:1.6em;min-width:36px;text-align:center">${u.isOwner ? '👑' : '👤'}</div>
+        <div class="icon" style="font-size:1.6em;min-width:36px;text-align:center">${u.isOwner ? icon('crown', 28) : icon('user', 28)}</div>
         <div style="flex:1;min-width:0">
           <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
             <strong>${escapeHtml(u.name)}</strong>
             ${u.username ? `<span class="sub">@${escapeHtml(u.username)}</span>` : ''}
-            <span class="badge badge-${u.session ? 'green' : 'gray'}" style="font-size:0.7em">${u.session ? 'Online' : 'Offline'}</span>
+            <span class="badge badge-${u.session ? 'green' : 'gray'}" style="font-size:0.7em">${u.session ? t('online') : t('offline')}</span>
             ${killBtn}
           </div>
-          <div class="sub" style="margin-top:4px">
-            ${platformIcon} ${platformName} · ${u.totalMessages} Nachrichten · Zuletzt aktiv: ${timeAgo(u.lastActive)}
+          <div class="sub" style="margin-top:4px;display:flex;align-items:center;gap:4px">
+            ${icon(platformIconName, 12)} ${platformName} · ${t('users.messages.total', { n: u.totalMessages })} · ${t('users.last.active')}: ${timeAgo(u.lastActive)}
           </div>
           ${lastMsg}
           ${sessionInfo}
@@ -928,26 +1047,20 @@ async function loadUsers() {
   }).join('');
 }
 
-function escapeHtml(str) {
-  if (!str) return '';
-  return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-}
-
 async function killUser(userId, name) {
-  if (!confirm(`User "${name}" wirklich löschen?\n\nDas löscht:\n• Aktive Session (+ laufende Anfrage)\n• Profil-Daten\n• Chat-History\n• Memory-Verzeichnis\n\nDiese Aktion kann nicht rückgängig gemacht werden!`)) return;
-
+  if (!confirm(t('users.kill.confirm', { name }))) return;
   try {
     const res = await fetch(API + `/api/users/${userId}`, { method: 'DELETE' });
     const data = await res.json();
     if (data.ok) {
-      const summary = data.deleted.length > 0 ? `Gelöscht: ${data.deleted.join(', ')}` : 'Nichts zu löschen';
-      alert(`✅ User gelöscht.\n\n${summary}`);
-      loadUsers(); // Refresh
+      const summary = data.deleted.length > 0 ? t('users.deleted.summary', { items: data.deleted.join(', ') }) : t('users.nothing');
+      alert(`${t('users.deleted')}\n\n${summary}`);
+      loadUsers();
     } else {
-      alert(`❌ Fehler: ${data.error || 'Unbekannt'}`);
+      alert(`${t('error')}: ${data.error || 'Unknown'}`);
     }
   } catch (e) {
-    alert(`❌ Fehler: ${e.message}`);
+    alert(`${t('error')}: ${e.message}`);
   }
 }
 
@@ -956,18 +1069,17 @@ async function loadPlatforms() {
   const res = await fetch(API + '/api/platforms/setup');
   const data = await res.json();
 
-  let html = '<div style="margin-bottom:20px"><h3 style="font-size:1em;margin-bottom:4px">📱 Messaging-Plattformen</h3><div class="sub">Verbinde Alvin Bot mit verschiedenen Messaging-Diensten. Mehrere gleichzeitig möglich.</div></div>';
+  let html = `<div style="margin-bottom:20px"><h3 style="font-size:1em;margin-bottom:4px;display:flex;align-items:center;gap:8px">${icon('smartphone', 20)} ${t('platforms.title')}</h3><div class="sub">${t('platforms.desc')}</div></div>`;
 
   for (const p of data.platforms) {
     let statusBadge;
     if (p.configured && p.depsInstalled) {
-      statusBadge = `<span class="badge badge-green" id="badge-${p.id}">✅ Bereit</span>`;
+      statusBadge = `<span class="badge badge-green" id="badge-${p.id}">${icon('circle-check', 12)} ${t('platforms.ready')}</span>`;
     } else if (p.configured && !p.depsInstalled) {
-      statusBadge = `<span class="badge badge-yellow" id="badge-${p.id}">📦 Deps fehlen</span>`;
+      statusBadge = `<span class="badge badge-yellow" id="badge-${p.id}">${icon('package', 12)} ${t('platforms.deps.missing')}</span>`;
     } else {
-      statusBadge = `<span class="badge badge-red" id="badge-${p.id}">Nicht eingerichtet</span>`;
+      statusBadge = `<span class="badge badge-red" id="badge-${p.id}">${t('platforms.not.configured')}</span>`;
     }
-    const depsBadge = '';
 
     html += `<div class="card setup-card" style="margin-bottom:16px">
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
@@ -976,18 +1088,14 @@ async function loadPlatforms() {
           <h3 style="font-size:0.95em;text-transform:none;letter-spacing:0">${p.name}</h3>
           <div class="sub">${p.description}</div>
         </div>
-        ${statusBadge} ${depsBadge}
+        ${statusBadge}
       </div>`;
 
-    // Setup steps
-    html += `<details ${p.configured ? '' : 'open'} style="margin-bottom:12px"><summary style="cursor:pointer;color:var(--accent2);font-size:0.82em;font-weight:500">📋 Setup-Anleitung</summary><ol style="margin:8px 0 0 16px;color:var(--fg2);font-size:0.82em;line-height:1.6">`;
-    for (const step of p.setupSteps) {
-      html += `<li>${step}</li>`;
-    }
+    html += `<details ${p.configured ? '' : 'open'} style="margin-bottom:12px"><summary style="cursor:pointer;color:var(--accent2);font-size:0.82em;font-weight:500;display:flex;align-items:center;gap:4px">${icon('clipboard', 14)} ${t('platforms.setup.guide')}</summary><ol style="margin:8px 0 0 16px;color:var(--fg2);font-size:0.82em;line-height:1.6">`;
+    for (const step of p.setupSteps) html += `<li>${step}</li>`;
     if (p.setupUrl) html += `<li><a href="${p.setupUrl}" target="_blank" style="color:var(--accent2)">${p.setupUrl}</a></li>`;
     html += `</ol></details>`;
 
-    // Env var inputs
     html += `<div style="display:flex;flex-direction:column;gap:8px;margin-bottom:8px">`;
     for (const v of p.envVars) {
       if (v.type === 'toggle') {
@@ -999,65 +1107,61 @@ async function loadPlatforms() {
       } else {
         html += `<div style="display:flex;gap:8px;align-items:center">
           <label style="font-size:0.78em;color:var(--fg2);min-width:120px">${v.label}</label>
-          <input type="${v.secret ? 'password' : 'text'}" id="pv-${p.id}-${v.key}" placeholder="${v.placeholder}" value="${p.values[v.key] || ''}" style="flex:1;background:var(--bg3);border:1px solid var(--bg3);border-radius:6px;padding:8px 12px;color:var(--fg);font:inherit;font-size:0.85em;font-family:monospace;outline:none">
+          <input type="${v.secret ? 'password' : 'text'}" id="pv-${p.id}-${v.key}" placeholder="${v.placeholder}" value="${p.values[v.key] || ''}" style="flex:1;background:var(--bg3);border:1px solid var(--glass-border);border-radius:6px;padding:8px 12px;color:var(--fg);font:inherit;font-size:0.85em;font-family:monospace;outline:none">
         </div>`;
       }
     }
     html += `</div>`;
 
-    // Action buttons
     html += `<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-      <button class="btn btn-sm" onclick="savePlatform('${p.id}')">💾 Speichern</button>`;
+      <button class="btn btn-sm" onclick="savePlatform('${p.id}')">${icon('save', 12)} ${t('platforms.save')}</button>`;
     if (p.npmPackages && !p.depsInstalled) {
-      html += `<button class="btn btn-sm btn-outline" onclick="installPlatformDeps('${p.id}')">📦 Dependencies installieren</button>`;
+      html += `<button class="btn btn-sm btn-outline" onclick="installPlatformDeps('${p.id}')">${icon('package', 12)} ${t('platforms.install.deps')}</button>`;
     }
     if (p.configured) {
-      html += `<button class="btn btn-sm btn-outline" onclick="testPlatformConnection('${p.id}')">🧪 Verbindung testen</button>`;
-      html += `<button class="btn btn-sm btn-outline" style="color:var(--red)" onclick="disablePlatform('${p.id}')">Deaktivieren</button>`;
+      html += `<button class="btn btn-sm btn-outline" onclick="testPlatformConnection('${p.id}')">${icon('test-tube', 12)} ${t('platforms.test')}</button>`;
+      html += `<button class="btn btn-sm btn-outline" style="color:var(--red)" onclick="disablePlatform('${p.id}')">${t('platforms.disable')}</button>`;
     }
     html += `<span id="platform-live-${p.id}" style="font-size:0.78em;margin-left:4px"></span>`;
     html += `</div>`;
 
-    // WhatsApp: QR code + connection status area
     if (p.id === 'whatsapp' && p.configured && p.depsInstalled) {
       html += `<div id="wa-qr-area" style="margin-top:12px;padding:12px;background:var(--bg3);border-radius:8px">
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
-          <span id="wa-status-dot" style="font-size:1.2em">⏳</span>
-          <span id="wa-status-text" style="font-size:0.85em;color:var(--fg2)">Status wird geladen...</span>
+          <span id="wa-status-dot" style="font-size:1.2em">${icon('clock', 16)}</span>
+          <span id="wa-status-text" style="font-size:0.85em;color:var(--fg2)">${t('wa.status.loading')}</span>
           <div style="flex:1"></div>
-          <button class="btn btn-sm btn-outline" onclick="checkWhatsAppStatus()">🔄 Status prüfen</button>
-          <button class="btn btn-sm btn-outline" style="color:var(--red);font-size:0.78em" onclick="disconnectWhatsApp()">🔌 Trennen & Reset</button>
+          <button class="btn btn-sm btn-outline" onclick="checkWhatsAppStatus()">${icon('refresh-cw', 12)} ${t('wa.check.status')}</button>
+          <button class="btn btn-sm btn-outline" style="color:var(--red);font-size:0.78em" onclick="disconnectWhatsApp()">${icon('plug', 12)} ${t('wa.disconnect')}</button>
         </div>
         <div id="wa-qr-container" style="display:none;text-align:center;padding:16px;background:#fff;border-radius:8px;margin-top:8px">
           <canvas id="wa-qr-canvas" style="image-rendering:pixelated"></canvas>
-          <div style="color:#333;font-size:0.82em;margin-top:8px">📱 Scanne mit WhatsApp → Verknüpfte Geräte → Gerät hinzufügen</div>
+          <div style="color:#333;font-size:0.82em;margin-top:8px">${t('wa.scan.qr')}</div>
         </div>
       </div>`;
     }
 
-    // WhatsApp: Group Management section (embedded — show when configured or deps installed)
     if (p.id === 'whatsapp' && (p.configured || p.depsInstalled)) {
-      html += `<div style="margin-top:16px;border-top:1px solid var(--bg3);padding-top:12px">
+      html += `<div style="margin-top:16px;border-top:1px solid var(--glass-border);padding-top:12px">
         <details id="wa-groups-details">
           <summary style="cursor:pointer;font-weight:600;font-size:0.9em;display:flex;align-items:center;gap:8px">
-            💬 Gruppen-Verwaltung
+            ${icon('message-circle', 16)} ${t('wa.groups')}
             <span style="font-size:0.75em;color:var(--fg2);font-weight:normal" id="wa-groups-badge"></span>
           </summary>
-          <div id="wa-groups-content" style="margin-top:12px"><div style="color:var(--fg2);font-size:0.85em">Lade Gruppen...</div></div>
+          <div id="wa-groups-content" style="margin-top:12px"><div style="color:var(--fg2);font-size:0.85em">${t('wa.groups.loading')}</div></div>
         </details>
       </div>`;
     }
 
-    html += `<div id="platform-result-${p.id}" style="font-size:0.78em;margin-top:6px"></div>
-    </div>`;
+    html += `<div id="platform-result-${p.id}" style="font-size:0.78em;margin-top:6px"></div></div>`;
   }
 
   document.getElementById('platforms-setup').innerHTML = html;
+  if (document.getElementById('wa-groups-content')) loadWAGroups();
 
-  // Auto-load WA groups if section exists
-  if (document.getElementById('wa-groups-content')) {
-    loadWAGroups();
-  }
+  // Load statuses
+  loadPlatformStatuses();
+  if (document.getElementById('wa-qr-area')) checkWhatsAppStatus();
 }
 
 async function savePlatform(platformId) {
@@ -1075,58 +1179,53 @@ async function savePlatform(platformId) {
   const resultDiv = document.getElementById('platform-result-' + platformId);
   if (data.ok) {
     if (data.restartNeeded === false) {
-      toast('✅ Gespeichert!');
-      resultDiv.innerHTML = '<span style="color:var(--green)">✅ Gespeichert.</span>';
+      toast(t('platforms.saved'));
+      resultDiv.innerHTML = `<span style="color:var(--green)">${icon('circle-check', 12)} ${t('platforms.saved')}</span>`;
     } else {
-      toast('✅ Gespeichert! Neustart nötig für Änderungen.');
-      resultDiv.innerHTML = '<span style="color:var(--green)">✅ Gespeichert. Bitte Bot neustarten.</span>';
+      toast(t('platforms.saved.restart'));
+      resultDiv.innerHTML = `<span style="color:var(--green)">${icon('circle-check', 12)} ${t('platforms.saved.restart')}</span>`;
     }
   } else {
     toast(data.error, 'error');
-    resultDiv.innerHTML = `<span style="color:var(--red)">❌ ${data.error}</span>`;
+    resultDiv.innerHTML = `<span style="color:var(--red)">${icon('circle-x', 12)} ${data.error}</span>`;
   }
 }
 
 async function installPlatformDeps(platformId) {
-  toast('📦 Installiere Dependencies...');
+  toast(t('platforms.installing'));
   const resultDiv = document.getElementById('platform-result-' + platformId);
-  resultDiv.innerHTML = '<span style="color:var(--fg2)">⏳ Installiere...</span>';
+  resultDiv.innerHTML = `<span style="color:var(--fg2)">${t('loading')}</span>`;
   const res = await fetch(API + '/api/platforms/install-deps', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ platformId }),
   });
   const data = await res.json();
   if (data.ok) {
-    toast('✅ Dependencies installiert!');
-    resultDiv.innerHTML = '<span style="color:var(--green)">✅ Installiert!</span>';
-    loadPlatforms(); // Refresh
+    toast(t('platforms.installed'));
+    resultDiv.innerHTML = `<span style="color:var(--green)">${icon('circle-check', 12)} ${t('platforms.installed')}</span>`;
+    loadPlatforms();
   } else {
-    toast('Fehler: ' + data.error, 'error');
-    resultDiv.innerHTML = `<span style="color:var(--red)">❌ ${data.error}</span>`;
+    toast(t('error') + ': ' + data.error, 'error');
+    resultDiv.innerHTML = `<span style="color:var(--red)">${icon('circle-x', 12)} ${data.error}</span>`;
   }
 }
 
 async function disablePlatform(platformId) {
-  if (!confirm(`${platformId} wirklich deaktivieren?`)) return;
-  // Clear all env vars for this platform
+  if (!confirm(t('platforms.disable.confirm', { id: platformId }))) return;
   const inputs = document.querySelectorAll(`[id^="pv-${platformId}-"]`);
   const values = {};
-  inputs.forEach(el => {
-    const key = el.id.replace(`pv-${platformId}-`, '');
-    values[key] = '';
-  });
+  inputs.forEach(el => { const key = el.id.replace(`pv-${platformId}-`, ''); values[key] = ''; });
   await fetch(API + '/api/platforms/configure', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ platformId, values }),
   });
-  toast('Plattform deaktiviert. Neustart nötig.');
+  toast(t('platforms.disabled'));
   loadPlatforms();
 }
 
-// ── Platform Connection Test ────────────────────────────
 async function testPlatformConnection(platformId) {
   const el = document.getElementById('platform-live-' + platformId);
-  if (el) el.innerHTML = '⏳ Teste...';
+  if (el) el.innerHTML = `${t('platforms.testing')}`;
   try {
     const res = await fetch(API + '/api/platforms/test-connection', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -1135,11 +1234,11 @@ async function testPlatformConnection(platformId) {
     const data = await res.json();
     if (el) {
       el.innerHTML = data.ok
-        ? `<span style="color:var(--green)">✅ ${data.info || 'Verbunden'}</span>`
-        : `<span style="color:var(--red)">❌ ${data.error || 'Fehler'}</span>`;
+        ? `<span style="color:var(--green)">${icon('circle-check', 12)} ${data.info || t('platforms.connected')}</span>`
+        : `<span style="color:var(--red)">${icon('circle-x', 12)} ${data.error || t('error')}</span>`;
     }
   } catch (err) {
-    if (el) el.innerHTML = `<span style="color:var(--red)">❌ ${err.message}</span>`;
+    if (el) el.innerHTML = `<span style="color:var(--red)">${icon('circle-x', 12)} ${err.message}</span>`;
   }
 }
 
@@ -1151,42 +1250,34 @@ async function loadPlatformStatuses() {
       const el = document.getElementById('platform-live-' + id);
       const badge = document.getElementById('badge-' + id);
       const s = state;
-      const icons = { connected: '🟢', connecting: '🟡', qr: '📱', error: '🔴', disconnected: '⚫', logged_out: '🔴', not_configured: '', unknown: '' };
-      const labels = { connected: 'Verbunden', connecting: 'Verbinde...', qr: 'QR-Code scannen!', error: s.error || 'Fehler', disconnected: 'Nicht verbunden', logged_out: 'Abgemeldet', not_configured: '', unknown: '' };
-      const icon = icons[s.status] || '';
-      const label = labels[s.status] || s.status;
 
-      // Update live status text
-      if (el && icon) {
+      if (el && s.status && s.status !== 'not_configured' && s.status !== 'unknown') {
         let extra = '';
         if (s.botUsername) extra = ` @${s.botUsername}`;
         else if (s.botTag) extra = ` ${s.botTag}`;
         else if (s.guildCount) extra = ` (${s.guildCount} Server)`;
         else if (s.apiVersion) extra = ` v${s.apiVersion}`;
-        el.innerHTML = `<span style="color:${s.status === 'connected' ? 'var(--green)' : s.status === 'error' || s.status === 'logged_out' ? 'var(--red)' : 'var(--fg2)'}">${icon} ${label}${extra}</span>`;
+        const statusColor = s.status === 'connected' ? 'var(--green)' : (s.status === 'error' || s.status === 'logged_out') ? 'var(--red)' : 'var(--fg2)';
+        const statusIcon = s.status === 'connected' ? icon('circle-check', 12) : s.status === 'error' ? icon('circle-x', 12) : icon('clock', 12);
+        const statusLabel = t(`platforms.status.${s.status.replace('_', '.')}`) || s.status;
+        el.innerHTML = `<span style="color:${statusColor}">${statusIcon} ${statusLabel}${extra}</span>`;
       }
 
-      // Update badge to reflect real connection status
       if (badge) {
         if (s.status === 'connected') {
-          badge.className = 'badge badge-green';
-          badge.textContent = '🟢 Verbunden';
+          badge.className = 'badge badge-green'; badge.innerHTML = `${icon('circle-check', 12)} ${t('platforms.connected')}`;
         } else if (s.status === 'qr') {
-          badge.className = 'badge badge-yellow';
-          badge.textContent = '📱 QR scannen';
+          badge.className = 'badge badge-yellow'; badge.innerHTML = `${icon('qr-code', 12)} QR`;
         } else if (s.status === 'connecting') {
-          badge.className = 'badge badge-yellow';
-          badge.textContent = '🟡 Verbinde...';
+          badge.className = 'badge badge-yellow'; badge.innerHTML = `${icon('clock', 12)} ${t('platforms.status.connecting')}`;
         } else if (s.status === 'error' || s.status === 'logged_out') {
-          badge.className = 'badge badge-red';
-          badge.textContent = '🔴 Fehler';
+          badge.className = 'badge badge-red'; badge.innerHTML = `${icon('circle-x', 12)} ${t('error')}`;
         } else if (s.status === 'disconnected') {
-          badge.className = 'badge badge-yellow';
-          badge.textContent = '⚫ Getrennt';
+          badge.className = 'badge badge-yellow'; badge.innerHTML = `${icon('circle-dot', 12)} ${t('platforms.status.disconnected')}`;
         }
       }
     }
-  } catch { /* ignore */ }
+  } catch { }
 }
 
 // ── WhatsApp QR + Status ────────────────────────────────
@@ -1202,98 +1293,63 @@ async function checkWhatsAppStatus() {
     if (!dot || !text) return;
 
     const statusMap = {
-      disconnected: ['⚫', 'Nicht verbunden'],
-      connecting: ['🟡', 'Verbinde...'],
-      qr: ['📱', 'QR-Code bereit — jetzt scannen!'],
-      connected: ['🟢', 'Verbunden' + (state.connectedAt ? ` seit ${new Date(state.connectedAt).toLocaleTimeString('de-DE')}` : '')],
-      logged_out: ['🔴', 'Abgemeldet — Auth-Daten löschen und neu verbinden'],
+      disconnected: [icon('circle-dot', 16), t('platforms.status.disconnected')],
+      connecting: [icon('clock', 16), t('platforms.status.connecting')],
+      qr: [icon('qr-code', 16), t('wa.qr.ready')],
+      connected: [icon('circle-check', 16), `${t('platforms.connected')}${state.connectedAt ? ` (${new Date(state.connectedAt).toLocaleTimeString(getLang() === 'de' ? 'de-DE' : 'en-US')})` : ''}`],
+      logged_out: [icon('circle-x', 16), t('platforms.status.logged.out')],
     };
-    const [icon, label] = statusMap[state.status] || ['❓', state.status];
-    dot.textContent = icon;
+    const [statusIc, label] = statusMap[state.status] || [icon('info', 16), state.status];
+    dot.innerHTML = statusIc;
     text.textContent = label;
 
-    // Update the top-right badge
     const badge = document.getElementById('badge-whatsapp');
     if (badge) {
-      if (state.status === 'connected') {
-        badge.className = 'badge badge-green';
-        badge.textContent = '🟢 Verbunden';
-      } else if (state.status === 'qr') {
-        badge.className = 'badge badge-yellow';
-        badge.textContent = '📱 QR scannen';
-      } else if (state.status === 'connecting') {
-        badge.className = 'badge badge-yellow';
-        badge.textContent = '🟡 Verbinde...';
-      } else if (state.status === 'error') {
-        badge.className = 'badge badge-red';
-        badge.textContent = '🔴 Fehler';
-      }
+      if (state.status === 'connected') { badge.className = 'badge badge-green'; badge.innerHTML = `${icon('circle-check', 12)} ${t('platforms.connected')}`; }
+      else if (state.status === 'qr') { badge.className = 'badge badge-yellow'; badge.innerHTML = `${icon('qr-code', 12)} QR`; }
+      else if (state.status === 'connecting') { badge.className = 'badge badge-yellow'; badge.innerHTML = `${icon('clock', 12)} ...`; }
+      else if (state.status === 'error') { badge.className = 'badge badge-red'; badge.innerHTML = `${icon('circle-x', 12)} ${t('error')}`; }
     }
 
-    // Update inline status next to buttons
     const liveEl = document.getElementById('platform-live-whatsapp');
     if (liveEl) {
       const infoStr = state.info ? ` (${state.info})` : '';
-      if (state.status === 'connected') {
-        liveEl.innerHTML = `<span style="color:var(--green)">🟢 Verbunden${infoStr}</span>`;
-      } else if (state.status === 'qr') {
-        liveEl.innerHTML = `<span style="color:var(--fg2)">📱 QR bereit</span>`;
-      } else if (state.status === 'connecting') {
-        liveEl.innerHTML = `<span style="color:var(--fg2)">🟡 Verbinde...</span>`;
-      } else if (state.status === 'error') {
-        liveEl.innerHTML = `<span style="color:var(--red)">🔴 ${state.error || 'Fehler'}</span>`;
-      }
+      if (state.status === 'connected') liveEl.innerHTML = `<span style="color:var(--green)">${icon('circle-check', 12)} ${t('platforms.connected')}${infoStr}</span>`;
+      else if (state.status === 'qr') liveEl.innerHTML = `<span style="color:var(--fg2)">${icon('qr-code', 12)} ${t('wa.qr.available')}</span>`;
+      else if (state.status === 'connecting') liveEl.innerHTML = `<span style="color:var(--fg2)">${icon('clock', 12)} ...</span>`;
+      else if (state.status === 'error') liveEl.innerHTML = `<span style="color:var(--red)">${icon('circle-x', 12)} ${state.error || t('error')}</span>`;
     }
 
     if (state.status === 'qr' && state.qrString && qrContainer) {
       qrContainer.style.display = '';
       renderQrCode(state.qrString);
-      // Auto-poll while QR or connecting
-      if (!waStatusInterval) {
-        waStatusInterval = setInterval(checkWhatsAppStatus, 3000);
-      }
+      if (!waStatusInterval) waStatusInterval = setInterval(checkWhatsAppStatus, 3000);
     } else if (state.status === 'connecting') {
       if (qrContainer) qrContainer.style.display = 'none';
-      // Keep polling during connecting phase
-      if (!waStatusInterval) {
-        waStatusInterval = setInterval(checkWhatsAppStatus, 3000);
-      }
+      if (!waStatusInterval) waStatusInterval = setInterval(checkWhatsAppStatus, 3000);
     } else {
       if (qrContainer) qrContainer.style.display = 'none';
-      if (state.status === 'connected' && waStatusInterval) {
-        clearInterval(waStatusInterval);
-        waStatusInterval = null;
-      }
+      if (state.status === 'connected' && waStatusInterval) { clearInterval(waStatusInterval); waStatusInterval = null; }
     }
   } catch (err) {
     const text = document.getElementById('wa-status-text');
-    if (text) text.textContent = 'Fehler: ' + err.message;
+    if (text) text.textContent = t('error') + ': ' + err.message;
   }
 }
 
 async function disconnectWhatsApp() {
-  if (!confirm('WhatsApp-Verbindung trennen und Auth-Daten löschen?\n\nDu musst danach erneut den QR-Code scannen.')) return;
+  if (!confirm(t('wa.disconnect.confirm'))) return;
   try {
     const res = await fetch(API + '/api/whatsapp/disconnect', { method: 'POST' });
     const data = await res.json();
-    toast(data.ok ? 'Auth-Daten gelöscht. Bitte Bot neustarten.' : data.error, data.ok ? 'success' : 'error');
-  } catch (err) { toast('Fehler: ' + err.message, 'error'); }
+    toast(data.ok ? t('wa.disconnected') : data.error, data.ok ? 'success' : 'error');
+  } catch (err) { toast(t('error') + ': ' + err.message, 'error'); }
 }
 
-// Minimal QR code renderer using Canvas API
-// Uses a lightweight QR encoder (no external lib)
 function renderQrCode(text) {
   const canvas = document.getElementById('wa-qr-canvas');
   if (!canvas) return;
-
-  // If qrcode.js is loaded, use it; otherwise fall back to API
-  if (typeof QRCode !== 'undefined') {
-    // External lib available
-    const qr = new QRCode(canvas.parentElement, { text, width: 256, height: 256, correctLevel: QRCode.CorrectLevel.M });
-    return;
-  }
-
-  // Fallback: load qrcode library dynamically
+  if (typeof QRCode !== 'undefined') { new QRCode(canvas.parentElement, { text, width: 256, height: 256, correctLevel: QRCode.CorrectLevel.M }); return; }
   if (!window._qrScriptLoaded) {
     window._qrScriptLoaded = true;
     const script = document.createElement('script');
@@ -1307,46 +1363,23 @@ function renderQrCode(text) {
 
 function renderQrCodeFromLib(text, canvas) {
   try {
-    const qr = qrcode(0, 'M');
-    qr.addData(text);
-    qr.make();
-
+    const qr = qrcode(0, 'M'); qr.addData(text); qr.make();
     const ctx = canvas.getContext('2d');
     const moduleCount = qr.getModuleCount();
     const cellSize = Math.max(4, Math.floor(256 / moduleCount));
     const size = moduleCount * cellSize;
-    canvas.width = size;
-    canvas.height = size;
-
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(0, 0, size, size);
-
+    canvas.width = size; canvas.height = size;
+    ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, size, size);
     ctx.fillStyle = '#000000';
     for (let row = 0; row < moduleCount; row++) {
       for (let col = 0; col < moduleCount; col++) {
-        if (qr.isDark(row, col)) {
-          ctx.fillRect(col * cellSize, row * cellSize, cellSize, cellSize);
-        }
+        if (qr.isDark(row, col)) ctx.fillRect(col * cellSize, row * cellSize, cellSize, cellSize);
       }
     }
-  } catch (err) {
-    console.error('QR render error:', err);
-  }
+  } catch (err) { console.error('QR render error:', err); }
 }
 
-// Auto-check platform statuses when platforms page loads
-const origLoadPlatforms = loadPlatforms;
-loadPlatforms = async function() {
-  await origLoadPlatforms();
-  // Load live connection statuses for all platforms
-  loadPlatformStatuses();
-  // Check WhatsApp QR status if area exists
-  if (document.getElementById('wa-qr-area')) {
-    checkWhatsAppStatus();
-  }
-};
-
-// ── Personality (SOUL.md) ───────────────────────────────
+// ── Personality ─────────────────────────────────────────
 async function loadPersonality() {
   const res = await fetch(API + '/api/soul');
   const data = await res.json();
@@ -1360,7 +1393,7 @@ async function saveSoul() {
     body: JSON.stringify({ content }),
   });
   const data = await res.json();
-  toast(data.ok ? 'Persönlichkeit aktualisiert!' : data.error, data.ok ? 'success' : 'error');
+  toast(data.ok ? t('personality.saved') : data.error, data.ok ? 'success' : 'error');
 }
 
 // ── Settings ────────────────────────────────────────────
@@ -1374,263 +1407,224 @@ async function loadSettings() {
 
   let html = '';
 
-  // ── Sudo / Admin Rights ──
-  const sudoIcon = sudoData.configured ? (sudoData.verified ? '🟢' : '🟡') : '🔴';
+  const sudoIcon = sudoData.configured ? (sudoData.verified ? icon('circle-check', 20, 'style="color:var(--green)"') : icon('circle-alert', 20, 'style="color:var(--yellow)"')) : icon('circle-x', 20, 'style="color:var(--red)"');
   const sudoStatusText = sudoData.configured
-    ? (sudoData.verified ? 'Aktiv & verifiziert' : 'Konfiguriert, Verifikation nötig')
-    : 'Nicht eingerichtet';
+    ? (sudoData.verified ? t('settings.sudo.active') : t('settings.sudo.configured'))
+    : t('settings.sudo.not.set');
 
   html += `<div class="card" style="margin-bottom:16px">
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
-      <span style="font-size:1.5em">🔐</span>
+      <span style="display:flex">${icon('lock', 24)}</span>
       <div style="flex:1">
-        <h3 style="font-size:0.95em;text-transform:none;letter-spacing:0">Sudo / Admin-Rechte</h3>
-        <div class="sub">Erlaube Alvin Bot, Befehle mit Administratorrechten auszuführen</div>
+        <h3 style="font-size:0.95em;text-transform:none;letter-spacing:0">${t('settings.sudo')}</h3>
+        <div class="sub">${t('settings.sudo.desc')}</div>
       </div>
-      <span style="font-size:1.2em">${sudoIcon}</span>
+      ${sudoIcon}
     </div>
     <div style="font-size:0.85em;margin-bottom:12px">
-      <div><strong>Status:</strong> ${sudoStatusText}</div>
-      <div><strong>Speicher:</strong> ${sudoData.storageMethod}</div>
-      <div><strong>System:</strong> ${sudoData.platform} (${sudoData.user})</div>
-      ${sudoData.permissions.accessibility !== null ? `<div><strong>Accessibility:</strong> ${sudoData.permissions.accessibility ? '✅' : '❌ <button class="btn btn-sm btn-outline" onclick="openSysSettings(\'accessibility\')" style="font-size:0.8em;padding:2px 6px">Öffnen</button>'}</div>` : ''}
-      ${sudoData.permissions.fullDiskAccess !== null ? `<div><strong>Full Disk Access:</strong> ${sudoData.permissions.fullDiskAccess ? '✅' : '❌ <button class="btn btn-sm btn-outline" onclick="openSysSettings(\'full-disk-access\')" style="font-size:0.8em;padding:2px 6px">Öffnen</button>'}</div>` : ''}
+      <div><strong>${t('settings.sudo.status')}:</strong> ${sudoStatusText}</div>
+      <div><strong>${t('settings.sudo.storage')}:</strong> ${sudoData.storageMethod}</div>
+      <div><strong>${t('settings.sudo.system')}:</strong> ${sudoData.platform} (${sudoData.user})</div>
+      ${sudoData.permissions.accessibility !== null ? `<div><strong>${t('settings.sudo.accessibility')}:</strong> ${sudoData.permissions.accessibility ? icon('circle-check', 14, 'style="color:var(--green)"') : `${icon('circle-x', 14, 'style="color:var(--red)"')} <button class="btn btn-sm btn-outline" onclick="openSysSettings('accessibility')" style="font-size:0.8em;padding:2px 6px">${t('settings.sudo.open')}</button>`}</div>` : ''}
+      ${sudoData.permissions.fullDiskAccess !== null ? `<div><strong>${t('settings.sudo.fda')}:</strong> ${sudoData.permissions.fullDiskAccess ? icon('circle-check', 14, 'style="color:var(--green)"') : `${icon('circle-x', 14, 'style="color:var(--red)"')} <button class="btn btn-sm btn-outline" onclick="openSysSettings('full-disk-access')" style="font-size:0.8em;padding:2px 6px">${t('settings.sudo.open')}</button>`}</div>` : ''}
     </div>`;
 
   if (!sudoData.configured) {
     html += `<div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
-      <input type="password" id="sudo-password" placeholder="System-Passwort eingeben..." style="flex:1;background:var(--bg3);border:1px solid var(--bg3);border-radius:6px;padding:8px 12px;color:var(--fg);font:inherit;font-size:0.85em;outline:none">
-      <button class="btn btn-sm" onclick="setupSudo()">🔐 Einrichten</button>
+      <input type="password" id="sudo-password" placeholder="${t('settings.sudo.password')}" style="flex:1;background:var(--bg3);border:1px solid var(--glass-border);border-radius:6px;padding:8px 12px;color:var(--fg);font:inherit;font-size:0.85em;outline:none">
+      <button class="btn btn-sm" onclick="setupSudo()">${icon('lock', 12)} ${t('settings.sudo.setup')}</button>
     </div>
-    <div class="sub">Das Passwort wird sicher im ${sudoData.storageMethod} gespeichert — nie im Klartext.</div>`;
+    <div class="sub">${t('settings.sudo.stored.secure')}</div>`;
   } else {
     html += `<div style="display:flex;gap:8px;flex-wrap:wrap">
-      <button class="btn btn-sm btn-outline" onclick="verifySudo()">🧪 Verifizieren</button>
-      <button class="btn btn-sm btn-outline" onclick="testSudoCommand()">⚡ Test-Command</button>
-      ${sudoData.platform === 'darwin' ? '<button class="btn btn-sm btn-outline" onclick="showAdminDialog()">🖥️ Admin-Dialog</button>' : ''}
-      <button class="btn btn-sm btn-outline" style="color:var(--red)" onclick="revokeSudo()">🔴 Widerrufen</button>
+      <button class="btn btn-sm btn-outline" onclick="verifySudo()">${icon('test-tube', 12)} ${t('settings.sudo.verify')}</button>
+      <button class="btn btn-sm btn-outline" onclick="testSudoCommand()">${icon('zap', 12)} ${t('settings.sudo.test')}</button>
+      ${sudoData.platform === 'darwin' ? `<button class="btn btn-sm btn-outline" onclick="showAdminDialog()">${icon('monitor', 12)} ${t('settings.sudo.admin.dialog')}</button>` : ''}
+      <button class="btn btn-sm btn-outline" style="color:var(--red)" onclick="revokeSudo()">${icon('circle-x', 12)} ${t('settings.sudo.revoke')}</button>
     </div>`;
   }
   html += `<div id="sudo-result" style="font-size:0.78em;margin-top:6px"></div></div>`;
 
-  // ── Environment Variables ──
   const envHtml = envData.vars.map(v => `
     <div class="list-item">
       <div class="info">
         <div class="name" style="font-family:monospace;font-size:0.85em">${v.key}</div>
         <div class="desc">${v.value || '(empty)'}</div>
       </div>
-      <button class="btn btn-sm btn-outline" onclick="editEnvVar('${v.key}')">Edit</button>
+      <button class="btn btn-sm btn-outline" onclick="editEnvVar('${v.key}')">${t('edit')}</button>
     </div>
   `).join('');
 
   html += `<div class="card" style="margin-bottom:16px">
-    <h3 style="font-size:0.95em;text-transform:none;letter-spacing:0;margin-bottom:8px">⚙️ Environment Variables</h3>
+    <h3 style="font-size:0.95em;text-transform:none;letter-spacing:0;margin-bottom:8px;display:flex;align-items:center;gap:6px">${icon('settings', 16)} ${t('settings.env')}</h3>
     ${envHtml}
     <div style="margin-top:12px;display:flex;gap:8px">
-      <button class="btn btn-sm" onclick="addEnvVar()">+ Variable hinzufügen</button>
+      <button class="btn btn-sm" onclick="addEnvVar()">${icon('plus', 14)} ${t('settings.env.add')}</button>
     </div>
   </div>`;
 
   document.getElementById('settings-content').innerHTML = html;
 }
 
-// ── Doctor & Backup (used by Maintenance page) ─────────
-async function repairIssue(action) {
-  const res = await fetch(API + '/api/doctor/repair', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ action }),
-  });
+async function setupSudo() {
+  const pw = document.getElementById('sudo-password').value;
+  if (!pw) { toast(t('settings.sudo.password'), 'error'); return; }
+  const resultDiv = document.getElementById('sudo-result');
+  resultDiv.innerHTML = `<span style="color:var(--fg2)">${t('loading')}</span>`;
+  const res = await fetch(API + '/api/sudo/setup', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password: pw }) });
   const data = await res.json();
-  toast(data.ok ? `✅ ${data.message}` : `❌ ${data.message}`, data.ok ? 'success' : 'error');
+  if (data.ok && data.verified) { toast(t('settings.sudo.setup.ok')); loadSettings(); }
+  else { resultDiv.innerHTML = `<span style="color:var(--red)">${icon('circle-x', 12)} ${data.error || t('error')}</span>`; toast(data.error || t('error'), 'error'); }
+}
+
+async function verifySudo() {
+  const resultDiv = document.getElementById('sudo-result');
+  resultDiv.innerHTML = `<span style="color:var(--fg2)">${t('settings.sudo.verifying')}</span>`;
+  const res = await fetch(API + '/api/sudo/verify', { method: 'POST' });
+  const data = await res.json();
+  resultDiv.innerHTML = data.ok
+    ? `<span style="color:var(--green)">${icon('circle-check', 12)} ${t('settings.sudo.verified')}</span>`
+    : `<span style="color:var(--red)">${icon('circle-x', 12)} ${data.error}</span>`;
+}
+
+async function testSudoCommand() {
+  const cmd = prompt(t('settings.sudo.test.prompt'), 'whoami');
+  if (!cmd) return;
+  const resultDiv = document.getElementById('sudo-result');
+  resultDiv.innerHTML = `<span style="color:var(--fg2)">${t('settings.sudo.executing')}</span>`;
+  const res = await fetch(API + '/api/sudo/exec', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ command: cmd }) });
+  const data = await res.json();
+  resultDiv.innerHTML = data.ok
+    ? `<span style="color:var(--green)">${icon('circle-check', 12)} ${t('settings.sudo.output')}:</span><pre style="margin:4px 0;padding:6px;background:var(--bg3);border-radius:4px;font-size:0.9em;overflow-x:auto">${escapeHtml(data.output.slice(0, 500))}</pre>`
+    : `<span style="color:var(--red)">${icon('circle-x', 12)} ${data.error}</span>`;
+}
+
+async function revokeSudo() {
+  if (!confirm(t('settings.sudo.revoke.confirm'))) return;
+  await fetch(API + '/api/sudo/revoke', { method: 'POST' });
+  toast(t('settings.sudo.revoked'));
+  loadSettings();
+}
+
+async function showAdminDialog() {
+  const reason = prompt(t('settings.sudo.admin.reason'), t('settings.sudo.admin.default.reason'));
+  if (!reason) return;
+  toast(t('settings.sudo.admin.showing'));
+  const res = await fetch(API + '/api/sudo/admin-dialog', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reason }) });
+  const data = await res.json();
+  toast(data.ok ? t('settings.sudo.admin.confirmed') : t('settings.sudo.admin.denied'), data.ok ? 'success' : 'error');
+}
+
+async function openSysSettings(pane) {
+  await fetch(API + '/api/sudo/open-settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pane }) });
+  toast(t('settings.sysopen'));
+}
+
+function editEnvVar(key) {
+  const value = prompt(t('settings.env.new.prompt', { key }), '');
+  if (value === null) return;
+  fetch(API + '/api/env/set', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key, value }) })
+    .then(r => r.json()).then(d => {
+      toast(d.ok ? t('settings.env.saved', { key }) : d.error, d.ok ? 'success' : 'error');
+      loadSettings();
+    });
+}
+
+function addEnvVar() {
+  const key = prompt(t('settings.env.name.prompt'));
+  if (!key) return;
+  const value = prompt(t('settings.env.value.prompt', { key }));
+  if (value === null) return;
+  fetch(API + '/api/env/set', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key, value }) })
+    .then(r => r.json()).then(d => {
+      toast(d.ok ? t('settings.env.added', { key }) : d.error, d.ok ? 'success' : 'error');
+      loadSettings();
+    });
+}
+
+// ── Doctor & Backup ─────────────────────────────────────
+async function repairIssue(action) {
+  const res = await fetch(API + '/api/doctor/repair', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action }) });
+  const data = await res.json();
+  toast(data.ok ? data.message : data.message, data.ok ? 'success' : 'error');
   loadMaintenance();
 }
 
 async function repairAll() {
-  if (!confirm('Alle Probleme automatisch reparieren?')) return;
+  if (!confirm(t('maint.doctor.fix.all.confirm'))) return;
   const res = await fetch(API + '/api/doctor/repair-all', { method: 'POST' });
   const data = await res.json();
   const ok = data.results.filter(r => r.ok).length;
   const fail = data.results.filter(r => !r.ok).length;
-  toast(`${ok} repariert${fail > 0 ? `, ${fail} fehlgeschlagen` : ''}`, fail > 0 ? 'error' : 'success');
+  toast(`${t('maint.doctor.fixed', { ok })}${fail > 0 ? `, ${t('maint.doctor.failed', { fail })}` : ''}`, fail > 0 ? 'error' : 'success');
   loadMaintenance();
 }
 
 async function createBackup() {
-  const name = prompt('Backup-Name (optional):', '');
-  toast('📦 Erstelle Backup...');
-  const res = await fetch(API + '/api/backups/create', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name: name || undefined }),
-  });
+  const name = prompt(t('maint.backup.name.prompt'), '');
+  toast(t('maint.backup.creating'));
+  const res = await fetch(API + '/api/backups/create', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: name || undefined }) });
   const data = await res.json();
-  if (data.ok) {
-    toast(`✅ Backup "${data.id}" erstellt (${data.files.length} Dateien)`);
-    loadMaintenance();
-  } else {
-    toast('❌ ' + (data.error || 'Fehler'), 'error');
-  }
+  if (data.ok) { toast(t('maint.backup.created', { id: data.id, count: data.files.length })); loadMaintenance(); }
+  else { toast(data.error || t('error'), 'error'); }
 }
-
 function createBackupMaint() { createBackup(); }
 
 async function restoreBackup(id) {
-  if (!confirm(`Backup "${id}" wiederherstellen?\n\nAktuelle Config-Dateien werden überschrieben!\nBot-Neustart nötig danach.`)) return;
-  const res = await fetch(API + '/api/backups/restore', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ id }),
-  });
+  if (!confirm(t('maint.backup.restore.confirm', { id }))) return;
+  const res = await fetch(API + '/api/backups/restore', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) });
   const data = await res.json();
   if (data.ok || data.restored?.length > 0) {
-    toast(`♻️ ${data.restored.length} Dateien wiederhergestellt! Bot-Neustart nötig.`);
-    if (data.errors?.length > 0) toast(`⚠️ ${data.errors.length} Fehler`, 'error');
+    toast(t('maint.backup.restored', { count: data.restored.length }));
+    if (data.errors?.length > 0) toast(`${data.errors.length} ${t('error')}`, 'error');
     loadMaintenance();
   } else {
-    toast('❌ ' + (data.errors?.[0] || 'Fehler'), 'error');
+    toast(data.errors?.[0] || t('error'), 'error');
   }
 }
 
 async function showBackupFiles(id) {
   const area = document.getElementById('backup-files-area');
-  if (area.style.display !== 'none' && area.dataset.id === id) {
-    area.style.display = 'none';
-    return;
-  }
+  if (area.style.display !== 'none' && area.dataset.id === id) { area.style.display = 'none'; return; }
   const res = await fetch(API + `/api/backups/${id}/files`);
   const data = await res.json();
-  area.dataset.id = id;
-  area.style.display = '';
-  area.innerHTML = `<div style="font-weight:500;margin-bottom:6px">📋 Dateien in ${id}:</div>` +
-    data.files.map(f => `<div style="padding:2px 0;color:var(--fg2)">📄 ${f}</div>`).join('') +
-    `<div style="margin-top:8px"><button class="btn btn-sm btn-outline" onclick="document.getElementById('backup-files-area').style.display='none'">Schließen</button></div>`;
+  area.dataset.id = id; area.style.display = '';
+  area.innerHTML = `<div style="font-weight:500;margin-bottom:6px">${icon('clipboard', 14)} ${t('maint.backup.files.in', { id })}:</div>` +
+    data.files.map(f => `<div style="padding:2px 0;color:var(--fg2)">${icon('file-text', 12)} ${f}</div>`).join('') +
+    `<div style="margin-top:8px"><button class="btn btn-sm btn-outline" onclick="document.getElementById('backup-files-area').style.display='none'">${t('close')}</button></div>`;
 }
 
 async function deleteBackup(id) {
-  if (!confirm(`Backup "${id}" unwiderruflich löschen?`)) return;
-  await fetch(API + '/api/backups/delete', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ id }),
-  });
-  toast('Gelöscht');
+  if (!confirm(t('maint.backup.delete.confirm', { id }))) return;
+  await fetch(API + '/api/backups/delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) });
+  toast(t('maint.backup.deleted'));
   loadMaintenance();
 }
 
-// ── Sudo ────────────────────────────────────────────────
-async function setupSudo() {
-  const pw = document.getElementById('sudo-password').value;
-  if (!pw) { toast('Bitte Passwort eingeben', 'error'); return; }
-  const resultDiv = document.getElementById('sudo-result');
-  resultDiv.innerHTML = '<span style="color:var(--fg2)">⏳ Einrichten & verifizieren...</span>';
-  const res = await fetch(API + '/api/sudo/setup', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ password: pw }),
-  });
-  const data = await res.json();
-  if (data.ok && data.verified) {
-    toast('✅ Sudo eingerichtet & verifiziert!');
-    loadSettings();
-  } else {
-    resultDiv.innerHTML = `<span style="color:var(--red)">❌ ${data.error || 'Fehler'}</span>`;
-    toast(data.error || 'Fehler', 'error');
-  }
-}
-
-async function verifySudo() {
-  const resultDiv = document.getElementById('sudo-result');
-  resultDiv.innerHTML = '<span style="color:var(--fg2)">⏳ Verifiziere...</span>';
-  const res = await fetch(API + '/api/sudo/verify', { method: 'POST' });
-  const data = await res.json();
-  resultDiv.innerHTML = data.ok
-    ? '<span style="color:var(--green)">✅ Sudo funktioniert!</span>'
-    : `<span style="color:var(--red)">❌ ${data.error}</span>`;
-}
-
-async function testSudoCommand() {
-  const cmd = prompt('Sudo-Befehl zum Testen:', 'whoami');
-  if (!cmd) return;
-  const resultDiv = document.getElementById('sudo-result');
-  resultDiv.innerHTML = '<span style="color:var(--fg2)">⏳ Ausführen...</span>';
-  const res = await fetch(API + '/api/sudo/exec', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ command: cmd }),
-  });
-  const data = await res.json();
-  resultDiv.innerHTML = data.ok
-    ? `<span style="color:var(--green)">✅ Output:</span><pre style="margin:4px 0;padding:6px;background:var(--bg3);border-radius:4px;font-size:0.9em;overflow-x:auto">${escapeHtml(data.output.slice(0, 500))}</pre>`
-    : `<span style="color:var(--red)">❌ ${data.error}</span>`;
-}
-
-async function revokeSudo() {
-  if (!confirm('Sudo-Zugriff wirklich widerrufen? Gespeichertes Passwort wird gelöscht.')) return;
-  await fetch(API + '/api/sudo/revoke', { method: 'POST' });
-  toast('🔴 Sudo-Zugriff widerrufen');
-  loadSettings();
-}
-
-async function showAdminDialog() {
-  const reason = prompt('Grund für Admin-Rechte:', 'Alvin Bot benötigt Administrator-Rechte');
-  if (!reason) return;
-  toast('🖥️ macOS Admin-Dialog wird angezeigt...');
-  const res = await fetch(API + '/api/sudo/admin-dialog', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ reason }),
-  });
-  const data = await res.json();
-  toast(data.ok ? '✅ Bestätigt!' : '❌ Abgelehnt oder Fehler', data.ok ? 'success' : 'error');
-}
-
-async function openSysSettings(pane) {
-  await fetch(API + '/api/sudo/open-settings', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ pane }),
-  });
-  toast('Systemeinstellungen geöffnet');
-}
-
-async function restartBot() {
-  if (!confirm('Bot wirklich neustarten? Laufende Anfragen werden abgebrochen.')) return;
-  toast('🔄 Bot wird neugestartet...');
-  await fetch(API + '/api/bot/restart', { method: 'POST' });
-  setTimeout(() => { toast('Bot sollte gleich wieder verfügbar sein...'); connectWS(); }, 3000);
-}
-
-async function reconnectBot() {
-  toast('🔌 Reconnecting...');
-  if (ws) ws.close();
-  setTimeout(connectWS, 500);
-}
-
-// ── PM2 Process Control ──
+// ── PM2 ─────────────────────────────────────────────────
 async function pm2Action(action) {
-  const labels = { restart: 'neustarten', reload: 'neu laden', stop: 'stoppen', start: 'starten', flush: 'Logs leeren' };
   const dangerous = ['stop'];
-  if (dangerous.includes(action) && !confirm(`Bot wirklich ${labels[action]}? ⚠️ Der Bot wird offline gehen!`)) return;
-  if (action === 'restart' && !confirm('Bot neustarten? Laufende Anfragen werden abgebrochen.')) return;
+  if (dangerous.includes(action) && !confirm(t('maint.pm2.stop.confirm'))) return;
+  if (action === 'restart' && !confirm(t('maint.pm2.restart.confirm'))) return;
 
-  toast(`⏳ PM2 ${action}...`);
+  toast(`PM2 ${action}...`);
   try {
-    const res = await fetch(API + '/api/pm2/action', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action }),
-    });
+    const res = await fetch(API + '/api/pm2/action', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action }) });
     const data = await res.json();
     if (data.ok) {
-      toast(`✅ PM2 ${action} erfolgreich`);
+      toast(t('maint.pm2.action.ok', { action }));
       if (action === 'stop') {
-        document.getElementById('pm2-status').innerHTML = '<span class="badge badge-red">⏹️ Gestoppt</span>';
+        document.getElementById('pm2-status').innerHTML = `<span class="badge badge-red">${icon('pause', 12)} ${t('maint.pm2.stop')}</span>`;
       } else {
         setTimeout(refreshPM2Status, 2000);
-        if (action === 'restart' || action === 'reload' || action === 'start') {
-          setTimeout(connectWS, 3000);
-        }
+        if (['restart', 'reload', 'start'].includes(action)) setTimeout(connectWS, 3000);
       }
     } else {
-      toast(`❌ PM2 ${action} fehlgeschlagen: ${data.error || 'Unbekannt'}`, 5000);
+      toast(t('maint.pm2.action.fail', { action }) + ': ' + (data.error || ''), 'error');
     }
   } catch (e) {
-    toast(`❌ Verbindung verloren (Bot gestoppt?)`, 5000);
-    document.getElementById('pm2-status').innerHTML = '<span class="badge badge-red">❌ Nicht erreichbar</span>';
+    toast(t('maint.pm2.lost'), 'error');
+    document.getElementById('pm2-status').innerHTML = `<span class="badge badge-red">${icon('circle-x', 12)} ${t('maint.pm2.unreachable')}</span>`;
   }
 }
 
@@ -1640,35 +1634,30 @@ async function refreshPM2Status() {
     const data = await res.json();
     const el = document.getElementById('pm2-status');
     if (!el) return;
-
-    if (data.error) {
-      el.innerHTML = `<span class="badge badge-yellow">⚠️ ${data.error}</span>`;
-      return;
-    }
+    if (data.error) { el.innerHTML = `<span class="badge badge-yellow">${icon('alert-triangle', 12)} ${data.error}</span>`; return; }
 
     const p = data.process;
     const statusColors = { online: 'green', stopping: 'yellow', stopped: 'red', errored: 'red', launching: 'yellow' };
-    const statusIcons = { online: '🟢', stopping: '🟡', stopped: '🔴', errored: '❌', launching: '🚀' };
+    const statusIcons = { online: 'circle-check', stopping: 'clock', stopped: 'circle-x', errored: 'circle-x', launching: 'zap' };
     const color = statusColors[p.status] || 'gray';
-    const icon = statusIcons[p.status] || '❓';
-
+    const sIcon = statusIcons[p.status] || 'info';
     const uptime = p.uptime > 0 ? formatDuration(p.uptime) : '—';
     const mem = p.memory ? (p.memory / 1024 / 1024).toFixed(1) + ' MB' : '—';
     const cpu = p.cpu !== undefined ? p.cpu + '%' : '—';
 
     el.innerHTML = `
       <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:center">
-        <span class="badge badge-${color}">${icon} ${p.status}</span>
-        <span title="Uptime">⏱️ ${uptime}</span>
-        <span title="Memory">💾 ${mem}</span>
-        <span title="CPU">🖥️ ${cpu}</span>
-        <span title="Restarts">🔄 ${p.restarts}x</span>
+        <span class="badge badge-${color}">${icon(sIcon, 12)} ${p.status}</span>
+        <span title="Uptime">${icon('clock', 12)} ${uptime}</span>
+        <span title="Memory">${icon('hard-drive', 12)} ${mem}</span>
+        <span title="CPU">${icon('monitor', 12)} ${cpu}</span>
+        <span title="Restarts">${icon('refresh-cw', 12)} ${p.restarts}x</span>
         <span title="PID">PID: ${p.pid || '—'}</span>
         <span title="PM2 Name" style="font-family:monospace;color:var(--accent2)">${p.name}</span>
       </div>`;
   } catch (e) {
     const el = document.getElementById('pm2-status');
-    if (el) el.innerHTML = '<span class="badge badge-red">❌ Nicht erreichbar</span>';
+    if (el) el.innerHTML = `<span class="badge badge-red">${icon('circle-x', 12)} ${t('maint.pm2.unreachable')}</span>`;
   }
 }
 
@@ -1686,45 +1675,26 @@ function formatDuration(ms) {
 async function loadPM2Logs() {
   const el = document.getElementById('pm2-log-output');
   if (!el) return;
-  el.textContent = 'Lade Logs...';
+  el.textContent = t('loading');
   try {
     const res = await fetch(API + '/api/pm2/logs');
     const data = await res.json();
-    if (data.error) {
-      el.textContent = '❌ ' + data.error;
-    } else {
-      el.textContent = data.logs || '(keine Logs)';
-      el.scrollTop = el.scrollHeight;
-    }
-  } catch (e) {
-    el.textContent = '❌ Verbindung fehlgeschlagen';
-  }
+    if (data.error) el.textContent = t('error') + ': ' + data.error;
+    else { el.textContent = data.logs || t('no.data'); el.scrollTop = el.scrollHeight; }
+  } catch (e) { el.textContent = t('error'); }
 }
 
-function editEnvVar(key) {
-  const value = prompt(`Neuer Wert für ${key}:`, '');
-  if (value === null) return;
-  fetch(API + '/api/env/set', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ key, value }),
-  }).then(r => r.json()).then(d => {
-    toast(d.ok ? `${key} gespeichert! Neustart nötig.` : d.error, d.ok ? 'success' : 'error');
-    loadSettings();
-  });
+async function restartBot() {
+  if (!confirm(t('maint.bot.restart.confirm'))) return;
+  toast(t('maint.bot.restarting'));
+  await fetch(API + '/api/bot/restart', { method: 'POST' });
+  setTimeout(() => { toast(t('maint.bot.reconnecting')); connectWS(); }, 3000);
 }
 
-function addEnvVar() {
-  const key = prompt('Variable Name (z.B. DISCORD_TOKEN):');
-  if (!key) return;
-  const value = prompt(`Wert für ${key}:`);
-  if (value === null) return;
-  fetch(API + '/api/env/set', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ key, value }),
-  }).then(r => r.json()).then(d => {
-    toast(d.ok ? `${key} hinzugefügt!` : d.error, d.ok ? 'success' : 'error');
-    loadSettings();
-  });
+async function reconnectBot() {
+  toast(t('reconnecting'));
+  if (ws) ws.close();
+  setTimeout(connectWS, 500);
 }
 
 // ── Files ───────────────────────────────────────────────
@@ -1741,17 +1711,17 @@ async function navigateFiles(dir) {
 
   const res = await fetch(API + '/api/files?path=' + encodeURIComponent(currentFilePath));
   const data = await res.json();
-  document.getElementById('file-breadcrumb').textContent = '📁 /' + (currentFilePath === '.' ? '' : currentFilePath);
+  document.getElementById('file-breadcrumb').innerHTML = `${icon('folder', 14)} /${currentFilePath === '.' ? '' : currentFilePath}`;
 
   if (data.entries) {
     document.getElementById('file-editor-area').style.display = 'none';
-    const icons = { ts:'🔷', js:'🟡', json:'📋', md:'📝', html:'🌐', css:'🎨', sh:'⚡', py:'🐍', txt:'📄', env:'🔒' };
+    const fileIcons = { ts:'code', js:'code', json:'file-text', md:'file-text', html:'globe', css:'palette', sh:'terminal', py:'code', txt:'file-text', env:'lock' };
     document.getElementById('file-list').innerHTML = data.entries.map(e => {
-      const icon = e.type === 'dir' ? '📁' : (icons[e.name.split('.').pop()?.toLowerCase()] || '📄');
+      const ic = e.type === 'dir' ? 'folder' : (fileIcons[e.name.split('.').pop()?.toLowerCase()] || 'file-text');
       const size = e.type === 'file' ? formatSize(e.size) : '';
       const fpath = (currentFilePath === '.' ? '' : currentFilePath + '/') + e.name;
       return `<div class="file-item" onclick="${e.type==='dir' ? `navigateFiles('${e.name}')` : `openFile('${fpath}')`}">
-        <span class="file-icon">${icon}</span><span class="file-name">${e.name}</span><span class="file-meta">${size}</span></div>`;
+        <span class="file-icon">${icon(ic, 16)}</span><span class="file-name">${e.name}</span><span class="file-meta">${size}</span></div>`;
     }).join('');
   }
 }
@@ -1764,65 +1734,45 @@ async function openFile(filePath) {
     document.getElementById('file-editor-area').style.display = '';
     document.getElementById('file-edit-name').textContent = filePath;
     document.getElementById('file-editor').value = data.content;
-    // Show line count
     const lines = data.content.split('\n').length;
     const sizeStr = data.size ? formatSize(data.size) : '';
     document.getElementById('file-edit-meta')?.remove();
     const meta = document.createElement('div');
     meta.id = 'file-edit-meta';
     meta.style.cssText = 'font-size:0.75em;color:var(--fg2);margin-top:4px';
-    meta.textContent = `${lines} Zeilen · ${sizeStr}`;
+    meta.textContent = `${t('files.lines', { count: lines })} · ${sizeStr}`;
     document.getElementById('file-editor').parentNode.insertBefore(meta, document.getElementById('file-editor'));
   } else if (data.binary) {
-    toast(`Binärdatei (${formatSize(data.size)}) — kann nicht im Editor geöffnet werden.`, 'error');
+    toast(t('files.binary'), 'error');
   } else {
-    toast('Datei kann nicht geöffnet werden', 'error');
+    toast(t('files.open.error'), 'error');
   }
 }
 
 async function saveFile() {
   const path = document.getElementById('file-edit-name').textContent;
   const content = document.getElementById('file-editor').value;
-  const res = await fetch(API + '/api/files/save', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ path, content }),
-  });
+  const res = await fetch(API + '/api/files/save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path, content }) });
   const data = await res.json();
-  toast(data.ok ? 'Gespeichert!' : data.error, data.ok ? 'success' : 'error');
+  toast(data.ok ? t('files.saved') : data.error, data.ok ? 'success' : 'error');
 }
 
 async function createNewFile() {
-  const name = prompt('Dateiname (z.B. notes.md):');
+  const name = prompt(t('files.name.prompt'));
   if (!name) return;
   const filePath = currentFilePath === '.' ? name : currentFilePath + '/' + name;
-  const res = await fetch(API + '/api/files/save', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ path: filePath, content: '' }),
-  });
+  const res = await fetch(API + '/api/files/save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: filePath, content: '' }) });
   const data = await res.json();
-  if (data.ok) {
-    toast('Datei erstellt!', 'success');
-    navigateFiles('.'); // Refresh current dir
-    openFile(filePath);
-  } else {
-    toast(data.error || 'Fehler beim Erstellen', 'error');
-  }
+  if (data.ok) { toast(t('files.created')); navigateFiles('.'); openFile(filePath); }
+  else { toast(data.error || t('files.create.error'), 'error'); }
 }
 
 async function deleteFile(filePath) {
-  if (!confirm('Datei löschen?\n\n' + filePath)) return;
-  const res = await fetch(API + '/api/files/delete', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ path: filePath }),
-  });
+  if (!confirm(t('files.delete.confirm', { path: filePath }))) return;
+  const res = await fetch(API + '/api/files/delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: filePath }) });
   const data = await res.json();
-  if (data.ok) {
-    toast('Gelöscht!', 'success');
-    document.getElementById('file-editor-area').style.display = 'none';
-    navigateFiles('.'); // Refresh
-  } else {
-    toast(data.error || 'Fehler beim Löschen', 'error');
-  }
+  if (data.ok) { toast(t('files.deleted')); document.getElementById('file-editor-area').style.display = 'none'; navigateFiles('.'); }
+  else { toast(data.error || t('files.delete.error'), 'error'); }
 }
 
 function formatSize(bytes) {
@@ -1838,42 +1788,43 @@ async function loadCron() {
   const list = document.getElementById('cron-list');
 
   if (data.jobs.length === 0) {
-    list.innerHTML = '<div class="card"><h3>Keine Jobs</h3><div class="sub">Erstelle einen Job oben oder via Telegram: /cron add 5m reminder Text</div></div>';
+    list.innerHTML = `<div class="card"><h3>${t('cron.none')}</h3><div class="sub">${t('cron.none.desc')}</div></div>`;
     return;
   }
 
+  const typeIcons = { reminder: 'timer', shell: 'zap', http: 'globe', message: 'message-square', 'ai-query': 'bot' };
+
   list.innerHTML = data.jobs.map(j => {
-    const statusIcon = j.enabled ? '🟢' : '⏸️';
-    const errIcon = j.lastError ? ' <span style="color:var(--red)">⚠️</span>' : '';
-    const typeIcons = { reminder: '⏰', shell: '⚡', http: '🌐', message: '💬', 'ai-query': '🤖' };
-    const icon = typeIcons[j.type] || '📋';
+    const statusIcon = j.enabled ? icon('circle-check', 14, 'style="color:var(--green)"') : icon('pause', 14, 'style="color:var(--fg3)"');
+    const errIcon = j.lastError ? ` <span style="color:var(--red)">${icon('alert-triangle', 14)}</span>` : '';
+    const ic = typeIcons[j.type] || 'clipboard';
     const payload = j.payload.text || j.payload.command || j.payload.url || j.payload.prompt || '';
     const schedLabel = j.scheduleReadable || j.schedule;
     const recBadge = j.oneShot
-      ? '<span class="badge badge-yellow">⚡ Einmalig</span>'
-      : `<span class="badge" style="background:var(--accent);color:#fff">🔄 ${escapeHtml(schedLabel)}</span>`;
+      ? `<span class="badge badge-yellow">${icon('zap', 10)} ${t('cron.single')}</span>`
+      : `<span class="badge" style="background:var(--accent);color:#fff">${icon('refresh-cw', 10)} ${escapeHtml(schedLabel)}</span>`;
 
     return `<div class="card" style="margin-bottom:12px">
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
-        <span style="font-size:1.2em">${statusIcon}</span>
-        <span style="font-weight:500;flex:1">${icon} ${escapeHtml(j.name)}${errIcon}</span>
+        ${statusIcon}
+        <span style="font-weight:500;flex:1;display:flex;align-items:center;gap:6px">${icon(ic, 16)} ${escapeHtml(j.name)}${errIcon}</span>
         ${recBadge}
       </div>
       <div id="cron-edit-${j.id}" style="display:none;margin-bottom:10px;padding:12px;background:var(--bg3);border-radius:8px">
         ${buildScheduleEditor(j.id, j.schedule, j.oneShot)}
       </div>
       <div style="font-size:0.82em;color:var(--fg2);margin-bottom:8px">
-        <span>Nächster Lauf: <strong>${j.nextRunFormatted || '—'}</strong></span> · 
-        <span>Runs: ${j.runCount}</span> · 
-        <span>Zuletzt: ${j.lastRunFormatted || 'nie'}</span>
+        <span>${t('cron.next.run')}: <strong>${j.nextRunFormatted || '—'}</strong></span> · 
+        <span>${t('cron.runs')}: ${j.runCount}</span> · 
+        <span>${t('cron.last.run')}: ${j.lastRunFormatted || t('cron.never')}</span>
       </div>
       ${payload ? `<div style="font-size:0.78em;font-family:monospace;color:var(--fg2);padding:6px 8px;background:var(--bg3);border-radius:4px;margin-bottom:8px;word-break:break-all">${escapeHtml(payload.slice(0, 200))}</div>` : ''}
-      ${j.lastError ? `<div style="font-size:0.78em;color:var(--red);margin-bottom:8px">❌ ${escapeHtml(j.lastError)}</div>` : ''}
+      ${j.lastError ? `<div style="font-size:0.78em;color:var(--red);margin-bottom:8px">${icon('circle-x', 12)} ${escapeHtml(j.lastError)}</div>` : ''}
       <div style="display:flex;gap:6px">
-        <button class="btn btn-sm btn-outline" onclick="toggleCronJob('${j.id}')">${j.enabled ? '⏸ Pause' : '▶️ Start'}</button>
-        <button class="btn btn-sm btn-outline" onclick="runCronJob('${j.id}')">▶ Jetzt</button>
-        <button class="btn btn-sm btn-outline" onclick="editCronSchedule('${j.id}')">✏️ Bearbeiten</button>
-        <button class="btn btn-sm btn-outline" style="color:var(--red)" onclick="deleteCronJob('${j.id}')">🗑</button>
+        <button class="btn btn-sm btn-outline" onclick="toggleCronJob('${j.id}')">${j.enabled ? `${icon('pause', 12)} ${t('cron.pause')}` : `${icon('play', 12)} ${t('cron.start')}`}</button>
+        <button class="btn btn-sm btn-outline" onclick="runCronJob('${j.id}')">${icon('play', 12)} ${t('cron.run.now')}</button>
+        <button class="btn btn-sm btn-outline" onclick="editCronSchedule('${j.id}')">${icon('edit', 12)} ${t('cron.edit')}</button>
+        <button class="btn btn-sm btn-outline" style="color:var(--red)" onclick="deleteCronJob('${j.id}')">${icon('trash-2', 12)}</button>
       </div>
     </div>`;
   }).join('');
@@ -1881,7 +1832,6 @@ async function loadCron() {
 
 function showCreateCron() {
   document.getElementById('cron-create-form').style.display = '';
-  // Inject schedule builder for create form (use null id → prefix "create-")
   const container = document.getElementById('cron-create-schedule-builder');
   if (container && !container.innerHTML.trim()) {
     container.innerHTML = buildScheduleEditor(null, '0 8 * * *', false);
@@ -1892,10 +1842,9 @@ async function createCronJob() {
   const name = document.getElementById('cron-name').value.trim();
   const type = document.getElementById('cron-type').value;
   const payloadText = document.getElementById('cron-payload').value.trim();
+  if (!name) { toast(t('cron.name.required'), 'error'); return; }
 
-  if (!name) { toast('Name ist Pflicht', 'error'); return; }
-
-  const result = fieldsToCron(null); // null id → create prefix
+  const result = fieldsToCron(null);
   if (!result) return;
 
   const payload = {};
@@ -1912,7 +1861,7 @@ async function createCronJob() {
   });
   const data = await res.json();
   if (data.ok) {
-    toast('✅ Job erstellt!');
+    toast(t('cron.created'));
     document.getElementById('cron-create-form').style.display = 'none';
     document.getElementById('cron-name').value = '';
     document.getElementById('cron-payload').value = '';
@@ -1929,16 +1878,15 @@ async function toggleCronJob(id) {
 }
 
 async function deleteCronJob(id) {
-  if (!confirm('Job löschen?')) return;
+  if (!confirm(t('cron.delete.confirm'))) return;
   await fetch(API + '/api/cron/delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) });
-  toast('Gelöscht');
+  toast(t('cron.deleted'));
   loadCron();
 }
 
 // ── Schedule Builder ─────────────────────────────────────
 
 function parseCronToFields(schedule) {
-  // Interval strings
   const intMatch = schedule.match(/^(\d+)\s*(m|min|h|hr|d|day|s|sec)s?$/i);
   if (intMatch) {
     const val = intMatch[1];
@@ -1946,7 +1894,6 @@ function parseCronToFields(schedule) {
     const unit = (u === 'm' || u === 'min') ? 'min' : (u === 'h' || u === 'hr') ? 'h' : (u === 'd' || u === 'day') ? 'd' : 's';
     return { mode: 'interval', interval: val, intervalUnit: unit, hour: '08', minute: '00', weekdays: [], monthday: '1' };
   }
-  // Cron expression
   const parts = schedule.trim().split(/\s+/);
   if (parts.length === 5) {
     const [min, hour, day, , wd] = parts;
@@ -1980,7 +1927,7 @@ function fieldsToCron(id) {
   if (mode === 'weekly') {
     const checks = document.querySelectorAll(`input[name="sched-wd-${pfx}"]:checked`);
     const days = Array.from(checks).map(c => c.value);
-    if (days.length === 0) { toast('Mindestens einen Wochentag wählen', 'error'); return null; }
+    if (days.length === 0) { toast(t('cron.schedule.weekday.min'), 'error'); return null; }
     return { schedule: `${minute} ${hour} * * ${days.join(',')}`, oneShot };
   }
 
@@ -1989,24 +1936,23 @@ function fieldsToCron(id) {
     return { schedule: `${minute} ${hour} ${day} * *`, oneShot };
   }
 
-  // daily
   return { schedule: `${minute} ${hour} * * *`, oneShot };
 }
 
 function buildScheduleEditor(id, schedule, oneShot, hideButtons) {
   const f = parseCronToFields(schedule || '0 8 * * *');
   const pfx = id ? id + '-' : 'create-';
-  const wdNames = ['So','Mo','Di','Mi','Do','Fr','Sa'];
+  const wdNames = t('cron.weekdays').split(',');
   const modeOptions = [
-    { val: 'interval', label: '⏱ Intervall', desc: 'z.B. alle 5 Min' },
-    { val: 'daily', label: '📅 Täglich', desc: '' },
-    { val: 'weekly', label: '📆 Wöchentlich', desc: '' },
-    { val: 'monthly', label: '🗓 Monatlich', desc: '' },
+    { val: 'interval', label: `${icon('timer', 14)} ${t('cron.schedule.interval')}` },
+    { val: 'daily', label: `${icon('calendar', 14)} ${t('cron.schedule.daily')}` },
+    { val: 'weekly', label: `${icon('calendar', 14)} ${t('cron.schedule.weekly')}` },
+    { val: 'monthly', label: `${icon('calendar', 14)} ${t('cron.schedule.monthly')}` },
   ];
 
   return `
     <div style="margin-bottom:10px">
-      <div style="font-size:0.82em;color:var(--fg2);margin-bottom:6px;font-weight:500">Wiederholung</div>
+      <div style="font-size:0.82em;color:var(--fg2);margin-bottom:6px;font-weight:500">${t('cron.schedule.repeat')}</div>
       <div style="display:flex;gap:4px;flex-wrap:wrap">
         ${modeOptions.map(o => `<label style="display:flex;align-items:center;gap:4px;padding:4px 10px;border-radius:6px;cursor:pointer;font-size:0.82em;background:${f.mode===o.val?'var(--accent)':'var(--bg2)'};color:${f.mode===o.val?'#fff':'var(--fg)'}">
           <input type="radio" name="sched-mode-${pfx}" value="${o.val}" ${f.mode===o.val?'checked':''} onchange="toggleSchedFields('${pfx}')" style="display:none"> ${o.label}
@@ -2015,22 +1961,22 @@ function buildScheduleEditor(id, schedule, oneShot, hideButtons) {
     </div>
 
     <div id="sched-interval-row-${pfx}" style="display:${f.mode==='interval'?'flex':'none'};gap:6px;align-items:center;margin-bottom:8px">
-      <span style="font-size:0.82em;color:var(--fg2)">Alle</span>
+      <span style="font-size:0.82em;color:var(--fg2)">${t('cron.schedule.every')}</span>
       <input id="sched-interval-${pfx}" type="number" min="1" value="${f.interval}" class="input" style="width:60px;text-align:center">
       <select id="sched-interval-unit-${pfx}" class="input" style="width:auto">
-        <option value="s" ${f.intervalUnit==='s'?'selected':''}>Sekunden</option>
-        <option value="min" ${f.intervalUnit==='min'?'selected':''}>Minuten</option>
-        <option value="h" ${f.intervalUnit==='h'?'selected':''}>Stunden</option>
-        <option value="d" ${f.intervalUnit==='d'?'selected':''}>Tage</option>
+        <option value="s" ${f.intervalUnit==='s'?'selected':''}>${t('cron.units.seconds')}</option>
+        <option value="min" ${f.intervalUnit==='min'?'selected':''}>${t('cron.units.minutes')}</option>
+        <option value="h" ${f.intervalUnit==='h'?'selected':''}>${t('cron.units.hours')}</option>
+        <option value="d" ${f.intervalUnit==='d'?'selected':''}>${t('cron.units.days')}</option>
       </select>
     </div>
 
     <div id="sched-time-row-${pfx}" style="display:${f.mode!=='interval'?'flex':'none'};gap:6px;align-items:center;margin-bottom:8px">
-      <span style="font-size:0.82em;color:var(--fg2)">Um</span>
+      <span style="font-size:0.82em;color:var(--fg2)">${t('cron.schedule.at')}</span>
       <input id="sched-hour-${pfx}" type="number" min="0" max="23" value="${f.hour}" class="input" style="width:50px;text-align:center">
       <span style="font-size:1.1em;font-weight:600">:</span>
       <input id="sched-minute-${pfx}" type="number" min="0" max="59" value="${f.minute}" class="input" style="width:50px;text-align:center">
-      <span style="font-size:0.82em;color:var(--fg2)">Uhr</span>
+      <span style="font-size:0.82em;color:var(--fg2)">${t('cron.schedule.oclock')}</span>
     </div>
 
     <div id="sched-wd-row-${pfx}" style="display:${f.mode==='weekly'?'flex':'none'};gap:4px;flex-wrap:wrap;margin-bottom:8px">
@@ -2040,20 +1986,20 @@ function buildScheduleEditor(id, schedule, oneShot, hideButtons) {
     </div>
 
     <div id="sched-md-row-${pfx}" style="display:${f.mode==='monthly'?'flex':'none'};gap:6px;align-items:center;margin-bottom:8px">
-      <span style="font-size:0.82em;color:var(--fg2)">Am</span>
+      <span style="font-size:0.82em;color:var(--fg2)">${t('cron.schedule.onday')}</span>
       <input id="sched-monthday-${pfx}" type="number" min="1" max="31" value="${f.monthday}" class="input" style="width:55px;text-align:center">
-      <span style="font-size:0.82em;color:var(--fg2)">. des Monats</span>
+      <span style="font-size:0.82em;color:var(--fg2)">${t('cron.schedule.ofmonth')}</span>
     </div>
 
     <div style="display:flex;gap:6px;align-items:center;margin-bottom:8px">
-      <span style="font-size:0.82em;color:var(--fg2)">Typ:</span>
-      <label style="font-size:0.82em;cursor:pointer"><input type="radio" name="sched-recur-${pfx}" value="false" ${!oneShot?'checked':''}> 🔄 Wiederkehrend</label>
-      <label style="font-size:0.82em;cursor:pointer"><input type="radio" name="sched-recur-${pfx}" value="true" ${oneShot?'checked':''}> ⚡ Einmalig</label>
+      <span style="font-size:0.82em;color:var(--fg2)">${t('cron.schedule.type')}:</span>
+      <label style="font-size:0.82em;cursor:pointer"><input type="radio" name="sched-recur-${pfx}" value="false" ${!oneShot?'checked':''}> ${icon('refresh-cw', 12)} ${t('cron.recurring')}</label>
+      <label style="font-size:0.82em;cursor:pointer"><input type="radio" name="sched-recur-${pfx}" value="true" ${oneShot?'checked':''}> ${icon('zap', 12)} ${t('cron.single')}</label>
     </div>
 
     ${id ? `<div style="display:flex;gap:6px">
-      <button class="btn btn-sm" onclick="saveCronSchedule('${id}')">💾 Speichern</button>
-      <button class="btn btn-sm btn-outline" onclick="document.getElementById('cron-edit-${id}').style.display='none'">Abbrechen</button>
+      <button class="btn btn-sm" onclick="saveCronSchedule('${id}')">${icon('save', 12)} ${t('save')}</button>
+      <button class="btn btn-sm btn-outline" onclick="document.getElementById('cron-edit-${id}').style.display='none'">${t('cancel')}</button>
     </div>` : ''}`;
 }
 
@@ -2078,16 +2024,16 @@ async function saveCronSchedule(id) {
     body: JSON.stringify({ id, schedule: result.schedule, oneShot: result.oneShot }),
   });
   const data = await res.json();
-  if (data.ok) { toast('✅ Timing aktualisiert!'); loadCron(); }
-  else toast('❌ ' + (data.error || 'Fehler'), 'error');
+  if (data.ok) { toast(t('cron.updated')); loadCron(); }
+  else toast(data.error || t('error'), 'error');
 }
 
 async function runCronJob(id) {
-  toast('Wird ausgeführt...');
+  toast(t('cron.executing'));
   const res = await fetch(API + '/api/cron/run', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) });
   const data = await res.json();
-  if (data.error) toast('❌ ' + data.error, 'error');
-  else toast('✅ Ausgeführt!');
+  if (data.error) toast(data.error, 'error');
+  else toast(t('cron.executed'));
   loadCron();
 }
 
@@ -2098,108 +2044,100 @@ async function loadTools() {
   const res = await fetch(API + '/api/tools');
   const data = await res.json();
   allTools = data.tools || [];
-  document.getElementById('tools-count').textContent = allTools.length + ' Tools';
+  document.getElementById('tools-count').textContent = t('tools.count', { count: allTools.length });
   renderTools(allTools);
 }
 
 function filterTools() {
   const q = document.getElementById('tools-search').value.toLowerCase();
   const filtered = q ? allTools.filter(t => t.name.toLowerCase().includes(q) || t.description.toLowerCase().includes(q)) : allTools;
-  document.getElementById('tools-count').textContent = filtered.length + ' Tools';
+  document.getElementById('tools-count').textContent = t('tools.count', { count: filtered.length });
   renderTools(filtered);
 }
 
 function renderTools(tools) {
   const categories = {};
-  tools.forEach(t => {
-    const cat = categorize(t.name);
+  tools.forEach(tl => {
+    const cat = categorize(tl.name);
     if (!categories[cat]) categories[cat] = [];
-    categories[cat].push(t);
+    categories[cat].push(tl);
   });
 
-  const icons = { '🖥️ System': '🖥️', '📧 Email': '📧', '🖱️ Automation': '🖱️', '📄 PDF': '📄', '🔧 Dev Tools': '🔧', '🌐 Network': '🌐', '🎨 Media': '🎨', '📋 Clipboard': '📋', '📁 Files': '📁', '🔨 Other': '🔨' };
+  const catIcons = {
+    'system': 'monitor', 'email': 'mail', 'automation': 'sparkles',
+    'pdf': 'file-text', 'dev': 'code', 'network': 'globe',
+    'media': 'image', 'clipboard': 'clipboard', 'files': 'folder', 'other': 'hammer'
+  };
 
   let html = '';
   for (const [cat, catTools] of Object.entries(categories)) {
-    html += `<div style="margin-bottom:20px"><h3 style="font-size:0.85em;color:var(--fg2);margin-bottom:8px">${cat}</h3>`;
-    html += catTools.map(t => {
-      const params = Object.keys(t.parameters || {});
+    const catIcon = catIcons[cat] || 'hammer';
+    html += `<div style="margin-bottom:20px"><h3 style="font-size:0.85em;color:var(--fg2);margin-bottom:8px;display:flex;align-items:center;gap:6px">${icon(catIcon, 16)} ${t('tools.cat.' + cat)}</h3>`;
+    html += catTools.map(tl => {
+      const params = Object.keys(tl.parameters || {});
       const paramBadges = params.map(p => `<span class="badge" style="font-size:0.65em">${p}</span>`).join(' ');
-      return `<div class="list-item" style="cursor:pointer" onclick="runTool('${escapeHtml(t.name)}')">
+      return `<div class="list-item" style="cursor:pointer" onclick="runTool('${escapeHtml(tl.name)}')">
         <div class="info">
-          <div class="name" style="font-family:monospace;font-size:0.85em">${t.name} ${paramBadges}</div>
-          <div class="desc">${t.description}</div>
+          <div class="name" style="font-family:monospace;font-size:0.85em">${tl.name} ${paramBadges}</div>
+          <div class="desc">${tl.description}</div>
         </div>
-        <button class="btn btn-sm btn-outline" onclick="event.stopPropagation();runTool('${escapeHtml(t.name)}')">▶️ Run</button>
+        <button class="btn btn-sm btn-outline" onclick="event.stopPropagation();runTool('${escapeHtml(tl.name)}')">${icon('play', 12)}</button>
       </div>`;
     }).join('');
     html += '</div>';
   }
-  document.getElementById('tools-list').innerHTML = html || '<div class="card"><h3>Keine Tools</h3><div class="sub">Tools in docs/tools.json konfigurieren.</div></div>';
+  document.getElementById('tools-list').innerHTML = html || `<div class="card"><h3>${t('tools.none')}</h3><div class="sub">${t('tools.none.desc')}</div></div>`;
 }
 
 function categorize(name) {
-  if (['run_shell','sudo_command','system_info','volume_set','brightness_set','bluetooth_control','wifi_status','say_text','notify','process_list','kill_process'].includes(name)) return '🖥️ System';
-  if (name.startsWith('email_')) return '📧 Email';
-  if (['osascript','osascript_js','cliclick_type','cliclick_click','cliclick_key'].includes(name)) return '🖱️ Automation';
-  if (name.startsWith('pdf_') || name.includes('_to_pdf')) return '📄 PDF';
-  if (['git_status','git_commit','pm2_status','pm2_restart','pm2_logs','ssh_command','docker_ps'].includes(name)) return '🔧 Dev Tools';
-  if (['web_fetch','network_check','open_url'].includes(name)) return '🌐 Network';
-  if (['image_convert','image_resize','ffmpeg_convert','whisper_transcribe','screenshot'].includes(name)) return '🎨 Media';
-  if (['clipboard_get','clipboard_set'].includes(name)) return '📋 Clipboard';
-  if (['find_files','disk_usage','open_file','calendar_today','calendar_upcoming'].includes(name)) return '📁 Files';
-  return '🔨 Other';
+  if (['run_shell','sudo_command','system_info','volume_set','brightness_set','bluetooth_control','wifi_status','say_text','notify','process_list','kill_process'].includes(name)) return 'system';
+  if (name.startsWith('email_')) return 'email';
+  if (['osascript','osascript_js','cliclick_type','cliclick_click','cliclick_key'].includes(name)) return 'automation';
+  if (name.startsWith('pdf_') || name.includes('_to_pdf')) return 'pdf';
+  if (['git_status','git_commit','pm2_status','pm2_restart','pm2_logs','ssh_command','docker_ps'].includes(name)) return 'dev';
+  if (['web_fetch','network_check','open_url'].includes(name)) return 'network';
+  if (['image_convert','image_resize','ffmpeg_convert','whisper_transcribe','screenshot'].includes(name)) return 'media';
+  if (['clipboard_get','clipboard_set'].includes(name)) return 'clipboard';
+  if (['find_files','disk_usage','open_file','calendar_today','calendar_upcoming'].includes(name)) return 'files';
+  return 'other';
 }
 
 function runTool(name) {
   const tool = allTools.find(t => t.name === name);
   if (!tool) return;
   const params = Object.entries(tool.parameters || {});
-
-  if (params.length === 0) {
-    // No params — run directly
-    executeTool(name, {});
-    return;
-  }
-
-  // Prompt for params
+  if (params.length === 0) { executeTool(name, {}); return; }
   const values = {};
   for (const [key, def] of params) {
     const val = prompt(`${key}: ${def.description}`, '');
-    if (val === null) return; // Cancelled
+    if (val === null) return;
     if (val) values[key] = val;
   }
   executeTool(name, values);
 }
 
 async function executeTool(name, params) {
-  toast(`Running ${name}...`);
+  toast(t('tools.running', { name }));
   try {
     const res = await fetch(API + '/api/tools/execute', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name, params }),
     });
     const data = await res.json();
-    if (data.error) {
-      toast(data.error, 'error');
-    } else {
-      // Show result in a dialog or terminal
-      const output = data.output || '(no output)';
-      // Switch to terminal and show output
-      document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
-      document.querySelector('[data-page="terminal"]').classList.add('active');
-      document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-      document.getElementById('page-terminal').classList.add('active');
-      document.getElementById('page-title').textContent = '💻 Terminal';
-      const termOutput = document.getElementById('terminal-output');
-      termOutput.innerHTML += `<div class="term-cmd">🛠️ ${escapeHtml(name)} ${JSON.stringify(params)}</div>`;
-      termOutput.innerHTML += `<div>${escapeHtml(output)}</div>`;
-      termOutput.scrollTop = termOutput.scrollHeight;
-      toast('Tool ausgeführt!');
-    }
+    if (data.error) { toast(data.error, 'error'); return; }
+    const output = data.output || '(no output)';
+    document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
+    document.querySelector('[data-page="terminal"]').classList.add('active');
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    document.getElementById('page-terminal').classList.add('active');
+    document.getElementById('page-title').innerHTML = `${icon('terminal', 18)} ${t('nav.terminal')}`;
+    const termOutput = document.getElementById('terminal-output');
+    termOutput.innerHTML += `<div class="term-cmd">${icon('wrench', 12)} ${escapeHtml(name)} ${JSON.stringify(params)}</div>`;
+    termOutput.innerHTML += `<div>${escapeHtml(output)}</div>`;
+    termOutput.scrollTop = termOutput.scrollHeight;
+    toast(t('tools.executed'));
   } catch (err) {
-    toast('Fehler: ' + err.message, 'error');
+    toast(t('error') + ': ' + err.message, 'error');
   }
 }
 
@@ -2219,7 +2157,7 @@ async function runCommand() {
     });
     const data = await res.json();
     if (data.output) output.innerHTML += `<div class="${data.exitCode ? 'term-err' : ''}">${escapeHtml(data.output)}</div>`;
-  } catch (err) { output.innerHTML += `<div class="term-err">Error: ${err.message}</div>`; }
+  } catch (err) { output.innerHTML += `<div class="term-err">${t('error')}: ${err.message}</div>`; }
   output.scrollTop = output.scrollHeight;
 }
 
@@ -2240,98 +2178,95 @@ async function loadMaintenance() {
 
   let html = '';
 
-  // ── Doctor / Health ──
-  const healthIcon = doctorData.healthy ? '🟢' : (doctorData.errorCount > 0 ? '🔴' : '🟡');
+  const healthIcon = doctorData.healthy ? icon('circle-check', 24, 'style="color:var(--green)"') : (doctorData.errorCount > 0 ? icon('circle-x', 24, 'style="color:var(--red)"') : icon('circle-alert', 24, 'style="color:var(--yellow)"'));
   html += `<div class="card" style="margin-bottom:16px">
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
-      <span style="font-size:1.5em">${healthIcon}</span>
+      ${healthIcon}
       <div style="flex:1">
-        <h3 style="font-size:0.95em;text-transform:none;letter-spacing:0">🩺 System-Doktor</h3>
-        <div class="sub">${doctorData.errorCount} Fehler, ${doctorData.warnCount} Warnungen</div>
+        <h3 style="font-size:0.95em;text-transform:none;letter-spacing:0;display:flex;align-items:center;gap:6px">${icon('stethoscope', 18)} ${t('maint.doctor')}</h3>
+        <div class="sub">${t('maint.doctor.errors', { errors: doctorData.errorCount, warns: doctorData.warnCount })}</div>
       </div>
-      <button class="btn btn-sm btn-outline" onclick="loadMaintenance()">🔄 Prüfen</button>
-      ${doctorData.errorCount > 0 ? `<button class="btn btn-sm" onclick="repairAll()">🔧 Alles reparieren</button>` : ''}
+      <button class="btn btn-sm btn-outline" onclick="loadMaintenance()">${icon('refresh-cw', 12)} ${t('maint.doctor.check')}</button>
+      ${doctorData.errorCount > 0 ? `<button class="btn btn-sm" onclick="repairAll()">${icon('wrench', 12)} ${t('maint.doctor.fix.all')}</button>` : ''}
     </div>`;
 
   for (const issue of doctorData.issues) {
-    const icons = { error: '❌', warning: '⚠️', info: 'ℹ️' };
+    const sevIcons = { error: icon('circle-x', 14), warning: icon('alert-triangle', 14), info: icon('info', 14) };
     const colors = { error: 'var(--red)', warning: 'var(--yellow)', info: 'var(--fg2)' };
-    html += `<div style="display:flex;align-items:center;gap:8px;padding:6px 0;font-size:0.85em;border-top:1px solid var(--bg3)">
-      <span style="color:${colors[issue.severity]}">${icons[issue.severity]}</span>
+    html += `<div style="display:flex;align-items:center;gap:8px;padding:6px 0;font-size:0.85em;border-top:1px solid var(--glass-border)">
+      <span style="color:${colors[issue.severity]}">${sevIcons[issue.severity]}</span>
       <span style="flex:1"><strong>${issue.category}:</strong> ${issue.message}</span>
-      ${issue.fixAction ? `<button class="btn btn-sm btn-outline" onclick="repairIssue('${issue.fixAction}')" title="${issue.fix || ''}">🔧 Fix</button>` : ''}
+      ${issue.fixAction ? `<button class="btn btn-sm btn-outline" onclick="repairIssue('${issue.fixAction}')" title="${issue.fix || ''}">${icon('wrench', 12)} Fix</button>` : ''}
     </div>`;
   }
   html += `</div>`;
 
-  // ── Backup & Restore ──
+  // Backup & Restore
   html += `<div class="card" style="margin-bottom:16px">
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
-      <span style="font-size:1.5em">💾</span>
+      <span style="display:flex">${icon('hard-drive', 24)}</span>
       <div style="flex:1">
-        <h3 style="font-size:0.95em;text-transform:none;letter-spacing:0">Backup & Wiederherstellung</h3>
-        <div class="sub">Sichere und stelle Config, Memory, Tools, SOUL.md wieder her</div>
+        <h3 style="font-size:0.95em;text-transform:none;letter-spacing:0">${t('maint.backup')}</h3>
+        <div class="sub">${t('maint.backup.desc')}</div>
       </div>
-      <button class="btn btn-sm" onclick="createBackupMaint()">📦 Backup erstellen</button>
+      <button class="btn btn-sm" onclick="createBackupMaint()">${icon('save', 12)} ${t('maint.backup.create')}</button>
     </div>`;
 
   if (backupData.backups.length > 0) {
     for (const b of backupData.backups) {
-      const date = new Date(b.createdAt).toLocaleString('de-DE');
+      const date = new Date(b.createdAt).toLocaleString(getLang() === 'de' ? 'de-DE' : 'en-US');
       const size = b.size < 1024 ? b.size + ' B' : (b.size / 1024).toFixed(1) + ' KB';
-      html += `<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-top:1px solid var(--bg3);font-size:0.85em">
-        <span>📦</span>
+      html += `<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-top:1px solid var(--glass-border);font-size:0.85em">
+        ${icon('package', 16)}
         <div style="flex:1">
           <div style="font-weight:500;font-family:monospace">${b.id}</div>
-          <div style="color:var(--fg2);font-size:0.82em">${date} · ${b.fileCount} Dateien · ${size}</div>
+          <div style="color:var(--fg2);font-size:0.82em">${date} · ${b.fileCount} ${t('maint.backup.files')} · ${size}</div>
         </div>
-        <button class="btn btn-sm btn-outline" onclick="showBackupFiles('${b.id}')">📋 Dateien</button>
-        <button class="btn btn-sm btn-outline" onclick="restoreBackup('${b.id}')">♻️ Wiederherstellen</button>
-        <button class="btn btn-sm btn-outline" style="color:var(--red)" onclick="deleteBackup('${b.id}')">🗑</button>
+        <button class="btn btn-sm btn-outline" onclick="showBackupFiles('${b.id}')">${icon('clipboard', 12)} ${t('maint.backup.files')}</button>
+        <button class="btn btn-sm btn-outline" onclick="restoreBackup('${b.id}')">${icon('refresh-cw', 12)} ${t('maint.backup.restore')}</button>
+        <button class="btn btn-sm btn-outline" style="color:var(--red)" onclick="deleteBackup('${b.id}')">${icon('trash-2', 12)}</button>
       </div>`;
     }
   } else {
-    html += `<div style="font-size:0.85em;color:var(--fg2);padding:8px 0;border-top:1px solid var(--bg3)">Noch keine Backups vorhanden.</div>`;
+    html += `<div style="font-size:0.85em;color:var(--fg2);padding:8px 0;border-top:1px solid var(--glass-border)">${t('maint.backup.none')}</div>`;
   }
   html += `<div id="backup-files-area" style="display:none;margin-top:8px;padding:8px;background:var(--bg3);border-radius:6px;font-size:0.82em"></div></div>`;
 
-  // ── PM2 Process Control ──
+  // PM2
   html += `<div class="card" style="margin-bottom:16px">
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
-      <span style="font-size:1.5em">⚙️</span>
+      <span style="display:flex">${icon('settings', 24)}</span>
       <div style="flex:1">
-        <h3 style="font-size:0.95em;text-transform:none;letter-spacing:0">Prozess-Steuerung (PM2)</h3>
-        <div class="sub">Bot-Prozess starten, stoppen und überwachen</div>
+        <h3 style="font-size:0.95em;text-transform:none;letter-spacing:0">${t('maint.pm2')}</h3>
+        <div class="sub">${t('maint.pm2.desc')}</div>
       </div>
-      <button class="btn btn-sm btn-outline" onclick="refreshPM2Status()">🔄 Status</button>
+      <button class="btn btn-sm btn-outline" onclick="refreshPM2Status()">${icon('refresh-cw', 12)} ${t('maint.pm2.status')}</button>
     </div>
-    <div id="pm2-status" style="margin-bottom:12px;font-size:0.85em;color:var(--fg2)">Lade PM2-Status...</div>
+    <div id="pm2-status" style="margin-bottom:12px;font-size:0.85em;color:var(--fg2)">${t('maint.pm2.loading')}</div>
     <div style="display:flex;gap:8px;flex-wrap:wrap">
-      <button class="btn btn-sm" onclick="pm2Action('restart')" title="Neustart (kein Datenverlust)">🔄 Restart</button>
-      <button class="btn btn-sm btn-outline" onclick="pm2Action('reload')" title="Zero-Downtime Reload">♻️ Reload</button>
-      <button class="btn btn-sm btn-danger" onclick="pm2Action('stop')" title="Bot stoppen">⏹️ Stop</button>
-      <button class="btn btn-sm" style="background:var(--green)" onclick="pm2Action('start')" title="Bot starten">▶️ Start</button>
-      <button class="btn btn-sm btn-outline" onclick="pm2Action('flush')" title="Logs leeren">🧹 Logs leeren</button>
+      <button class="btn btn-sm" onclick="pm2Action('restart')">${icon('refresh-cw', 12)} ${t('maint.pm2.restart')}</button>
+      <button class="btn btn-sm btn-outline" onclick="pm2Action('reload')">${icon('refresh-cw', 12)} ${t('maint.pm2.reload')}</button>
+      <button class="btn btn-sm btn-danger" onclick="pm2Action('stop')">${icon('pause', 12)} ${t('maint.pm2.stop')}</button>
+      <button class="btn btn-sm" style="background:var(--green)" onclick="pm2Action('start')">${icon('play', 12)} ${t('maint.pm2.start')}</button>
+      <button class="btn btn-sm btn-outline" onclick="pm2Action('flush')">${icon('trash-2', 12)} ${t('maint.pm2.flush')}</button>
     </div>
     <div id="pm2-logs" style="display:none;margin-top:12px"></div>
   </div>`;
 
-  // ── Bot Logs ──
+  // Logs
   html += `<div class="card" style="margin-bottom:16px">
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
-      <span style="font-size:1.5em">📋</span>
+      <span style="display:flex">${icon('clipboard', 24)}</span>
       <div style="flex:1">
-        <h3 style="font-size:0.95em;text-transform:none;letter-spacing:0">Letzte Logs</h3>
-        <div class="sub">Die letzten 30 Zeilen der Bot-Ausgabe</div>
+        <h3 style="font-size:0.95em;text-transform:none;letter-spacing:0">${t('maint.logs')}</h3>
+        <div class="sub">${t('maint.logs.desc')}</div>
       </div>
-      <button class="btn btn-sm btn-outline" onclick="loadPM2Logs()">🔄 Aktualisieren</button>
+      <button class="btn btn-sm btn-outline" onclick="loadPM2Logs()">${icon('refresh-cw', 12)} ${t('maint.logs.refresh')}</button>
     </div>
-    <div id="pm2-log-output" style="background:var(--bg1);border-radius:6px;padding:10px;font-family:monospace;font-size:0.75em;max-height:300px;overflow-y:auto;white-space:pre-wrap;color:var(--fg2)">Klicke "Aktualisieren" um Logs zu laden.</div>
+    <div id="pm2-log-output" style="background:var(--bg);border-radius:6px;padding:10px;font-family:monospace;font-size:0.75em;max-height:300px;overflow-y:auto;white-space:pre-wrap;color:var(--fg2);border:1px solid var(--glass-border)">${t('maint.logs.load')}</div>
   </div>`;
 
   document.getElementById('maintenance-content').innerHTML = html;
-
-  // Auto-load PM2 status + auto-refresh every 10s while on maintenance page
   refreshPM2Status();
   if (window._pm2RefreshInterval) clearInterval(window._pm2RefreshInterval);
   window._pm2RefreshInterval = setInterval(() => {
@@ -2341,17 +2276,16 @@ async function loadMaintenance() {
 }
 
 // ── WhatsApp Groups Management ──────────────────────────
-
 let _waGroupsCache = null;
 let _waRulesCache = null;
 
 async function loadWAGroups() {
   const container = document.getElementById('wa-groups-content');
   if (!container) return;
-  container.innerHTML = '<div style="color:var(--fg2);font-size:0.85em">Lade WhatsApp-Gruppen...</div>';
+  container.innerHTML = `<div style="color:var(--fg2);font-size:0.85em">${t('wa.groups.loading')}</div>`;
 
   const [groupsRes, rulesRes] = await Promise.all([
-    fetch(API + '/api/whatsapp/groups').then(r => r.json()).catch(() => ({ groups: [], error: 'Nicht erreichbar' })),
+    fetch(API + '/api/whatsapp/groups').then(r => r.json()).catch(() => ({ groups: [], error: 'Unreachable' })),
     fetch(API + '/api/whatsapp/group-rules').then(r => r.json()).catch(() => ({ rules: [] })),
   ]);
 
@@ -2359,30 +2293,24 @@ async function loadWAGroups() {
   _waRulesCache = rulesRes.rules || [];
   const activeCount = _waRulesCache.filter(r => r.enabled).length;
 
-  // Update badge
   const badge = document.getElementById('wa-groups-badge');
-  if (badge) badge.textContent = activeCount > 0 ? `(${activeCount} aktiv)` : '';
+  if (badge) badge.textContent = activeCount > 0 ? `(${t('wa.groups.active', { count: activeCount })})` : '';
 
   if (groupsRes.error && _waGroupsCache.length === 0) {
-    container.innerHTML = `<div style="color:var(--fg2);font-size:0.85em;padding:8px 0">WhatsApp nicht verbunden — zuerst oben verbinden.</div>`;
+    container.innerHTML = `<div style="color:var(--fg2);font-size:0.85em;padding:8px 0">${t('wa.not.connected')}</div>`;
     return;
   }
 
   const rulesMap = {};
   for (const r of _waRulesCache) rulesMap[r.groupId] = r;
 
-  let html = `
-    <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
-      <div style="flex:1;font-size:0.8em;color:var(--fg2)">
-        ${_waGroupsCache.length} Gruppen · ${activeCount} aktiv
-      </div>
-      <button class="btn btn-sm btn-outline" style="font-size:0.75em" onclick="loadWAGroups()">🔄</button>
-    </div>`;
+  let html = `<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+    <div style="flex:1;font-size:0.8em;color:var(--fg2)">${t('wa.groups.count', { count: _waGroupsCache.length })} · ${t('wa.groups.active', { count: activeCount })}</div>
+    <button class="btn btn-sm btn-outline" style="font-size:0.75em" onclick="loadWAGroups()">${icon('refresh-cw', 12)}</button>
+  </div>`;
 
-  // Configured groups first, then unconfigured
   const sorted = [..._waGroupsCache].sort((a, b) => {
-    const aRule = rulesMap[a.id];
-    const bRule = rulesMap[b.id];
+    const aRule = rulesMap[a.id]; const bRule = rulesMap[b.id];
     if (aRule?.enabled && !bRule?.enabled) return -1;
     if (!aRule?.enabled && bRule?.enabled) return 1;
     if (aRule && !bRule) return -1;
@@ -2393,27 +2321,24 @@ async function loadWAGroups() {
   for (const g of sorted) {
     const rule = rulesMap[g.id];
     const isEnabled = rule?.enabled;
-    const statusIcon = isEnabled ? '🟢' : '⚪';
+    const statusIcon = isEnabled ? icon('circle-check', 14, 'style="color:var(--green)"') : icon('circle-dot', 14, 'style="opacity:0.3"');
     const allowedCount = rule?.allowedParticipants?.length || 0;
-    const accessLabel = !rule ? 'Nicht konfiguriert' :
-      isEnabled ? (allowedCount > 0 ? `${allowedCount} erlaubte Kontakte` : 'Alle Teilnehmer erlaubt') :
-      'Deaktiviert';
-    const mentionLabel = rule?.requireMention ? '@ Erwähnung nötig' : 'Alle Nachrichten';
-    const mediaLabel = rule?.allowMedia !== false ? '📎 Medien' : '';
-    const approvalLabel = rule?.requireApproval !== false ? '🔐 Approval' : '⚡ Auto';
+    const accessLabel = !rule ? t('wa.groups.no.config') :
+      isEnabled ? (allowedCount > 0 ? t('wa.groups.allowed', { count: allowedCount }) : t('wa.groups.all.allowed')) :
+      t('disabled');
+    const approvalLabel = rule?.requireApproval !== false ? t('wa.approval') : t('wa.auto');
 
-    html += `
-      <div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--bg3)">
-        <span>${statusIcon}</span>
-        <div style="flex:1;min-width:0">
-          <div style="font-weight:500;font-size:0.85em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(g.name)}</div>
-          <div style="font-size:0.72em;color:var(--fg2)">${accessLabel}${isEnabled ? ' · ' + approvalLabel : ''}</div>
-        </div>
-        <button class="btn btn-sm ${isEnabled ? '' : 'btn-outline'}" style="font-size:0.75em;padding:4px 8px" onclick="toggleWAGroup('${g.id}', '${escapeHtml(g.name)}', ${!isEnabled})">
-          ${isEnabled ? '⏸' : '▶️'}
-        </button>
-        <button class="btn btn-sm btn-outline" style="font-size:0.75em;padding:4px 8px" onclick="configureWAGroup('${g.id}', '${escapeHtml(g.name)}')">⚙️</button>
-      </div>`;
+    html += `<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--glass-border)">
+      ${statusIcon}
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:500;font-size:0.85em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(g.name)}</div>
+        <div style="font-size:0.72em;color:var(--fg2)">${accessLabel}${isEnabled ? ' · ' + approvalLabel : ''}</div>
+      </div>
+      <button class="btn btn-sm ${isEnabled ? '' : 'btn-outline'}" style="font-size:0.75em;padding:4px 8px" onclick="toggleWAGroup('${g.id}', '${escapeHtml(g.name)}', ${!isEnabled})">
+        ${isEnabled ? icon('pause', 12) : icon('play', 12)}
+      </button>
+      <button class="btn btn-sm btn-outline" style="font-size:0.75em;padding:4px 8px" onclick="configureWAGroup('${g.id}', '${escapeHtml(g.name)}')">${icon('settings', 12)}</button>
+    </div>`;
   }
 
   container.innerHTML = html;
@@ -2424,7 +2349,7 @@ async function toggleWAGroup(groupId, groupName, enable) {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ groupId, groupName, enabled: enable }),
   });
-  toast(enable ? `${groupName} aktiviert` : `${groupName} deaktiviert`, 'success');
+  toast(enable ? t('wa.groups.enabled', { name: groupName }) : t('wa.groups.disabled', { name: groupName }));
   loadWAGroups();
 }
 
@@ -2433,8 +2358,7 @@ async function configureWAGroup(groupId, groupName) {
   if (!container) return;
 
   const rule = _waRulesCache?.find(r => r.groupId === groupId) || {};
-
-  container.innerHTML = `<div style="color:var(--fg2);font-size:0.85em">Lade Teilnehmer von "${groupName}"...</div>`;
+  container.innerHTML = `<div style="color:var(--fg2);font-size:0.85em">${t('loading')}</div>`;
   const res = await fetch(API + `/api/whatsapp/groups/${encodeURIComponent(groupId)}/participants`);
   const { participants } = await res.json();
 
@@ -2445,41 +2369,40 @@ async function configureWAGroup(groupId, groupName) {
 
   let html = `
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
-      <button class="btn btn-sm btn-outline" style="font-size:0.75em;padding:3px 8px" onclick="loadWAGroups()">←</button>
+      <button class="btn btn-sm btn-outline" style="font-size:0.75em;padding:3px 8px" onclick="loadWAGroups()">${icon('arrow-left', 12)}</button>
       <span style="font-weight:600;font-size:0.9em">${escapeHtml(groupName)}</span>
-      <span style="font-size:0.75em;color:var(--fg2)">${participants.length} Teilnehmer</span>
+      <span style="font-size:0.75em;color:var(--fg2)">${t('wa.groups.participants', { count: participants.length })}</span>
     </div>
 
     <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:12px;padding:10px;background:var(--bg3);border-radius:6px">
       <label style="display:flex;align-items:center;gap:6px;font-size:0.82em;cursor:pointer">
         <input type="checkbox" id="wa-require-mention" ${requireMention ? 'checked' : ''}>
-        <span>@ Erwähnung erforderlich</span>
+        <span>${t('wa.groups.mention.required')}</span>
       </label>
       <label style="display:flex;align-items:center;gap:6px;font-size:0.82em;cursor:pointer">
         <input type="checkbox" id="wa-allow-media" ${allowMedia ? 'checked' : ''}>
-        <span>📎 Medien verarbeiten</span>
+        <span>${icon('paperclip', 12)} ${t('wa.groups.media')}</span>
       </label>
       <label style="display:flex;align-items:center;gap:6px;font-size:0.82em;cursor:pointer">
         <input type="checkbox" id="wa-require-approval" ${requireApproval ? 'checked' : ''}>
-        <span>🔐 Approval vor Verarbeitung</span>
+        <span>${icon('lock', 12)} ${t('wa.groups.approval')}</span>
       </label>
     </div>
 
     <div style="margin-bottom:8px">
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
-        <span style="font-weight:500;font-size:0.85em">👥 Erlaubte Kontakte</span>
+        <span style="font-weight:500;font-size:0.85em">${icon('users', 14)} ${t('wa.groups.allowed.contacts')}</span>
         <span style="flex:1"></span>
-        <button class="btn btn-sm btn-outline" style="font-size:0.7em;padding:2px 6px" onclick="waSelectAll(true)">Alle</button>
-        <button class="btn btn-sm btn-outline" style="font-size:0.7em;padding:2px 6px" onclick="waSelectAll(false)">Keine</button>
+        <button class="btn btn-sm btn-outline" style="font-size:0.7em;padding:2px 6px" onclick="waSelectAll(true)">${t('wa.groups.select.all')}</button>
+        <button class="btn btn-sm btn-outline" style="font-size:0.7em;padding:2px 6px" onclick="waSelectAll(false)">${t('wa.groups.select.none')}</button>
       </div>
-      <div style="font-size:0.72em;color:var(--fg2);margin-bottom:6px">Keine Auswahl = alle dürfen ansprechen</div>
+      <div style="font-size:0.72em;color:var(--fg2);margin-bottom:6px">${t('wa.groups.no.selection')}</div>
       <div id="wa-participants" style="max-height:250px;overflow-y:auto">`;
 
   for (const p of participants) {
     const checked = allowed.has(p.id) || allowed.has(p.number) ? 'checked' : '';
-    const adminBadge = p.isAdmin ? ' <span style="background:var(--accent);color:var(--bg);padding:0 4px;border-radius:3px;font-size:0.7em">Admin</span>' : '';
-    html += `
-      <label style="display:flex;align-items:center;gap:6px;padding:4px 0;border-bottom:1px solid var(--bg3);cursor:pointer;font-size:0.82em" class="wa-participant">
+    const adminBadge = p.isAdmin ? ` <span style="background:var(--accent);color:var(--bg);padding:0 4px;border-radius:3px;font-size:0.7em">${t('wa.groups.admin')}</span>` : '';
+    html += `<label style="display:flex;align-items:center;gap:6px;padding:4px 0;border-bottom:1px solid var(--glass-border);cursor:pointer;font-size:0.82em" class="wa-participant">
         <input type="checkbox" data-pid="${p.id}" data-number="${p.number}" ${checked}>
         <span style="flex:1">${escapeHtml(p.name)}${adminBadge}</span>
         <span style="color:var(--fg2);font-size:0.75em;font-family:monospace">+${p.number}</span>
@@ -2487,11 +2410,10 @@ async function configureWAGroup(groupId, groupName) {
   }
 
   html += `</div></div>
-
     <div style="display:flex;gap:6px;margin-top:10px">
-      <button class="btn btn-sm" onclick="saveWAGroupConfig('${groupId}', '${escapeHtml(groupName)}')">💾 Speichern</button>
-      <button class="btn btn-sm btn-outline" onclick="loadWAGroups()">Abbrechen</button>
-      ${rule.groupId ? `<button class="btn btn-sm btn-outline" style="color:var(--red);margin-left:auto" onclick="deleteWAGroupRule('${groupId}')">🗑</button>` : ''}
+      <button class="btn btn-sm" onclick="saveWAGroupConfig('${groupId}', '${escapeHtml(groupName)}')">${icon('save', 12)} ${t('save')}</button>
+      <button class="btn btn-sm btn-outline" onclick="loadWAGroups()">${t('cancel')}</button>
+      ${rule.groupId ? `<button class="btn btn-sm btn-outline" style="color:var(--red);margin-left:auto" onclick="deleteWAGroupRule('${groupId}')">${icon('trash-2', 12)}</button>` : ''}
     </div>`;
 
   container.innerHTML = html;
@@ -2505,7 +2427,6 @@ async function saveWAGroupConfig(groupId, groupName) {
   const requireMention = document.getElementById('wa-require-mention').checked;
   const allowMedia = document.getElementById('wa-allow-media').checked;
   const requireApproval = document.getElementById('wa-require-approval').checked;
-
   const allowedParticipants = [];
   const participantNames = {};
   document.querySelectorAll('#wa-participants input[type=checkbox]:checked').forEach(cb => {
@@ -2518,29 +2439,145 @@ async function saveWAGroupConfig(groupId, groupName) {
 
   await fetch(API + '/api/whatsapp/group-rules', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      groupId, groupName, enabled: true,
-      allowedParticipants, participantNames,
-      requireMention, allowMedia, requireApproval,
-    }),
+    body: JSON.stringify({ groupId, groupName, enabled: true, allowedParticipants, participantNames, requireMention, allowMedia, requireApproval }),
   });
-
-  toast(`${groupName} konfiguriert und aktiviert!`, 'success');
+  toast(t('wa.groups.configured', { name: groupName }));
   loadWAGroups();
 }
 
 async function deleteWAGroupRule(groupId) {
-  if (!confirm('Regel für diese Gruppe löschen?')) return;
+  if (!confirm(t('wa.groups.rule.delete.confirm'))) return;
   await fetch(API + `/api/whatsapp/group-rules/${encodeURIComponent(groupId)}`, { method: 'DELETE' });
-  toast('Regel gelöscht', 'success');
+  toast(t('wa.groups.rule.deleted'));
   loadWAGroups();
 }
 
-function escapeHtml(text) {
-  const div = document.createElement('div');
-  div.textContent = text;
-  return div.innerHTML;
+// ── Command Palette (Cmd+K) ─────────────────────────────
+let _cmdPaletteIdx = 0;
+let _cmdPaletteItems = [];
+
+function openCommandPalette() {
+  const overlay = document.getElementById('cmd-palette-overlay');
+  overlay.style.display = 'flex';
+  const input = document.getElementById('cmd-palette-input');
+  input.value = '';
+  input.focus();
+  renderCommandPaletteResults('');
 }
+
+function closeCommandPalette() {
+  document.getElementById('cmd-palette-overlay').style.display = 'none';
+}
+
+function getCommandPaletteItems() {
+  const pages = [
+    { id: 'chat', icon: 'message-square', label: t('nav.chat'), action: () => navigateTo('chat') },
+    { id: 'dashboard', icon: 'layout-dashboard', label: t('nav.dashboard'), action: () => navigateTo('dashboard') },
+    { id: 'models', icon: 'bot', label: t('nav.models'), action: () => navigateTo('models') },
+    { id: 'personality', icon: 'palette', label: t('nav.personality'), action: () => navigateTo('personality') },
+    { id: 'memory', icon: 'brain', label: t('nav.memory'), action: () => navigateTo('memory') },
+    { id: 'sessions', icon: 'clipboard', label: t('nav.sessions'), action: () => navigateTo('sessions') },
+    { id: 'files', icon: 'folder', label: t('nav.files'), action: () => navigateTo('files') },
+    { id: 'cron', icon: 'timer', label: t('nav.cron'), action: () => navigateTo('cron') },
+    { id: 'tools', icon: 'hammer', label: t('nav.tools'), action: () => navigateTo('tools') },
+    { id: 'plugins', icon: 'plug', label: t('nav.plugins'), action: () => navigateTo('plugins') },
+    { id: 'platforms', icon: 'smartphone', label: t('nav.platforms'), action: () => navigateTo('platforms') },
+    { id: 'users', icon: 'users', label: t('nav.users'), action: () => navigateTo('users') },
+    { id: 'terminal', icon: 'terminal', label: t('nav.terminal'), action: () => navigateTo('terminal') },
+    { id: 'maintenance', icon: 'stethoscope', label: t('nav.maintenance'), action: () => navigateTo('maintenance') },
+    { id: 'settings', icon: 'settings', label: t('nav.settings'), action: () => navigateTo('settings') },
+  ];
+
+  const actions = [
+    { id: 'reset', icon: 'refresh-cw', label: t('cmd.action.reset'), kbd: navigator.platform?.includes('Mac') ? '⌘N' : 'Ctrl+N', action: () => resetChat() },
+    { id: 'theme', icon: 'sun', label: t('cmd.action.theme'), action: () => toggleTheme() },
+    { id: 'export', icon: 'download', label: t('cmd.action.export'), kbd: navigator.platform?.includes('Mac') ? '⌘⇧E' : 'Ctrl+Shift+E', action: () => exportChat() },
+    { id: 'lang', icon: 'languages', label: t('cmd.action.lang'), action: () => toggleLang() },
+  ];
+
+  return { pages, actions };
+}
+
+function renderCommandPaletteResults(query) {
+  const { pages, actions } = getCommandPaletteItems();
+  const q = query.toLowerCase().trim();
+
+  const filteredPages = q ? pages.filter(p => p.label.toLowerCase().includes(q) || p.id.includes(q)) : pages;
+  const filteredActions = q ? actions.filter(a => a.label.toLowerCase().includes(q) || a.id.includes(q)) : actions;
+
+  _cmdPaletteItems = [...filteredPages, ...filteredActions];
+  _cmdPaletteIdx = 0;
+
+  const container = document.getElementById('cmd-palette-results');
+
+  if (_cmdPaletteItems.length === 0) {
+    container.innerHTML = `<div class="cmd-palette-empty">${t('cmd.no.results')}</div>`;
+    return;
+  }
+
+  let html = '';
+  if (filteredPages.length > 0) {
+    html += `<div class="cmd-palette-section">${t('cmd.goto')}</div>`;
+    filteredPages.forEach((p, i) => {
+      html += `<div class="cmd-palette-item${i === 0 ? ' selected' : ''}" data-idx="${i}" onclick="executeCmdPaletteItem(${i})" onmouseenter="selectCmdPaletteItem(${i})">
+        ${icon(p.icon, 16)} <span>${p.label}</span>
+      </div>`;
+    });
+  }
+  if (filteredActions.length > 0) {
+    html += `<div class="cmd-palette-section">${t('cmd.actions')}</div>`;
+    filteredActions.forEach((a, j) => {
+      const idx = filteredPages.length + j;
+      html += `<div class="cmd-palette-item${idx === 0 && filteredPages.length === 0 ? ' selected' : ''}" data-idx="${idx}" onclick="executeCmdPaletteItem(${idx})" onmouseenter="selectCmdPaletteItem(${idx})">
+        ${icon(a.icon, 16)} <span>${a.label}</span>
+        ${a.kbd ? `<kbd>${a.kbd}</kbd>` : ''}
+      </div>`;
+    });
+  }
+
+  container.innerHTML = html;
+}
+
+function selectCmdPaletteItem(idx) {
+  _cmdPaletteIdx = idx;
+  document.querySelectorAll('.cmd-palette-item').forEach((el, i) => {
+    el.classList.toggle('selected', i === idx);
+  });
+}
+
+function executeCmdPaletteItem(idx) {
+  const item = _cmdPaletteItems[idx];
+  if (item) {
+    closeCommandPalette();
+    item.action();
+  }
+}
+
+function navigateTo(page) {
+  const navItem = document.querySelector(`.nav-item[data-page="${page}"]`);
+  if (navItem) navItem.click();
+}
+
+// Command palette keyboard navigation
+document.getElementById('cmd-palette-input').addEventListener('input', (e) => {
+  renderCommandPaletteResults(e.target.value);
+});
+
+document.getElementById('cmd-palette-input').addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') { closeCommandPalette(); return; }
+  if (e.key === 'ArrowDown') {
+    e.preventDefault();
+    selectCmdPaletteItem(Math.min(_cmdPaletteIdx + 1, _cmdPaletteItems.length - 1));
+  }
+  if (e.key === 'ArrowUp') {
+    e.preventDefault();
+    selectCmdPaletteItem(Math.max(_cmdPaletteIdx - 1, 0));
+  }
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    executeCmdPaletteItem(_cmdPaletteIdx);
+  }
+});
 
 // ── Theme Toggle ────────────────────────────────────────
 function toggleTheme() {
@@ -2549,12 +2586,13 @@ function toggleTheme() {
   body.setAttribute('data-theme', current === 'light' ? '' : 'light');
   localStorage.setItem('theme', current === 'light' ? 'dark' : 'light');
 }
-// Restore theme
 if (localStorage.getItem('theme') === 'light') document.documentElement.setAttribute('data-theme', 'light');
 
 // ── Init ────────────────────────────────────────────────
+initUI();
+initDragDrop();
 restoreChatFromStorage();
 if (chatMessages.length > 0) scrollToBottom();
 connectWS();
 loadDashboard();
-loadModels(); // Populate chat model selector
+loadModels();
