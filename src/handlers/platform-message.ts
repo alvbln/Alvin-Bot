@@ -70,11 +70,28 @@ export async function handlePlatformMessage(
     text = `[Bild angehängt: ${msg.media.path}]\n\n${caption}`;
   }
 
-  // ── Document: provide path + filename as context ─────────────────────
+  // ── Document: provide path + filename + instructions ──────────────────
   if (msg.media?.type === "document" && msg.media.path) {
     const fname = msg.media.fileName || "Dokument";
+    const fpath = msg.media.path;
+    const ext = fname.split(".").pop()?.toLowerCase() || "";
     const caption = text || `Analysiere dieses Dokument: ${fname}`;
-    text = `[Dokument angehängt: ${msg.media.path} (${fname})]\n\n${caption}`;
+
+    // Give the AI concrete instructions based on file type
+    const isArchive = ["zip", "tar", "gz", "tgz", "7z", "rar"].includes(ext);
+    const isPdf = ext === "pdf";
+    const isOffice = ["xlsx", "xls", "docx", "doc", "pptx", "csv"].includes(ext);
+
+    let fileHint = `[Datei empfangen: ${fpath}]\nDateiname: ${fname}\nTyp: ${msg.media.mimeType || "unbekannt"}`;
+    if (isArchive) {
+      fileHint += `\n\nDiese Datei ist ein Archiv. Entpacke sie mit: unzip "${fpath}" -d "${fpath.replace(/\.[^.]+$/, "")}" oder tar xf "${fpath}" und arbeite dann mit dem Inhalt.`;
+    } else if (isPdf) {
+      fileHint += `\n\nLies den Inhalt mit: pdftotext "${fpath}" - oder python3 mit PyPDF2/pdfplumber.`;
+    } else if (isOffice) {
+      fileHint += `\n\nÖffne mit python3 (openpyxl für xlsx, python-docx für docx, csv-Modul für csv).`;
+    }
+
+    text = `${fileHint}\n\n${caption}`;
   }
 
   if (!text) return;

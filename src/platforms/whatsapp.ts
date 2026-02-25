@@ -496,7 +496,8 @@ export class WhatsAppAdapter implements PlatformAdapter {
       try {
         const media = await msg.downloadMedia();
         if (media?.data) {
-          const tmpDir = join(tmpdir(), "alvin-bot");
+          // Store in project data dir (persistent) instead of OS temp (volatile)
+          const tmpDir = resolve(BOT_ROOT, "data", "wa-media");
           if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true });
 
           if (isVoice) {
