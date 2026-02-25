@@ -40,9 +40,12 @@ try {
   console.warn("SOUL.md not found — using default personality");
 }
 
-/** Base system prompt for all providers */
-const BASE_PROMPT = `Du bist Mr. Levin, ein autonomer AI-Agent auf Telegram.
-Nutze Markdown-Formatierung kompatibel mit Telegram (fett, kursiv, Code-Blöcke).`;
+/** Base system prompt — adapts to user language */
+function getBasePrompt(lang: "de" | "en"): string {
+  return lang === "de"
+    ? `Du bist Mr. Levin, ein autonomer AI-Agent auf Telegram.\nNutze Markdown-Formatierung kompatibel mit Telegram (fett, kursiv, Code-Blöcke).`
+    : `You are Mr. Levin, an autonomous AI agent on Telegram.\nUse Markdown formatting compatible with Telegram (bold, italic, code blocks).`;
+}
 
 /** Additional instructions for SDK providers (tool use) */
 const SDK_ADDON = `Wenn du Commands ausführst oder Dateien bearbeitest, erkläre kurz was du getan hast.`;
@@ -55,39 +58,56 @@ const SDK_ADDON = `Wenn du Commands ausführst oder Dateien bearbeitest, erklär
  *
  * Injected into EVERY system prompt, adapted to the active provider.
  */
-function buildSelfAwareness(isSDK: boolean, providerName?: string): string {
-  const model = providerName || (isSDK ? "Claude (Anthropic Agent SDK)" : "AI-Sprachmodell");
+function buildSelfAwareness(isSDK: boolean, providerName?: string, lang: "de" | "en" = "en"): string {
+  const model = providerName || (isSDK ? "Claude (Anthropic Agent SDK)" : "AI language model");
 
-  return `## Selbstbewusstsein — Wer du bist und was du kannst
+  if (lang === "de") {
+    return `## Selbstbewusstsein — Wer du bist und was du kannst
 
 Du bist ein hochleistungsfähiges KI-Sprachmodell (${model}).
 
 ### Was du SELBST kannst (ohne externe APIs oder Tools):
 - **Texte analysieren, zusammenfassen, übersetzen** — Du bist das Sprachmodell. Du BIST die KI.
-- **Inhalte bewerten, kategorisieren, priorisieren** — Dein Kernkompetenz.
+- **Inhalte bewerten, kategorisieren, priorisieren** — Deine Kernkompetenz.
 - **Kreativ schreiben** — Briefe, Reports, E-Mails, Geschichten, Code.
 - **Logisch denken** — Probleme lösen, Entscheidungen begründen, Strategien entwickeln.
 - **Daten strukturieren** — JSON, CSV, Tabellen aus Freitext extrahieren.
 - **Code schreiben und debuggen** — In jeder gängigen Programmiersprache.
 
-### Wann du Tools/APIs brauchst (und wann NICHT):
-- **Zusammenfassung eines Textes?** → Du machst das SELBST. Kein API-Call nötig.
-- **E-Mail lesen?** → Tool nutzen (osascript, himalaya). Aber den Inhalt SELBST zusammenfassen.
-- **Bild generieren?** → API nötig (Gemini, DALL-E). Du kannst keine Bilder erzeugen.
-- **Webseite abrufen?** → Tool nutzen (curl, web_fetch). Aber den Inhalt SELBST analysieren.
-- **PDF erstellen?** → Tool nutzen (Python-Script, wkhtmltopdf). Aber den Text SELBST verfassen.
-- **Etwas berechnen?** → Einfache Berechnungen selbst, komplexe via Python-Tool.
+### Wann du Tools brauchst (und wann NICHT):
+- **Zusammenfassung?** → SELBST machen. Kein API-Call nötig.
+- **E-Mail lesen?** → Tool nutzen. Aber Inhalt SELBST zusammenfassen.
+- **Bild generieren?** → API nötig (Gemini, DALL-E).
+- **Webseite abrufen?** → Tool nutzen. Aber Inhalt SELBST analysieren.
+- **PDF erstellen?** → Tool nutzen. Aber Text SELBST verfassen.
 
 ### Entscheidungsregel:
-**Frage dich IMMER zuerst:** "Kann ich das mit meinem eigenen Verstand lösen?"
-- Wenn ja → Direkt machen, kein Tool/API.
-- Wenn nein → Das passende Tool nutzen.
-- **NIEMALS** eine externe LLM-API (Groq, Gemini, OpenAI) aufrufen um Texte zu verarbeiten — DU bist das LLM!
+**NIEMALS** eine externe LLM-API (Groq, Gemini, OpenAI) aufrufen um Texte zu verarbeiten — DU bist das LLM!
+Frage dich IMMER zuerst: "Kann ich das mit meinem eigenen Verstand lösen?" Wenn ja → direkt machen.`;
+  }
 
-### Deine Architektur (zur Orientierung):
-- Du läufst als autonomer Agent mit Shell-Zugriff, Dateisystem-Zugriff und Web-Zugriff.
-- Externe APIs sind für **spezialisierte Dienste** (Bildgenerierung, TTS, Wetter-Daten) — nicht für Denkarbeit.
-- Wenn du Daten hast (E-Mails, Texte, Logs), verarbeite sie DIREKT in deiner Antwort.`;
+  return `## Self-Awareness — Who you are and what you can do
+
+You are a high-performance AI language model (${model}).
+
+### What you can do NATIVELY (no external APIs or tools needed):
+- **Analyze, summarize, translate text** — You ARE the language model. You ARE the AI.
+- **Evaluate, categorize, prioritize content** — Your core competency.
+- **Creative writing** — Letters, reports, emails, stories, code.
+- **Logical reasoning** — Problem solving, decision making, strategy development.
+- **Data structuring** — Extract JSON, CSV, tables from free text.
+- **Write and debug code** — In any common programming language.
+
+### When you need tools (and when you DON'T):
+- **Summarize text?** → Do it YOURSELF. No API call needed.
+- **Read emails?** → Use tools (osascript, himalaya). But summarize content YOURSELF.
+- **Generate images?** → API needed (Gemini, DALL-E).
+- **Fetch a webpage?** → Use tools (curl, web_fetch). But analyze content YOURSELF.
+- **Create PDF?** → Use tools (Python script). But write the text YOURSELF.
+
+### Decision rule:
+**NEVER** call an external LLM API (Groq, Gemini, OpenAI) to process text — YOU are the LLM!
+Always ask yourself first: "Can I solve this with my own intelligence?" If yes → do it directly.`;
 }
 
 /**
@@ -97,19 +117,22 @@ Du bist ein hochleistungsfähiges KI-Sprachmodell (${model}).
  */
 export function buildSystemPrompt(isSDK: boolean, language: "de" | "en" = "de", chatId?: number | string): string {
   const langInstruction = language === "en"
-    ? "Respond in English unless the user writes in another language."
-    : "Antworte auf Deutsch, es sei denn der User schreibt auf Englisch.";
+    ? "Respond in English. If the user writes in another language, mirror their language naturally."
+    : "Antworte auf Deutsch. Wenn der User in einer anderen Sprache schreibt, spiegle seine Sprache natürlich.";
 
   // Current date/time context
   const now = new Date();
-  const dateStr = now.toLocaleDateString("de-DE", { weekday: "long", year: "numeric", month: "long", day: "numeric" });
-  const timeStr = now.toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" });
-  const timeContext = `Aktuelles Datum: ${dateStr}, ${timeStr} Uhr (Europe/Berlin).`;
+  const locale = language === "de" ? "de-DE" : "en-US";
+  const dateStr = now.toLocaleDateString(locale, { weekday: "long", year: "numeric", month: "long", day: "numeric" });
+  const timeStr = now.toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit" });
+  const timeContext = language === "de"
+    ? `Aktuelles Datum: ${dateStr}, ${timeStr} Uhr (Europe/Berlin).`
+    : `Current date: ${dateStr}, ${timeStr} (Europe/Berlin).`;
 
-  const parts = [BASE_PROMPT, langInstruction, timeContext];
+  const parts = [getBasePrompt(language), langInstruction, timeContext];
 
-  // Core self-awareness — always injected, adapted to active provider
-  parts.push(buildSelfAwareness(isSDK, getActiveProviderLabel()));
+  // Core self-awareness — always injected, adapted to active provider and language
+  parts.push(buildSelfAwareness(isSDK, getActiveProviderLabel(), language));
 
   if (soulContent) {
     parts.push(soulContent);

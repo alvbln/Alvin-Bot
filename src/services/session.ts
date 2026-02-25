@@ -62,7 +62,7 @@ export function getSession(userId: number): UserSession {
       messageCount: 0,
       toolUseCount: 0,
       history: [],
-      language: "de",
+      language: "en",
       messageQueue: [],
     };
     sessions.set(userId, session);

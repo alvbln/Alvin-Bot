@@ -44,6 +44,10 @@ export interface UserProfile {
   isOwner: boolean;
   /** Custom notes about this user (for AI context) */
   notes: string;
+  /** Language usage statistics — tracks how often the user writes in each language */
+  langStats?: { de: number; en: number; other: number };
+  /** Whether the language was explicitly set by the user (overrides auto-detection) */
+  langExplicit?: boolean;
   /** Last platform the user communicated from */
   lastPlatform?: "telegram" | "whatsapp" | "discord" | "signal" | "webui";
   /** Last message text (truncated) */
@@ -97,9 +101,11 @@ export function getOrCreateProfile(userId: number, name?: string, username?: str
       firstSeen: Date.now(),
       lastActive: Date.now(),
       totalMessages: 0,
-      language: "de",
+      language: "en",
       isOwner,
       notes: "",
+      langStats: { de: 0, en: 0, other: 0 },
+      langExplicit: false,
     };
 
     // Create user memory directory for non-owner users

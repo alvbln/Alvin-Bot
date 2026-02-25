@@ -9,6 +9,7 @@ import type { QueryOptions } from "../providers/types.js";
 import { buildSystemPrompt, buildSmartSystemPrompt } from "../services/personality.js";
 import { isForwardingAllowed } from "../services/access.js";
 import { touchProfile } from "../services/users.js";
+import { trackAndAdapt } from "../services/language-detect.js";
 
 /** React to a message with an emoji. Silently fails if reactions aren't supported. */
 async function react(ctx: Context, emoji: string): Promise<void> {
@@ -52,6 +53,13 @@ export async function handleMessage(ctx: Context): Promise<void> {
   // Track user profile
   touchProfile(userId, ctx.from?.first_name, ctx.from?.username, "telegram", text);
 
+  // Sync session language from persistent profile (on first message)
+  if (session.messageCount === 0) {
+    const { loadProfile } = await import("../services/users.js");
+    const profile = loadProfile(userId);
+    if (profile?.language) session.language = profile.language;
+  }
+
   if (session.isProcessing) {
     // Queue the message instead of rejecting it (max 3)
     if (session.messageQueue.length < 3) {
@@ -84,6 +92,13 @@ export async function handleMessage(ctx: Context): Promise<void> {
     await react(ctx, "🤔");
     await ctx.api.sendChatAction(ctx.chat!.id, "typing");
     session.messageCount++;
+
+    // Auto-detect and adapt language from user's message
+    const userId = ctx.from!.id;
+    const adaptedLang = trackAndAdapt(userId, text, session.language);
+    if (adaptedLang !== session.language) {
+      session.language = adaptedLang;
+    }
 
     const registry = getRegistry();
     const activeProvider = registry.getActive();

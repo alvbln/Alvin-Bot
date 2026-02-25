@@ -12,6 +12,7 @@ import { getSession, addToHistory, trackProviderUsage } from "../services/sessio
 import { getRegistry } from "../engine.js";
 import { buildSystemPrompt, buildSmartSystemPrompt } from "../services/personality.js";
 import { touchProfile } from "../services/users.js";
+import { trackAndAdapt } from "../services/language-detect.js";
 import { transcribeAudio } from "../services/voice.js";
 import { config } from "../config.js";
 import type { QueryOptions } from "../providers/types.js";
@@ -95,6 +96,11 @@ export async function handlePlatformMessage(
 
   try {
     session.messageCount++;
+
+    // Auto-detect and adapt language
+    const adaptedLang = trackAndAdapt(Number(msg.userId) || 0, fullText, session.language);
+    if (adaptedLang !== session.language) session.language = adaptedLang;
+
     const registry = getRegistry();
     const activeProvider = registry.getActive();
     const isSDK = activeProvider.config.type === "claude-sdk";

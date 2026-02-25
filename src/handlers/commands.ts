@@ -689,7 +689,9 @@ export function registerCommands(bot: Bot): void {
     if (!arg) {
       const keyboard = new InlineKeyboard()
         .text(session.language === "de" ? "✅ Deutsch" : "Deutsch", "lang:de")
-        .text(session.language === "en" ? "✅ English" : "English", "lang:en");
+        .text(session.language === "en" ? "✅ English" : "English", "lang:en")
+        .row()
+        .text("🔄 Auto-detect", "lang:auto");
 
       await ctx.reply(`🌐 *Sprache / Language:* ${session.language === "de" ? "Deutsch" : "English"}`, {
         parse_mode: "Markdown",
@@ -698,19 +700,37 @@ export function registerCommands(bot: Bot): void {
       return;
     }
 
-    if (arg === "de" || arg === "en") {
+    if (arg === "auto") {
+      const { resetToAutoLanguage } = await import("../services/language-detect.js");
+      resetToAutoLanguage(userId);
+      await ctx.reply("🔄 Auto-detection enabled. I'll adapt to the language you write in.");
+    } else if (arg === "de" || arg === "en") {
       session.language = arg;
-      await ctx.reply(arg === "de" ? "✅ Sprache: Deutsch" : "✅ Language: English");
+      const { setExplicitLanguage } = await import("../services/language-detect.js");
+      setExplicitLanguage(userId, arg);
+      await ctx.reply(arg === "de" ? "✅ Sprache: Deutsch (fixiert)" : "✅ Language: English (fixed)");
     } else {
-      await ctx.reply("Nutze: `/lang de` oder `/lang en`", { parse_mode: "Markdown" });
+      await ctx.reply("Use: `/lang de`, `/lang en`, or `/lang auto`", { parse_mode: "Markdown" });
     }
   });
 
-  bot.callbackQuery(/^lang:(de|en)$/, async (ctx) => {
-    const lang = ctx.match![1] as "de" | "en";
+  bot.callbackQuery(/^lang:(de|en|auto)$/, async (ctx) => {
+    const choice = ctx.match![1];
     const userId = ctx.from!.id;
     const session = getSession(userId);
+
+    if (choice === "auto") {
+      const { resetToAutoLanguage } = await import("../services/language-detect.js");
+      resetToAutoLanguage(userId);
+      await ctx.answerCallbackQuery({ text: "🔄 Auto-detect enabled" });
+      await ctx.editMessageText("🌐 *Language:* Auto-detect 🔄", { parse_mode: "Markdown" });
+      return;
+    }
+
+    const lang = choice as "de" | "en";
     session.language = lang;
+    const { setExplicitLanguage } = await import("../services/language-detect.js");
+    setExplicitLanguage(userId, lang);
 
     const keyboard = new InlineKeyboard()
       .text(lang === "de" ? "✅ Deutsch" : "Deutsch", "lang:de")
