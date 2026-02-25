@@ -1,9 +1,9 @@
 {
   "name": "alvin-bot",
   "version": "3.0.0",
-  "description": "Alvin Bot — Your personal AI agent on Telegram, WhatsApp, Discord, Signal, and Web.",
+  "description": "Alvin Bot \u2014 Your personal AI agent on Telegram, WhatsApp, Discord, Signal, and Web.",
   "type": "module",
-  "main": "electron/dist/main.cjs",
+  "main": "dist/index.js",
   "bin": {
     "alvin-bot": "./bin/cli.js"
   },
@@ -128,7 +128,8 @@
       "!**/*.log",
       "!**/*.bak"
     ],
-    "afterPack": "./electron/afterPack.cjs"
+    "afterPack": "./electron/afterPack.cjs",
+    "main": "electron/dist/main.cjs"
   },
   "keywords": [
     "telegram",
@@ -142,7 +143,15 @@
     "gemini",
     "nvidia",
     "self-hosted",
-    "autonomous"
+    "autonomous",
+    "whatsapp",
+    "discord",
+    "signal",
+    "openai",
+    "groq",
+    "chatbot",
+    "assistant",
+    "electron"
   ],
   "author": "Ali Levin",
   "license": "MIT",
@@ -166,5 +175,12 @@
     "electron-builder": "^26.8.1",
     "tsx": "^4.19.0",
     "typescript": "^5.9.3"
+  },
+  "homepage": "https://github.com/alvbln/alvin-bot",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "bugs": {
+    "url": "https://github.com/alvbln/alvin-bot/issues"
   }
 }

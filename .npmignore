@@ -1,14 +1,43 @@
 # Source (dist/ is included)
 src/
 tsconfig.json
+electron/
+electron/**/*
+build/**
+release/**
+homebrew/
+scoop/
 
-# Dev files
+# Dev/build files
 .env
+.env.*
+!.env.example
 .git*
+.electronignore
+CLAUDE.md
+telegram-agent-setup-prompt.md
+
+# Personal/runtime data
 docs/memory/*.md
+!docs/memory/.gitkeep
 docs/MEMORY.md
+docs/users/
+docs/whatsapp-groups.json
+docs/cron-jobs.json
+data/
+backups/
+.wwebjs_cache/
+
+# Docker (separate install method)
 Dockerfile
 docker-compose.yml
+docker-compose.example.yml
 .dockerignore
 ecosystem.config.cjs
-telegram-agent-setup-prompt.md
+
+# Dev tooling
+.prod-node-modules/
+.electron-prod/
+scripts/
+*.log
+*.bak
