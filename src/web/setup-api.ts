@@ -15,6 +15,7 @@ import http from "http";
 import { getRegistry } from "../engine.js";
 import { PROVIDER_PRESETS, type ProviderConfig } from "../providers/types.js";
 import { listJobs, createJob, deleteJob, toggleJob, runJobNow, formatNextRun, type CronJob, type JobType } from "../services/cron.js";
+import { storePassword, revokePassword, getSudoStatus, verifyPassword, sudoExec, requestAdminViaDialog, openSystemSettings } from "../services/sudo.js";
 
 const BOT_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const ENV_FILE = resolve(BOT_ROOT, ".env");
@@ -493,6 +494,102 @@ export async function handleSetupAPI(
     } catch (err: unknown) {
       const error = err instanceof Error ? err.message : String(err);
       res.end(JSON.stringify({ ok: false, error }));
+    }
+    return true;
+  }
+
+  // ── Sudo / Elevated Access ─────────────────────────
+
+  // GET /api/sudo/status — check sudo configuration
+  if (urlPath === "/api/sudo/status") {
+    const status = await getSudoStatus();
+    res.end(JSON.stringify(status));
+    return true;
+  }
+
+  // POST /api/sudo/setup — store sudo password
+  if (urlPath === "/api/sudo/setup" && req.method === "POST") {
+    try {
+      const { password } = JSON.parse(body);
+      if (!password) {
+        res.statusCode = 400;
+        res.end(JSON.stringify({ error: "Passwort erforderlich" }));
+        return true;
+      }
+      const result = storePassword(password);
+      if (result.ok) {
+        // Verify it works
+        const verify = await verifyPassword();
+        if (verify.ok) {
+          res.end(JSON.stringify({ ok: true, method: result.method, verified: true }));
+        } else {
+          revokePassword(); // Clean up if wrong password
+          res.end(JSON.stringify({ ok: false, error: "Passwort gespeichert aber Verifikation fehlgeschlagen: " + verify.error }));
+        }
+      } else {
+        res.end(JSON.stringify({ ok: false, error: result.error }));
+      }
+    } catch {
+      res.statusCode = 400;
+      res.end(JSON.stringify({ error: "Invalid request" }));
+    }
+    return true;
+  }
+
+  // POST /api/sudo/revoke — delete stored password
+  if (urlPath === "/api/sudo/revoke" && req.method === "POST") {
+    const ok = revokePassword();
+    res.end(JSON.stringify({ ok }));
+    return true;
+  }
+
+  // POST /api/sudo/verify — test if stored password works
+  if (urlPath === "/api/sudo/verify" && req.method === "POST") {
+    const result = await verifyPassword();
+    res.end(JSON.stringify(result));
+    return true;
+  }
+
+  // POST /api/sudo/exec — execute a command with sudo
+  if (urlPath === "/api/sudo/exec" && req.method === "POST") {
+    try {
+      const { command } = JSON.parse(body);
+      if (!command) {
+        res.statusCode = 400;
+        res.end(JSON.stringify({ error: "Kein Command angegeben" }));
+        return true;
+      }
+      const result = await sudoExec(command);
+      res.end(JSON.stringify(result));
+    } catch {
+      res.statusCode = 400;
+      res.end(JSON.stringify({ error: "Invalid request" }));
+    }
+    return true;
+  }
+
+  // POST /api/sudo/admin-dialog — show macOS admin dialog
+  if (urlPath === "/api/sudo/admin-dialog" && req.method === "POST") {
+    try {
+      const { reason } = JSON.parse(body);
+      const result = await requestAdminViaDialog(reason || "Mr. Levin benötigt Administrator-Rechte");
+      res.end(JSON.stringify(result));
+    } catch {
+      res.statusCode = 400;
+      res.end(JSON.stringify({ error: "Invalid request" }));
+    }
+    return true;
+  }
+
+  // POST /api/sudo/open-settings — open macOS system settings
+  if (urlPath === "/api/sudo/open-settings" && req.method === "POST") {
+    try {
+      const { pane } = JSON.parse(body);
+      const ok = openSystemSettings(pane || "security");
+      res.end(JSON.stringify({ ok }));
+    } catch {
+      res.statusCode = 400;
+      res.end(JSON.stringify({ error: "Invalid request" }));
     }
     return true;
   }

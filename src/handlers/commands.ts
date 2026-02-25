@@ -20,6 +20,7 @@ import { getMCPStatus, getMCPTools, callMCPTool } from "../services/mcp.js";
 import { listCustomTools, executeCustomTool, hasCustomTools } from "../services/custom-tools.js";
 import { screenshotUrl, extractText, generatePdf, hasPlaywright } from "../services/browser.js";
 import { listJobs, createJob, deleteJob, toggleJob, runJobNow, formatNextRun, type JobType } from "../services/cron.js";
+import { storePassword, revokePassword, getSudoStatus, verifyPassword, sudoExec } from "../services/sudo.js";
 import { config } from "../config.js";
 
 /** Bot start time for uptime tracking */
@@ -1240,6 +1241,7 @@ export function registerCommands(bot: Bot): void {
       const keyboard = new InlineKeyboard()
         .text("🔑 API Keys verwalten", "setup:keys").row()
         .text("📱 Plattformen", "setup:platforms").row()
+        .text("🔐 Sudo / Admin-Rechte", "setup:sudo").row()
         .text("🔧 Web Dashboard öffnen", "setup:web").row();
 
       await ctx.reply(
@@ -1250,6 +1252,76 @@ export function registerCommands(bot: Bot): void {
         `Was möchtest du einrichten?`,
         { parse_mode: "Markdown", reply_markup: keyboard }
       );
+      return;
+    }
+
+    // /setup sudo [password] — configure sudo access
+    if (arg.startsWith("sudo")) {
+      const pw = arg.slice(4).trim();
+
+      if (!pw) {
+        // Show status
+        const status = await getSudoStatus();
+        const statusIcon = status.configured ? (status.verified ? "✅" : "⚠️") : "❌";
+
+        const keyboard = new InlineKeyboard();
+        if (status.configured) {
+          keyboard.text("🧪 Verifizieren", "sudo:verify").row();
+          keyboard.text("🔴 Zugriff widerrufen", "sudo:revoke").row();
+        }
+
+        await ctx.reply(
+          `🔐 *Sudo / Admin-Rechte*\n\n` +
+          `*Status:* ${statusIcon} ${status.configured ? (status.verified ? "Konfiguriert & verifiziert" : "Konfiguriert, nicht verifiziert") : "Nicht eingerichtet"}\n` +
+          `*Speicher:* ${status.storageMethod}\n` +
+          `*System:* ${status.platform} (${status.user})\n` +
+          (status.permissions.accessibility !== null ? `*Accessibility:* ${status.permissions.accessibility ? "✅" : "❌"}\n` : "") +
+          (status.permissions.fullDiskAccess !== null ? `*Full Disk Access:* ${status.permissions.fullDiskAccess ? "✅" : "❌"}\n` : "") +
+          `\n*Einrichten:*\n\`/setup sudo <dein-system-passwort>\`\n\n` +
+          `_Das Passwort wird sicher im ${status.storageMethod} gespeichert. ` +
+          `Damit kann Mr. Levin Befehle mit Admin-Rechten ausführen (Software installieren, Systemeinstellungen ändern, etc.)._\n\n` +
+          `⚠️ _Lösche diese Nachricht nach dem Einrichten! Das Passwort ist im Chatverlauf sichtbar._`,
+          { parse_mode: "Markdown", reply_markup: keyboard }
+        );
+        return;
+      }
+
+      // Store the password
+      await ctx.api.sendChatAction(ctx.chat!.id, "typing");
+      const result = storePassword(pw);
+
+      if (!result.ok) {
+        await ctx.reply(`❌ Fehler beim Speichern: ${result.error}`);
+        return;
+      }
+
+      // Verify
+      const verify = await verifyPassword();
+      if (verify.ok) {
+        await ctx.reply(
+          `✅ *Sudo-Zugriff eingerichtet!*\n\n` +
+          `Passwort gespeichert in: ${result.method}\n` +
+          `Verifizierung: ✅ erfolgreich\n\n` +
+          `Mr. Levin kann jetzt Admin-Befehle ausführen.\n\n` +
+          `⚠️ _Bitte lösche die Nachricht mit dem Passwort aus dem Chat!_`,
+          { parse_mode: "Markdown" }
+        );
+      } else {
+        revokePassword(); // Wrong password — clean up
+        await ctx.reply(
+          `❌ *Passwort falsch!*\n\n` +
+          `Das eingegebene Passwort funktioniert nicht für sudo.\n` +
+          `Bitte versuche es erneut: \`/setup sudo <richtiges-passwort>\``,
+          { parse_mode: "Markdown" }
+        );
+      }
+
+      // Try to delete the user's message containing the password
+      try {
+        await ctx.api.deleteMessage(ctx.chat!.id, ctx.message!.message_id);
+      } catch {
+        // Can't delete in private chats sometimes — that's ok
+      }
       return;
     }
 
@@ -1299,6 +1371,18 @@ export function registerCommands(bot: Bot): void {
     }
   });
 
+  bot.callbackQuery(/^sudo:(.+)$/, async (ctx) => {
+    const action = ctx.match![1];
+    if (action === "verify") {
+      const result = await verifyPassword();
+      await ctx.answerCallbackQuery(result.ok ? "✅ Sudo funktioniert!" : `❌ ${result.error}`);
+    } else if (action === "revoke") {
+      revokePassword();
+      await ctx.editMessageText("🔴 Sudo-Zugriff widerrufen. Passwort gelöscht.");
+      await ctx.answerCallbackQuery("Zugriff widerrufen");
+    }
+  });
+
   bot.callbackQuery(/^setup:(.+)$/, async (ctx) => {
     const action = ctx.match![1];
 
@@ -1338,6 +1422,21 @@ export function registerCommands(bot: Bot): void {
           `📱 *Plattformen*\n\n${lines.join("\n")}\n\n` +
           `_Plattformen im Web UI einrichten: Models → Platforms_\n` +
           `_Dort kannst du Token eingeben und Dependencies installieren._`,
+          { parse_mode: "Markdown" }
+        );
+        break;
+      }
+
+      case "sudo": {
+        const status = await getSudoStatus();
+        const statusIcon = status.configured ? (status.verified ? "✅" : "⚠️") : "❌";
+        await ctx.editMessageText(
+          `🔐 *Sudo / Admin-Rechte*\n\n` +
+          `*Status:* ${statusIcon} ${status.configured ? (status.verified ? "Aktiv & verifiziert" : "Konfiguriert") : "Nicht eingerichtet"}\n` +
+          `*Speicher:* ${status.storageMethod}\n\n` +
+          `Einrichten: \`/setup sudo <system-passwort>\`\n` +
+          `Widerrufen: \`/setup sudo\` → Button "Widerrufen"\n\n` +
+          `_Das Passwort wird sicher im ${status.storageMethod} gespeichert._`,
           { parse_mode: "Markdown" }
         );
         break;

@@ -730,16 +730,57 @@ async function saveSoul() {
 
 // ── Settings ────────────────────────────────────────────
 async function loadSettings() {
-  const [envRes, doctorRes, backupRes] = await Promise.all([
+  const [envRes, doctorRes, backupRes, sudoRes] = await Promise.all([
     fetch(API + '/api/env'),
     fetch(API + '/api/doctor'),
     fetch(API + '/api/backups'),
+    fetch(API + '/api/sudo/status'),
   ]);
   const envData = await envRes.json();
   const doctorData = await doctorRes.json();
   const backupData = await backupRes.json();
+  const sudoData = await sudoRes.json();
 
   let html = '';
+
+  // ── Sudo / Admin Rights ──
+  const sudoIcon = sudoData.configured ? (sudoData.verified ? '🟢' : '🟡') : '🔴';
+  const sudoStatusText = sudoData.configured
+    ? (sudoData.verified ? 'Aktiv & verifiziert' : 'Konfiguriert, Verifikation nötig')
+    : 'Nicht eingerichtet';
+
+  html += `<div class="card" style="margin-bottom:16px">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+      <span style="font-size:1.5em">🔐</span>
+      <div style="flex:1">
+        <h3 style="font-size:0.95em;text-transform:none;letter-spacing:0">Sudo / Admin-Rechte</h3>
+        <div class="sub">Erlaube Mr. Levin, Befehle mit Administratorrechten auszuführen</div>
+      </div>
+      <span style="font-size:1.2em">${sudoIcon}</span>
+    </div>
+    <div style="font-size:0.85em;margin-bottom:12px">
+      <div><strong>Status:</strong> ${sudoStatusText}</div>
+      <div><strong>Speicher:</strong> ${sudoData.storageMethod}</div>
+      <div><strong>System:</strong> ${sudoData.platform} (${sudoData.user})</div>
+      ${sudoData.permissions.accessibility !== null ? `<div><strong>Accessibility:</strong> ${sudoData.permissions.accessibility ? '✅' : '❌ <button class="btn btn-sm btn-outline" onclick="openSysSettings(\'accessibility\')" style="font-size:0.8em;padding:2px 6px">Öffnen</button>'}</div>` : ''}
+      ${sudoData.permissions.fullDiskAccess !== null ? `<div><strong>Full Disk Access:</strong> ${sudoData.permissions.fullDiskAccess ? '✅' : '❌ <button class="btn btn-sm btn-outline" onclick="openSysSettings(\'full-disk-access\')" style="font-size:0.8em;padding:2px 6px">Öffnen</button>'}</div>` : ''}
+    </div>`;
+
+  if (!sudoData.configured) {
+    html += `<div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
+      <input type="password" id="sudo-password" placeholder="System-Passwort eingeben..." style="flex:1;background:var(--bg3);border:1px solid var(--bg3);border-radius:6px;padding:8px 12px;color:var(--fg);font:inherit;font-size:0.85em;outline:none">
+      <button class="btn btn-sm" onclick="setupSudo()">🔐 Einrichten</button>
+    </div>
+    <div class="sub">Das Passwort wird sicher im ${sudoData.storageMethod} gespeichert — nie im Klartext.</div>`;
+  } else {
+    html += `<div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn btn-sm btn-outline" onclick="verifySudo()">🧪 Verifizieren</button>
+      <button class="btn btn-sm btn-outline" onclick="testSudoCommand()">⚡ Test-Command</button>
+      ${sudoData.platform === 'darwin' ? '<button class="btn btn-sm btn-outline" onclick="showAdminDialog()">🖥️ Admin-Dialog</button>' : ''}
+      <button class="btn btn-sm btn-outline" style="color:var(--red)" onclick="revokeSudo()">🔴 Widerrufen</button>
+    </div>`;
+  }
+  html += `<div id="sudo-result" style="font-size:0.78em;margin-top:6px"></div></div>`;
 
   // ── Doctor / Health ──
   const healthIcon = doctorData.healthy ? '🟢' : (doctorData.errorCount > 0 ? '🔴' : '🟡');
@@ -903,6 +944,78 @@ async function deleteBackup(id) {
   });
   toast('Gelöscht');
   loadSettings();
+}
+
+// ── Sudo ────────────────────────────────────────────────
+async function setupSudo() {
+  const pw = document.getElementById('sudo-password').value;
+  if (!pw) { toast('Bitte Passwort eingeben', 'error'); return; }
+  const resultDiv = document.getElementById('sudo-result');
+  resultDiv.innerHTML = '<span style="color:var(--fg2)">⏳ Einrichten & verifizieren...</span>';
+  const res = await fetch(API + '/api/sudo/setup', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ password: pw }),
+  });
+  const data = await res.json();
+  if (data.ok && data.verified) {
+    toast('✅ Sudo eingerichtet & verifiziert!');
+    loadSettings();
+  } else {
+    resultDiv.innerHTML = `<span style="color:var(--red)">❌ ${data.error || 'Fehler'}</span>`;
+    toast(data.error || 'Fehler', 'error');
+  }
+}
+
+async function verifySudo() {
+  const resultDiv = document.getElementById('sudo-result');
+  resultDiv.innerHTML = '<span style="color:var(--fg2)">⏳ Verifiziere...</span>';
+  const res = await fetch(API + '/api/sudo/verify', { method: 'POST' });
+  const data = await res.json();
+  resultDiv.innerHTML = data.ok
+    ? '<span style="color:var(--green)">✅ Sudo funktioniert!</span>'
+    : `<span style="color:var(--red)">❌ ${data.error}</span>`;
+}
+
+async function testSudoCommand() {
+  const cmd = prompt('Sudo-Befehl zum Testen:', 'whoami');
+  if (!cmd) return;
+  const resultDiv = document.getElementById('sudo-result');
+  resultDiv.innerHTML = '<span style="color:var(--fg2)">⏳ Ausführen...</span>';
+  const res = await fetch(API + '/api/sudo/exec', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ command: cmd }),
+  });
+  const data = await res.json();
+  resultDiv.innerHTML = data.ok
+    ? `<span style="color:var(--green)">✅ Output:</span><pre style="margin:4px 0;padding:6px;background:var(--bg3);border-radius:4px;font-size:0.9em;overflow-x:auto">${escapeHtml(data.output.slice(0, 500))}</pre>`
+    : `<span style="color:var(--red)">❌ ${data.error}</span>`;
+}
+
+async function revokeSudo() {
+  if (!confirm('Sudo-Zugriff wirklich widerrufen? Gespeichertes Passwort wird gelöscht.')) return;
+  await fetch(API + '/api/sudo/revoke', { method: 'POST' });
+  toast('🔴 Sudo-Zugriff widerrufen');
+  loadSettings();
+}
+
+async function showAdminDialog() {
+  const reason = prompt('Grund für Admin-Rechte:', 'Mr. Levin benötigt Administrator-Rechte');
+  if (!reason) return;
+  toast('🖥️ macOS Admin-Dialog wird angezeigt...');
+  const res = await fetch(API + '/api/sudo/admin-dialog', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ reason }),
+  });
+  const data = await res.json();
+  toast(data.ok ? '✅ Bestätigt!' : '❌ Abgelehnt oder Fehler', data.ok ? 'success' : 'error');
+}
+
+async function openSysSettings(pane) {
+  await fetch(API + '/api/sudo/open-settings', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ pane }),
+  });
+  toast('Systemeinstellungen geöffnet');
 }
 
 async function restartBot() {
