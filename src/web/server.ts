@@ -107,6 +107,108 @@ async function handleAPI(req: http.IncomingMessage, res: http.ServerResponse, ur
   const doctorHandled = await handleDoctorAPI(req, res, urlPath, body);
   if (doctorHandled) return;
 
+  // GET /api/setup-check — is the bot fully configured?
+  if (urlPath === "/api/setup-check") {
+    const envPath = resolve(dirname(fileURLToPath(import.meta.url)), "../../.env");
+    let env: Record<string, string> = {};
+    try {
+      const lines = fs.readFileSync(envPath, "utf-8").split("\n");
+      for (const line of lines) {
+        if (line.startsWith("#") || !line.includes("=")) continue;
+        const idx = line.indexOf("=");
+        env[line.slice(0, idx).trim()] = line.slice(idx + 1).trim();
+      }
+    } catch {}
+
+    const hasBotToken = !!(env.BOT_TOKEN || process.env.BOT_TOKEN);
+    const hasAllowedUsers = !!(env.ALLOWED_USERS || process.env.ALLOWED_USERS);
+    const hasPrimaryProvider = !!(env.PRIMARY_PROVIDER || process.env.PRIMARY_PROVIDER);
+
+    // Check which providers have keys
+    const providerKeys: Record<string, boolean> = {
+      groq: !!(env.GROQ_API_KEY || process.env.GROQ_API_KEY),
+      openai: !!(env.OPENAI_API_KEY || process.env.OPENAI_API_KEY),
+      google: !!(env.GOOGLE_API_KEY || process.env.GOOGLE_API_KEY),
+      nvidia: !!(env.NVIDIA_API_KEY || process.env.NVIDIA_API_KEY),
+      anthropic: !!(env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_API_KEY),
+      openrouter: !!(env.OPENROUTER_API_KEY || process.env.OPENROUTER_API_KEY),
+    };
+    const hasAnyProvider = hasPrimaryProvider || Object.values(providerKeys).some(Boolean);
+
+    // Check Claude CLI
+    let claudeCliInstalled = false;
+    try {
+      const { execSync } = await import("child_process");
+      execSync("claude --version", { timeout: 5000, stdio: "pipe" });
+      claudeCliInstalled = true;
+    } catch {}
+
+    const isComplete = hasBotToken && hasAllowedUsers && hasAnyProvider;
+    res.end(JSON.stringify({
+      isComplete,
+      steps: {
+        telegram: { done: hasBotToken && hasAllowedUsers, botToken: hasBotToken, allowedUsers: hasAllowedUsers },
+        provider: { done: hasAnyProvider, primary: env.PRIMARY_PROVIDER || process.env.PRIMARY_PROVIDER || "", keys: providerKeys, claudeCli: claudeCliInstalled },
+      },
+    }));
+    return;
+  }
+
+  // POST /api/setup-wizard — save all setup data at once (first-run wizard)
+  if (urlPath === "/api/setup-wizard" && req.method === "POST") {
+    try {
+      const data = JSON.parse(body);
+      const envPath = resolve(dirname(fileURLToPath(import.meta.url)), "../../.env");
+      let content = fs.existsSync(envPath) ? fs.readFileSync(envPath, "utf-8") : "";
+
+      const setEnv = (key: string, value: string) => {
+        const regex = new RegExp(`^${key}=.*$`, "m");
+        if (regex.test(content)) { content = content.replace(regex, `${key}=${value}`); }
+        else { content = content.trimEnd() + `\n${key}=${value}\n`; }
+        process.env[key] = value;
+      };
+
+      // Step 1: Telegram
+      if (data.botToken) setEnv("BOT_TOKEN", data.botToken);
+      if (data.allowedUsers) setEnv("ALLOWED_USERS", data.allowedUsers);
+
+      // Step 2: Provider
+      if (data.primaryProvider) setEnv("PRIMARY_PROVIDER", data.primaryProvider);
+      if (data.apiKey && data.apiKeyEnv) setEnv(data.apiKeyEnv, data.apiKey);
+
+      // Step 3: Optional
+      if (data.webPassword) setEnv("WEB_PASSWORD", data.webPassword);
+
+      fs.writeFileSync(envPath, content);
+      res.end(JSON.stringify({ ok: true, note: "Setup complete! Restart needed." }));
+    } catch (e: unknown) {
+      res.statusCode = 400;
+      res.end(JSON.stringify({ error: e instanceof Error ? e.message : String(e) }));
+    }
+    return;
+  }
+
+  // POST /api/validate-bot-token — validate a Telegram bot token
+  if (urlPath === "/api/validate-bot-token" && req.method === "POST") {
+    try {
+      const { token } = JSON.parse(body);
+      if (!token || !token.includes(":")) {
+        res.end(JSON.stringify({ ok: false, error: "Invalid token format" }));
+        return;
+      }
+      const tgRes = await fetch(`https://api.telegram.org/bot${token}/getMe`);
+      const tgData = await tgRes.json() as any;
+      if (tgData.ok) {
+        res.end(JSON.stringify({ ok: true, bot: { username: tgData.result.username, firstName: tgData.result.first_name, id: tgData.result.id } }));
+      } else {
+        res.end(JSON.stringify({ ok: false, error: tgData.description || "Invalid token" }));
+      }
+    } catch (e: unknown) {
+      res.end(JSON.stringify({ ok: false, error: e instanceof Error ? e.message : String(e) }));
+    }
+    return;
+  }
+
   // GET /api/status
   if (urlPath === "/api/status") {
     const registry = getRegistry();

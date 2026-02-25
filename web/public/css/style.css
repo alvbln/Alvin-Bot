@@ -461,6 +461,87 @@ body {
   padding: 20px; text-align: center; color: var(--fg3); font-size: 0.88em;
 }
 
+/* ── Setup Wizard ── */
+.wizard-overlay {
+  position: fixed; inset: 0; background: var(--bg);
+  z-index: 99999; display: flex; align-items: center; justify-content: center;
+  padding: 20px;
+}
+.wizard {
+  width: 620px; max-width: 100%; background: var(--bg2);
+  border: 1px solid var(--glass-border); border-radius: 16px;
+  box-shadow: var(--shadow-lg); overflow: hidden;
+  backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+}
+.wizard-header {
+  padding: 32px 32px 0; text-align: center;
+}
+.wizard-header h1 {
+  font-size: 1.5em; font-weight: 700; margin-bottom: 8px;
+  display: flex; align-items: center; justify-content: center; gap: 10px;
+}
+.wizard-header .wizard-subtitle { color: var(--fg2); font-size: 0.9em; }
+.wizard-header .wizard-steps {
+  display: flex; gap: 8px; justify-content: center; margin-top: 20px;
+}
+.wizard-step-dot {
+  width: 10px; height: 10px; border-radius: 50%; background: var(--bg4);
+  transition: all 0.3s ease;
+}
+.wizard-step-dot.active { background: var(--accent); box-shadow: 0 0 8px var(--accent); width: 28px; border-radius: 5px; }
+.wizard-step-dot.done { background: var(--green); }
+
+.wizard-body { padding: 24px 32px; min-height: 280px; }
+.wizard-body h2 { font-size: 1.1em; font-weight: 600; margin-bottom: 6px; display: flex; align-items: center; gap: 8px; }
+.wizard-body .wizard-desc { color: var(--fg2); font-size: 0.88em; margin-bottom: 20px; }
+
+.wizard-body .wizard-field { margin-bottom: 16px; }
+.wizard-body .wizard-field label {
+  display: block; font-size: 0.82em; color: var(--fg2); margin-bottom: 6px;
+  font-weight: 500; text-transform: uppercase; letter-spacing: 0.03em;
+}
+.wizard-body .wizard-field input {
+  width: 100%; background: var(--bg3); border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm); padding: 12px 14px; color: var(--fg);
+  font: inherit; font-size: 0.9em; outline: none; transition: border 0.2s;
+}
+.wizard-body .wizard-field input:focus { border-color: var(--accent); }
+.wizard-body .wizard-field .wizard-hint {
+  font-size: 0.78em; color: var(--fg3); margin-top: 4px; line-height: 1.4;
+}
+.wizard-body .wizard-field .wizard-hint a { color: var(--accent2); text-decoration: none; }
+.wizard-body .wizard-field .wizard-hint a:hover { text-decoration: underline; }
+
+.wizard-body .wizard-validation {
+  padding: 10px 14px; border-radius: var(--radius-sm); margin-top: 8px;
+  font-size: 0.85em; animation: fadeIn 0.2s ease;
+}
+.wizard-body .wizard-validation.success { background: rgba(0,184,148,0.1); color: var(--green); border: 1px solid rgba(0,184,148,0.2); }
+.wizard-body .wizard-validation.error { background: rgba(225,112,85,0.1); color: var(--red); border: 1px solid rgba(225,112,85,0.2); }
+
+.wizard-provider-grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 16px;
+}
+.wizard-provider-card {
+  padding: 14px; border-radius: var(--radius-sm); border: 2px solid var(--glass-border);
+  cursor: pointer; transition: all 0.2s ease; position: relative;
+}
+.wizard-provider-card:hover { border-color: var(--accent); background: var(--bg3); }
+.wizard-provider-card.selected { border-color: var(--accent); background: var(--accent-dim); box-shadow: 0 0 12px rgba(108,92,231,0.15); }
+.wizard-provider-card .provider-name { font-weight: 600; font-size: 0.9em; margin-bottom: 2px; }
+.wizard-provider-card .provider-desc { font-size: 0.75em; color: var(--fg2); }
+.wizard-provider-card .provider-badge {
+  position: absolute; top: 8px; right: 8px; font-size: 0.6em;
+  padding: 2px 6px; border-radius: 10px; font-weight: 600;
+}
+.wizard-provider-card .provider-badge.free { background: rgba(0,184,148,0.15); color: var(--green); }
+.wizard-provider-card .provider-badge.recommended { background: var(--accent-dim); color: var(--accent2); }
+
+.wizard-footer {
+  padding: 16px 32px 24px; display: flex; gap: 10px; justify-content: flex-end;
+}
+.wizard-footer .btn { min-width: 100px; justify-content: center; }
+
 /* ── Responsive ── */
 @media (max-width: 768px) {
   .sidebar { width: 56px; }

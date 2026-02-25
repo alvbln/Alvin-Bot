@@ -2796,11 +2796,285 @@ function toggleTheme() {
 }
 if (localStorage.getItem('theme') === 'light') document.documentElement.setAttribute('data-theme', 'light');
 
+// ── Setup Wizard ────────────────────────────────────────
+let _wizardStep = 1;
+let _wizardData = { botToken: '', allowedUsers: '', primaryProvider: '', apiKey: '', apiKeyEnv: '', webPassword: '' };
+let _wizardBotInfo = null;
+
+const WIZARD_PROVIDERS = [
+  { id: 'groq', name: 'Groq', desc: 'Llama 3.3 70B — fast & free', envKey: 'GROQ_API_KEY', key: 'groq', free: true, recommended: true, signupUrl: 'https://console.groq.com/keys' },
+  { id: 'google', name: 'Google Gemini', desc: 'Gemini 2.5 Flash — free tier', envKey: 'GOOGLE_API_KEY', key: 'gemini-2.5-flash', free: true, signupUrl: 'https://aistudio.google.com/apikey' },
+  { id: 'nvidia', name: 'NVIDIA NIM', desc: 'Llama 3.3 70B — free tier', envKey: 'NVIDIA_API_KEY', key: 'nvidia-llama-3.3-70b', free: true, signupUrl: 'https://build.nvidia.com' },
+  { id: 'anthropic', name: 'Anthropic', desc: 'Claude Opus / Sonnet / Haiku', envKey: 'ANTHROPIC_API_KEY', key: 'claude-opus', signupUrl: 'https://console.anthropic.com' },
+  { id: 'openai', name: 'OpenAI', desc: 'GPT-4o, GPT-4.1, o3', envKey: 'OPENAI_API_KEY', key: 'gpt-4o', signupUrl: 'https://platform.openai.com/api-keys' },
+  { id: 'openrouter', name: 'OpenRouter', desc: '200+ models, one API key', envKey: 'OPENROUTER_API_KEY', key: 'openrouter', signupUrl: 'https://openrouter.ai/keys' },
+  { id: 'claude-sdk', name: 'Claude Agent SDK', desc: 'Full agent + tools (CLI login)', envKey: '', key: 'claude-sdk', premium: true },
+  { id: 'ollama', name: 'Ollama (Local)', desc: 'Run models locally, no API key', envKey: '', key: 'ollama', free: true, signupUrl: 'https://ollama.com/download' },
+];
+
+async function checkSetupNeeded() {
+  try {
+    const res = await fetch(API + '/api/setup-check');
+    const data = await res.json();
+    if (!data.isComplete) { showWizard(data); return true; }
+  } catch {}
+  return false;
+}
+
+function showWizard(setupData) {
+  document.getElementById('wizard-overlay').style.display = 'flex';
+  // Pre-fill from existing config
+  if (setupData?.steps?.telegram?.botToken) _wizardData.botToken = '(already set)';
+  if (setupData?.steps?.telegram?.allowedUsers) _wizardData.allowedUsers = '(already set)';
+  _wizardStep = 1;
+  if (setupData?.steps?.telegram?.done) _wizardStep = 2;
+  if (setupData?.steps?.provider?.done) _wizardStep = 3;
+  renderWizardStep();
+}
+
+function renderWizardStep() {
+  const header = document.getElementById('wizard-header');
+  const body = document.getElementById('wizard-body');
+  const footer = document.getElementById('wizard-footer');
+
+  // Header with step dots
+  header.innerHTML = `
+    <h1>${icon('bot', 28)} ${t('wizard.title')}</h1>
+    <div class="wizard-subtitle">${t('wizard.subtitle')}</div>
+    <div class="wizard-steps">
+      ${[1,2,3].map(n => `<div class="wizard-step-dot ${n === _wizardStep ? 'active' : n < _wizardStep ? 'done' : ''}"></div>`).join('')}
+    </div>
+    <div style="font-size:0.75em;color:var(--fg3);margin-top:8px">${t('wizard.step', { n: _wizardStep, total: 3 })}</div>
+  `;
+
+  if (_wizardStep === 1) renderWizardStep1(body, footer);
+  else if (_wizardStep === 2) renderWizardStep2(body, footer);
+  else if (_wizardStep === 3) renderWizardStep3(body, footer);
+}
+
+function renderWizardStep1(body, footer) {
+  body.innerHTML = `
+    <h2>${icon('send', 20)} ${t('wizard.step1.title')}</h2>
+    <div class="wizard-desc">${t('wizard.step1.desc')}</div>
+    <div style="background:var(--bg3);border-radius:var(--radius-sm);padding:14px;margin-bottom:16px;font-size:0.85em;line-height:1.8">
+      ${t('wizard.step1.instruction1')} <a href="https://t.me/BotFather" target="_blank" style="color:var(--accent2);font-weight:600">@BotFather</a><br>
+      ${t('wizard.step1.instruction2')}<br>
+      ${t('wizard.step1.instruction3')}
+    </div>
+    <div class="wizard-field">
+      <label>Bot Token</label>
+      <div style="display:flex;gap:8px">
+        <input id="wiz-token" type="text" placeholder="${t('wizard.step1.token.placeholder')}" value="${_wizardData.botToken.startsWith('(') ? '' : _wizardData.botToken}" style="flex:1;font-family:monospace">
+        <button class="btn btn-sm" onclick="validateWizardToken()">${icon('check', 14)} ${t('wizard.step1.token.validate')}</button>
+      </div>
+      <div id="wiz-token-result"></div>
+    </div>
+    <div class="wizard-field">
+      <label>${t('wizard.step1.userid')}</label>
+      <input id="wiz-userid" type="text" placeholder="${t('wizard.step1.userid.placeholder')}" value="${_wizardData.allowedUsers.startsWith('(') ? '' : _wizardData.allowedUsers}" style="font-family:monospace">
+      <div class="wizard-hint">${t('wizard.step1.userid.help')} <a href="https://t.me/userinfobot" target="_blank">@userinfobot</a></div>
+    </div>
+  `;
+  footer.innerHTML = `
+    <button class="btn btn-outline" onclick="document.getElementById('wizard-overlay').style.display='none'">${t('wizard.skip')}</button>
+    <button class="btn" onclick="wizardNext()" id="wiz-next-btn">${icon('chevron-right', 16)} ${t('wizard.next')}</button>
+  `;
+}
+
+async function validateWizardToken() {
+  const token = document.getElementById('wiz-token').value.trim();
+  const el = document.getElementById('wiz-token-result');
+  if (!token) { el.innerHTML = ''; return; }
+  el.innerHTML = `<div class="wizard-validation" style="color:var(--fg2)">${icon('refresh-cw', 14)} ...</div>`;
+  try {
+    const res = await fetch(API + '/api/validate-bot-token', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token }),
+    });
+    const data = await res.json();
+    if (data.ok) {
+      _wizardBotInfo = data.bot;
+      _wizardData.botToken = token;
+      el.innerHTML = `<div class="wizard-validation success">${icon('check', 14)} ${t('wizard.step1.token.valid')} <strong>@${data.bot.username}</strong> (${data.bot.firstName})</div>`;
+    } else {
+      el.innerHTML = `<div class="wizard-validation error">${icon('x', 14)} ${t('wizard.step1.token.invalid')}: ${data.error}</div>`;
+    }
+  } catch (e) {
+    el.innerHTML = `<div class="wizard-validation error">${icon('alert-triangle', 14)} ${e.message}</div>`;
+  }
+}
+
+function renderWizardStep2(body, footer) {
+  const selected = _wizardData.primaryProvider;
+  body.innerHTML = `
+    <h2>${icon('bot', 20)} ${t('wizard.step2.title')}</h2>
+    <div class="wizard-desc">${t('wizard.step2.desc')}</div>
+    <div class="wizard-provider-grid">
+      ${WIZARD_PROVIDERS.map(p => `
+        <div class="wizard-provider-card ${selected === p.id ? 'selected' : ''}" onclick="selectWizardProvider('${p.id}')" data-provider="${p.id}">
+          <div class="provider-name">${p.name}</div>
+          <div class="provider-desc">${p.desc}</div>
+          ${p.free ? `<span class="provider-badge free">${t('wizard.step2.free')}</span>` : ''}
+          ${p.recommended ? `<span class="provider-badge recommended">${t('wizard.step2.recommended')}</span>` : ''}
+          ${p.premium ? `<span class="provider-badge" style="background:rgba(253,203,110,0.15);color:var(--yellow)">${t('wizard.step2.premium')}</span>` : ''}
+        </div>
+      `).join('')}
+    </div>
+    <div id="wiz-provider-config" style="display:${selected ? 'block' : 'none'}"></div>
+  `;
+  if (selected) renderWizardProviderConfig(selected);
+  footer.innerHTML = `
+    <button class="btn btn-outline" onclick="_wizardStep=1;renderWizardStep()">${icon('arrow-left', 14)} ${t('wizard.back')}</button>
+    <button class="btn" onclick="wizardNext()">${icon('chevron-right', 16)} ${t('wizard.next')}</button>
+  `;
+}
+
+function selectWizardProvider(id) {
+  _wizardData.primaryProvider = id;
+  document.querySelectorAll('.wizard-provider-card').forEach(c => c.classList.toggle('selected', c.dataset.provider === id));
+  const provider = WIZARD_PROVIDERS.find(p => p.id === id);
+  const cfg = document.getElementById('wiz-provider-config');
+  cfg.style.display = 'block';
+  renderWizardProviderConfig(id);
+}
+
+function renderWizardProviderConfig(id) {
+  const provider = WIZARD_PROVIDERS.find(p => p.id === id);
+  const cfg = document.getElementById('wiz-provider-config');
+  if (!provider) { cfg.innerHTML = ''; return; }
+
+  if (provider.id === 'claude-sdk') {
+    cfg.innerHTML = `<div style="background:var(--bg3);border-radius:var(--radius-sm);padding:14px;font-size:0.85em;line-height:1.8">
+      <strong>Claude Agent SDK</strong> — requires Claude Max subscription ($20/month)<br>
+      1. <code style="background:rgba(0,0,0,0.2);padding:2px 6px;border-radius:4px">npm install -g @anthropic-ai/claude-code</code><br>
+      2. <code style="background:rgba(0,0,0,0.2);padding:2px 6px;border-radius:4px">claude login</code><br>
+      No API key needed — uses CLI auth.
+    </div>`;
+    _wizardData.apiKeyEnv = '';
+    _wizardData.apiKey = '';
+    return;
+  }
+  if (provider.id === 'ollama') {
+    cfg.innerHTML = `<div style="background:var(--bg3);border-radius:var(--radius-sm);padding:14px;font-size:0.85em;line-height:1.8">
+      <strong>Ollama</strong> — runs locally on your machine<br>
+      1. Install: <a href="https://ollama.com/download" target="_blank" style="color:var(--accent2)">ollama.com/download</a><br>
+      2. <code style="background:rgba(0,0,0,0.2);padding:2px 6px;border-radius:4px">ollama pull llama3.2</code><br>
+      No API key needed.
+    </div>`;
+    _wizardData.apiKeyEnv = '';
+    _wizardData.apiKey = '';
+    return;
+  }
+
+  cfg.innerHTML = `
+    <div class="wizard-field">
+      <label>${provider.name} API Key</label>
+      <input id="wiz-apikey" type="password" placeholder="${t('wizard.step2.key.placeholder')}" value="${_wizardData.apiKey}" style="font-family:monospace">
+      <div class="wizard-hint">
+        ${provider.signupUrl ? `<a href="${provider.signupUrl}" target="_blank">${provider.signupUrl}</a>` : ''}
+        ${provider.free ? ` — ${t('wizard.step2.free')}!` : ''}
+      </div>
+    </div>
+  `;
+  _wizardData.apiKeyEnv = provider.envKey;
+}
+
+function renderWizardStep3(body, footer) {
+  body.innerHTML = `
+    <h2>${icon('check', 20)} ${t('wizard.step3.title')}</h2>
+    <div class="wizard-desc">${t('wizard.step3.desc')}</div>
+    <div class="wizard-field">
+      <label>${t('wizard.step3.password')}</label>
+      <input id="wiz-password" type="password" placeholder="${t('wizard.step3.password.placeholder')}" value="${_wizardData.webPassword}">
+      <div class="wizard-hint">${t('wizard.step3.password.help')}</div>
+    </div>
+    <div style="background:var(--bg3);border-radius:var(--radius-sm);padding:16px;margin-top:16px">
+      <h3 style="font-size:0.85em;margin-bottom:10px;display:flex;align-items:center;gap:6px">${icon('list', 16)} Summary</h3>
+      <div style="font-size:0.82em;color:var(--fg2);display:flex;flex-direction:column;gap:6px">
+        <div style="display:flex;gap:8px">${icon('send', 14)} <strong>Telegram:</strong> ${_wizardBotInfo ? `@${_wizardBotInfo.username}` : (_wizardData.botToken ? 'Token set' : 'Not configured')}</div>
+        <div style="display:flex;gap:8px">${icon('user', 14)} <strong>User ID:</strong> ${_wizardData.allowedUsers || 'Not set'}</div>
+        <div style="display:flex;gap:8px">${icon('bot', 14)} <strong>Provider:</strong> ${WIZARD_PROVIDERS.find(p=>p.id===_wizardData.primaryProvider)?.name || 'Not selected'}</div>
+      </div>
+    </div>
+  `;
+  footer.innerHTML = `
+    <button class="btn btn-outline" onclick="_wizardStep=2;renderWizardStep()">${icon('arrow-left', 14)} ${t('wizard.back')}</button>
+    <button class="btn btn-success" onclick="finishWizard()" style="min-width:160px">${icon('check', 16)} ${t('wizard.finish')}</button>
+  `;
+}
+
+function wizardNext() {
+  if (_wizardStep === 1) {
+    const token = document.getElementById('wiz-token')?.value?.trim();
+    const userId = document.getElementById('wiz-userid')?.value?.trim();
+    if (token) _wizardData.botToken = token;
+    if (userId) _wizardData.allowedUsers = userId;
+    if (!_wizardData.botToken || _wizardData.botToken.startsWith('(')) {
+      toast(t('wizard.step1.token.invalid'), 'error'); return;
+    }
+    if (!_wizardData.allowedUsers || _wizardData.allowedUsers.startsWith('(')) {
+      toast(t('wizard.step1.userid') + ' required', 'error'); return;
+    }
+  }
+  if (_wizardStep === 2) {
+    if (!_wizardData.primaryProvider) { toast('Please select a provider', 'error'); return; }
+    const provider = WIZARD_PROVIDERS.find(p => p.id === _wizardData.primaryProvider);
+    const keyInput = document.getElementById('wiz-apikey');
+    if (keyInput) _wizardData.apiKey = keyInput.value.trim();
+    if (provider?.envKey && !_wizardData.apiKey) { toast('API key required', 'error'); return; }
+  }
+  _wizardStep++;
+  renderWizardStep();
+}
+
+async function finishWizard() {
+  const pw = document.getElementById('wiz-password')?.value?.trim();
+  if (pw) _wizardData.webPassword = pw;
+
+  const provider = WIZARD_PROVIDERS.find(p => p.id === _wizardData.primaryProvider);
+  const payload = {
+    botToken: _wizardData.botToken.startsWith('(') ? undefined : _wizardData.botToken,
+    allowedUsers: _wizardData.allowedUsers.startsWith('(') ? undefined : _wizardData.allowedUsers,
+    primaryProvider: provider?.key || _wizardData.primaryProvider,
+    apiKey: _wizardData.apiKey || undefined,
+    apiKeyEnv: _wizardData.apiKeyEnv || undefined,
+    webPassword: _wizardData.webPassword || undefined,
+  };
+
+  try {
+    const res = await fetch(API + '/api/setup-wizard', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+    if (data.ok) {
+      document.getElementById('wizard-overlay').style.display = 'none';
+      toast(t('wizard.finish.success'), 'success');
+      // Show restart notice
+      const overlay = document.createElement('div');
+      overlay.style.cssText = 'position:fixed;inset:0;background:var(--bg);z-index:99999;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:16px';
+      overlay.innerHTML = `
+        <div style="font-size:1.2em;font-weight:600;display:flex;align-items:center;gap:10px">${icon('check', 24)} ${t('wizard.finish.success')}</div>
+        <div style="color:var(--fg2);font-size:0.9em">${t('wizard.finish.restart')}</div>
+        <div style="color:var(--fg3);font-size:0.82em;margin-top:8px">Or restart from the Maintenance page after refresh.</div>
+      `;
+      document.body.appendChild(overlay);
+    } else {
+      toast(data.error || 'Setup failed', 'error');
+    }
+  } catch (e) {
+    toast(e.message, 'error');
+  }
+}
+
 // ── Init ────────────────────────────────────────────────
 initUI();
 initDragDrop();
 restoreChatFromStorage();
 if (chatMessages.length > 0) scrollToBottom();
 connectWS();
-loadDashboard();
-loadModels();
+
+// Check if first-run setup is needed
+checkSetupNeeded().then(needed => {
+  if (!needed) { loadDashboard(); loadModels(); }
+});
