@@ -260,10 +260,12 @@ export class WhatsAppAdapter implements PlatformAdapter {
     if (msg.fromMe && isGroup) return;
 
     // ── Direct chats: only respond in self-chat ───────────────────────────
-    // whatsapp-web.js runs as YOUR account. If you message a friend,
-    // the bot should NOT hijack that conversation.
-    // Only respond in "Note to Self" / "Saved Messages" (self-chat).
-    if (msg.fromMe) {
+    // whatsapp-web.js runs as YOUR account (not a separate bot).
+    // CRITICAL: Never respond in private chats with other people!
+    // - fromMe=true in non-self-chat → you're messaging a friend → ignore
+    // - fromMe=false in any chat → someone messaged you → ignore
+    // - Only respond in self-chat (Note to Self / Saved Messages)
+    if (!isGroup) {
       if (!this.isSelfChat(chat)) return;
     }
 
