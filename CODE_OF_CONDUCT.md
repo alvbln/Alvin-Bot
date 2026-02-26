@@ -42,7 +42,7 @@ an individual is officially representing the community in public spaces.
 ## Enforcement
 
 Instances of abusive, harassing, or otherwise unacceptable behavior may be
-reported to the project maintainers at **hello@alev-b.com**. All complaints
+reported to the project maintainers at **alvbln7@gmail.com**. All complaints
 will be reviewed and investigated promptly and fairly.
 
 ## Attribution

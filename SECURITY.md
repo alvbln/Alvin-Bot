@@ -12,7 +12,7 @@
 If you discover a security vulnerability, please report it responsibly:
 
 1. **Do NOT** open a public GitHub issue
-2. **Email** security concerns to **hello@alev-b.com**
+2. **Email** security concerns to **alvbln7@gmail.com**
 3. Include a description of the vulnerability and steps to reproduce
 
 ## What to Report
