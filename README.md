@@ -213,11 +213,8 @@ alvin-bot/
 ├── plugins/                     # Plugin directory (6 built-in)
 ├── docs/
 │   ├── tools.json               # Custom tool definitions
-│   ├── custom-models.json       # Custom model configurations
-│   ├── memory/                  # Daily session logs (auto-generated)
-│   └── MEMORY.md                # Long-term memory (curated)
+│   └── custom-models.json       # Custom model configurations
 ├── SOUL.md                      # Agent personality
-├── CLAUDE.md                    # Agent instructions (for Claude SDK)
 ├── bin/cli.js                   # CLI entry point
 └── ecosystem.config.cjs         # PM2 configuration
 ```
