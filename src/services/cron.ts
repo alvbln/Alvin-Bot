@@ -285,6 +285,7 @@ async function executeJob(job: CronJob): Promise<{ output: string; error?: strin
 // ── Scheduler Loop ──────────────────────────────────────
 
 let schedulerTimer: ReturnType<typeof setInterval> | null = null;
+const runningJobs = new Set<string>(); // Guard against overlapping executions
 
 export function startScheduler(): void {
   if (schedulerTimer) return;
@@ -298,6 +299,9 @@ export function startScheduler(): void {
     for (const job of jobs) {
       if (!job.enabled) continue;
 
+      // Skip if this job is already running
+      if (runningJobs.has(job.id)) continue;
+
       // Calculate next run if not set
       if (!job.nextRunAt) {
         job.nextRunAt = calculateNextRun(job);
@@ -307,19 +311,34 @@ export function startScheduler(): void {
       if (job.nextRunAt && now >= job.nextRunAt) {
         console.log(`Cron: Running job "${job.name}" (${job.id})`);
 
-        const result = await executeJob(job);
-        job.lastRunAt = now;
-        job.lastResult = result.output.slice(0, 500);
-        job.lastError = result.error || null;
-        job.runCount++;
+        // Mark as running + clear nextRunAt BEFORE async execution to prevent re-trigger
+        runningJobs.add(job.id);
+        job.nextRunAt = null;
+        saveJobs(jobs);
 
-        if (job.oneShot) {
-          job.enabled = false;
-          job.nextRunAt = null;
-        } else {
-          job.nextRunAt = calculateNextRun(job);
+        try {
+          const result = await executeJob(job);
+          // Re-load jobs in case they were modified during execution
+          const freshJobs = loadJobs();
+          const freshJob = freshJobs.find(j => j.id === job.id);
+          if (freshJob) {
+            freshJob.lastRunAt = now;
+            freshJob.lastResult = result.output.slice(0, 500);
+            freshJob.lastError = result.error || null;
+            freshJob.runCount++;
+
+            if (freshJob.oneShot) {
+              freshJob.enabled = false;
+              freshJob.nextRunAt = null;
+            } else {
+              freshJob.nextRunAt = calculateNextRun(freshJob);
+            }
+            saveJobs(freshJobs);
+          }
+        } finally {
+          runningJobs.delete(job.id);
         }
-        changed = true;
+        continue; // Skip the outer changed/save since we save inside
       }
     }
 
