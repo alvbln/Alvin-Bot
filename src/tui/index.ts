@@ -12,13 +12,18 @@
  * - Color-coded messages
  * - Input history (↑/↓)
  * - Multi-line input (Shift+Enter)
+ * - i18n: English (default) / German (--lang de)
  *
- * Usage: alvin-bot tui [--port 3100] [--host localhost]
+ * Usage: alvin-bot tui [--port 3100] [--host localhost] [--lang en|de]
  */
 
 import { createInterface, Interface } from "readline";
 import WebSocket from "ws";
 import http from "http";
+import { initI18n, t } from "../i18n.js";
+
+// Init i18n before anything else
+initI18n();
 
 // ── ANSI Colors & Styles ────────────────────────────────
 
@@ -29,7 +34,6 @@ const C = {
   italic: "\x1b[3m",
   underline: "\x1b[4m",
 
-  // Foreground
   black: "\x1b[30m",
   red: "\x1b[31m",
   green: "\x1b[32m",
@@ -40,7 +44,6 @@ const C = {
   white: "\x1b[37m",
   gray: "\x1b[90m",
 
-  // Bright
   brightRed: "\x1b[91m",
   brightGreen: "\x1b[92m",
   brightYellow: "\x1b[93m",
@@ -49,7 +52,6 @@ const C = {
   brightCyan: "\x1b[96m",
   brightWhite: "\x1b[97m",
 
-  // Background
   bgBlack: "\x1b[40m",
   bgBlue: "\x1b[44m",
   bgMagenta: "\x1b[45m",
@@ -78,6 +80,9 @@ const port: number = process.argv.includes("--port")
 const baseUrl = `http://${host}:${port}`;
 const wsUrl = `ws://${host}:${port}`;
 
+// Track header line count for redraw
+const HEADER_LINES = 3;
+
 // ── Screen Drawing ──────────────────────────────────────
 
 function getWidth(): number {
@@ -88,45 +93,54 @@ function clearLine(): void {
   process.stdout.write("\r\x1b[K");
 }
 
-function moveCursorUp(n: number): void {
-  if (n > 0) process.stdout.write(`\x1b[${n}A`);
-}
-
 function drawHeader(): void {
   const w = getWidth();
   const statusDot = connected ? `${C.brightGreen}●${C.reset}` : `${C.red}●${C.reset}`;
-  const status = connected ? "Connected" : "Disconnected";
+  const status = connected ? t("tui.connected") : t("tui.disconnected");
   const modelStr = `${C.brightMagenta}${currentModel}${C.reset}`;
   const costStr = totalCost > 0 ? ` ${C.gray}· $${totalCost.toFixed(4)}${C.reset}` : "";
 
-  const title = `${C.bold}${C.brightCyan}🤖 Alvin Bot TUI${C.reset}`;
+  const title = `${C.bold}${C.brightCyan}${t("tui.title")}${C.reset}`;
   const right = `${statusDot} ${status} ${C.gray}│${C.reset} ${modelStr}${costStr}`;
 
-  // Top border
   console.log(`${C.gray}${"─".repeat(w)}${C.reset}`);
   console.log(`  ${title}${"".padEnd(10)}${right}`);
   console.log(`${C.gray}${"─".repeat(w)}${C.reset}`);
 }
 
+function redrawHeader(): void {
+  // Save cursor, move to top, redraw header, restore cursor
+  process.stdout.write("\x1b7");      // Save cursor position
+  process.stdout.write("\x1b[H");     // Move to top-left (1,1)
+  // Clear the 3 header lines
+  for (let i = 0; i < HEADER_LINES; i++) {
+    process.stdout.write("\x1b[K");   // Clear line
+    if (i < HEADER_LINES - 1) process.stdout.write("\x1b[1B"); // Move down
+  }
+  process.stdout.write("\x1b[H");     // Back to top
+  drawHeader();
+  process.stdout.write("\x1b8");      // Restore cursor position
+}
+
 function drawHelp(): void {
   console.log(`
-${C.bold}Befehle:${C.reset}
-  ${C.cyan}/model${C.reset}        Model wechseln
-  ${C.cyan}/status${C.reset}       Bot-Status anzeigen
-  ${C.cyan}/clear${C.reset}        Chat löschen
-  ${C.cyan}/cron${C.reset}         Cron-Jobs anzeigen
-  ${C.cyan}/doctor${C.reset}       Health-Check
-  ${C.cyan}/backup${C.reset}       Backup erstellen
-  ${C.cyan}/restart${C.reset}      Bot neustarten
-  ${C.cyan}/help${C.reset}         Diese Hilfe
-  ${C.cyan}/quit${C.reset}         Beenden (oder Ctrl+C)
+${C.bold}${t("help.title")}${C.reset}
+  ${C.cyan}/model${C.reset}        ${t("help.model")}
+  ${C.cyan}/status${C.reset}       ${t("help.status")}
+  ${C.cyan}/clear${C.reset}        ${t("help.clear")}
+  ${C.cyan}/cron${C.reset}         ${t("help.cron")}
+  ${C.cyan}/doctor${C.reset}       ${t("help.doctor")}
+  ${C.cyan}/backup${C.reset}       ${t("help.backup")}
+  ${C.cyan}/restart${C.reset}      ${t("help.restart")}
+  ${C.cyan}/help${C.reset}         ${t("help.help")}
+  ${C.cyan}/quit${C.reset}         ${t("help.quit")}
 
-${C.dim}Enter = Senden · ↑/↓ = History · Ctrl+C = Beenden${C.reset}
+${C.dim}${t("help.footer")}${C.reset}
 `);
 }
 
 function printUser(text: string): void {
-  console.log(`\n${C.bold}${C.brightGreen}Du:${C.reset} ${text}`);
+  console.log(`\n${C.bold}${C.brightGreen}${t("tui.you")}:${C.reset} ${text}`);
 }
 
 function printAssistantStart(): void {
@@ -150,7 +164,8 @@ function printTool(name: string): void {
 function printToolDone(): void {
   clearLine();
   if (toolCount > 0) {
-    console.log(`  ${C.dim}${C.yellow}⚙ ${toolCount} tool${toolCount > 1 ? "s" : ""} used${C.reset}`);
+    const label = toolCount > 1 ? t("tui.toolsUsed") : t("tui.toolUsed");
+    console.log(`  ${C.dim}${C.yellow}⚙ ${toolCount} ${label}${C.reset}`);
   }
   toolCount = 0;
 }
@@ -181,7 +196,8 @@ function connectWebSocket(): void {
 
   ws.on("open", () => {
     connected = true;
-    printInfo("Verbunden mit Alvin Bot");
+    redrawHeader();
+    printInfo(t("tui.connectedTo"));
     showPrompt();
   });
 
@@ -195,7 +211,8 @@ function connectWebSocket(): void {
   ws.on("close", () => {
     connected = false;
     isStreaming = false;
-    printError("Verbindung verloren. Reconnect in 3s...");
+    redrawHeader();
+    printError(t("tui.connectionLost"));
     setTimeout(connectWebSocket, 3000);
   });
 
@@ -209,7 +226,6 @@ function handleMessage(msg: any): void {
     case "text":
       if (!isStreaming) {
         isStreaming = true;
-        // End tool indicator line if present
         if (currentToolName) {
           printToolDone();
           currentToolName = "";
@@ -230,7 +246,7 @@ function handleMessage(msg: any): void {
       break;
 
     case "fallback":
-      printInfo(`Fallback: ${msg.from} → ${msg.to}`);
+      printInfo(`${t("tui.fallback")} ${msg.from} → ${msg.to}`);
       break;
 
     case "done":
@@ -241,6 +257,7 @@ function handleMessage(msg: any): void {
       isStreaming = false;
       currentResponse = "";
       currentToolName = "";
+      redrawHeader(); // Update cost in header
       showPrompt();
       break;
 
@@ -251,7 +268,7 @@ function handleMessage(msg: any): void {
       break;
 
     case "reset":
-      printInfo("Session zurückgesetzt");
+      printInfo(t("tui.sessionReset"));
       showPrompt();
       break;
   }
@@ -306,27 +323,28 @@ async function handleCommand(cmd: string): Promise<void> {
     case "m": {
       try {
         const data = await apiGet("/api/models");
-        console.log(`\n${C.bold}Models:${C.reset}`);
+        console.log(`\n${C.bold}${t("tui.models")}:${C.reset}`);
         if (data.models) {
           for (const m of data.models) {
-            const active = m.key === data.active ? `${C.brightGreen} ◀ aktiv${C.reset}` : "";
+            const active = m.key === data.active ? `${C.brightGreen} ◀ ${t("tui.active")}${C.reset}` : "";
             const status = m.status === "ready" ? `${C.green}✓${C.reset}` : `${C.dim}✗${C.reset}`;
             console.log(`  ${status} ${C.bold}${m.key}${C.reset} ${C.dim}(${m.model || m.name})${C.reset}${active}`);
           }
         }
-        console.log(`\n${C.dim}Model wechseln: /model <key>${C.reset}`);
+        console.log(`\n${C.dim}${t("tui.switchModel")} /model <key>${C.reset}`);
 
         if (parts[1]) {
           const res = await apiPost("/api/models/switch", { key: parts[1] });
           if (res.ok) {
             currentModel = res.active || parts[1];
-            printSuccess(`Model gewechselt zu: ${currentModel}`);
+            printSuccess(`${t("tui.switchedTo")}: ${currentModel}`);
+            redrawHeader();
           } else {
-            printError(res.error || "Fehler beim Wechseln");
+            printError(res.error || t("tui.switchError"));
           }
         }
       } catch (err) {
-        printError(`Konnte Models nicht laden: ${(err as Error).message}`);
+        printError(`${t("tui.modelsError")}: ${(err as Error).message}`);
       }
       break;
     }
@@ -335,28 +353,28 @@ async function handleCommand(cmd: string): Promise<void> {
     case "s": {
       try {
         const data = await apiGet("/api/status");
-        console.log(`\n${C.bold}${C.brightCyan}Bot Status${C.reset}`);
+        console.log(`\n${C.bold}${C.brightCyan}${t("status.title")}${C.reset}`);
         console.log(`${C.gray}${"─".repeat(40)}${C.reset}`);
         if (data.model) {
-          console.log(`  ${C.cyan}Model:${C.reset}    ${data.model.model || data.model.name || "?"}`);
-          console.log(`  ${C.cyan}Provider:${C.reset} ${data.model.name || "?"}`);
-          console.log(`  ${C.cyan}Status:${C.reset}   ${data.model.status || "?"}`);
+          console.log(`  ${C.cyan}${t("status.model")}${C.reset}    ${data.model.model || data.model.name || "?"}`);
+          console.log(`  ${C.cyan}${t("status.provider")}${C.reset} ${data.model.name || "?"}`);
+          console.log(`  ${C.cyan}${t("status.status")}${C.reset}   ${data.model.status || "?"}`);
         }
         if (data.bot) {
           const upH = Math.floor((data.bot.uptime || 0) / 3600);
           const upM = Math.floor(((data.bot.uptime || 0) % 3600) / 60);
-          console.log(`  ${C.cyan}Version:${C.reset}  ${data.bot.version || "?"}`);
-          console.log(`  ${C.cyan}Uptime:${C.reset}   ${upH}h ${upM}m`);
+          console.log(`  ${C.cyan}${t("status.version")}${C.reset}  ${data.bot.version || "?"}`);
+          console.log(`  ${C.cyan}${t("status.uptime")}${C.reset}   ${upH}h ${upM}m`);
         }
         if (data.memory) {
-          console.log(`  ${C.cyan}Memory:${C.reset}   ${data.memory.vectors || 0} Embeddings`);
+          console.log(`  ${C.cyan}${t("status.memory")}${C.reset}   ${data.memory.vectors || 0} ${t("status.embeddings")}`);
         }
-        console.log(`  ${C.cyan}Plugins:${C.reset}  ${data.plugins || 0}`);
-        console.log(`  ${C.cyan}Tools:${C.reset}    ${data.tools || 0}`);
-        console.log(`  ${C.cyan}Users:${C.reset}    ${data.users || 0}`);
+        console.log(`  ${C.cyan}${t("status.plugins")}${C.reset}  ${data.plugins || 0}`);
+        console.log(`  ${C.cyan}${t("status.tools")}${C.reset}    ${data.tools || 0}`);
+        console.log(`  ${C.cyan}${t("status.users")}${C.reset}    ${data.users || 0}`);
         console.log("");
       } catch (err) {
-        printError(`Status nicht verfügbar: ${(err as Error).message}`);
+        printError(`${t("tui.statusError")}: ${(err as Error).message}`);
       }
       break;
     }
@@ -367,7 +385,7 @@ async function handleCommand(cmd: string): Promise<void> {
         console.log(`\n${C.bold}Cron Jobs${C.reset}`);
         console.log(`${C.gray}${"─".repeat(40)}${C.reset}`);
         if (!data.jobs || data.jobs.length === 0) {
-          console.log(`  ${C.dim}Keine Cron-Jobs konfiguriert.${C.reset}`);
+          console.log(`  ${C.dim}${t("tui.noCronJobs")}${C.reset}`);
         } else {
           for (const job of data.jobs) {
             const status = job.enabled ? `${C.green}●${C.reset}` : `${C.red}●${C.reset}`;
@@ -377,14 +395,14 @@ async function handleCommand(cmd: string): Promise<void> {
         }
         console.log("");
       } catch (err) {
-        printError(`Cron nicht verfügbar: ${(err as Error).message}`);
+        printError(`${t("tui.cronError")}: ${(err as Error).message}`);
       }
       break;
     }
 
     case "doctor": {
       try {
-        printInfo("Scanne...");
+        printInfo(t("tui.scanning"));
         const data = await apiGet("/api/doctor");
         const icons: Record<string, string> = { error: `${C.red}✖`, warning: `${C.yellow}⚠`, info: `${C.blue}ℹ` };
         console.log(`\n${C.bold}Health-Check${C.reset}`);
@@ -396,33 +414,33 @@ async function handleCommand(cmd: string): Promise<void> {
         }
         console.log("");
       } catch (err) {
-        printError(`Doctor nicht verfügbar: ${(err as Error).message}`);
+        printError(`${t("tui.doctorError")}: ${(err as Error).message}`);
       }
       break;
     }
 
     case "backup": {
       try {
-        printInfo("Erstelle Backup...");
+        printInfo(t("tui.creatingBackup"));
         const data = await apiPost("/api/backups/create", {});
         if (data.ok) {
-          printSuccess(`Backup "${data.id}" erstellt (${data.files.length} Dateien)`);
+          printSuccess(`${t("tui.backupCreated")} "${data.id}" (${data.files.length} files)`);
         } else {
-          printError(data.error || "Fehlgeschlagen");
+          printError(data.error || t("tui.backupFailed"));
         }
       } catch (err) {
-        printError(`Backup-Fehler: ${(err as Error).message}`);
+        printError(`${t("tui.backupError")}: ${(err as Error).message}`);
       }
       break;
     }
 
     case "restart": {
-      printInfo("Bot wird neugestartet...");
+      printInfo(t("tui.botRestarting"));
       try {
         await apiPost("/api/restart", {});
-        printSuccess("Restart ausgelöst. Reconnect in 3s...");
+        printSuccess(t("tui.restartTriggered"));
       } catch {
-        printError("Restart-Befehl konnte nicht gesendet werden");
+        printError(t("tui.restartFailed"));
       }
       break;
     }
@@ -439,12 +457,11 @@ async function handleCommand(cmd: string): Promise<void> {
     case "quit":
     case "q":
     case "exit":
-      console.log(`\n${C.dim}Tschüss! 👋${C.reset}\n`);
+      console.log(`\n${C.dim}${t("tui.bye")}${C.reset}\n`);
       process.exit(0);
       break;
 
     default:
-      // Send as chat message (just forward the full text including /)
       sendChat(cmd);
       return;
   }
@@ -454,7 +471,7 @@ async function handleCommand(cmd: string): Promise<void> {
 
 function sendChat(text: string): void {
   if (!ws || ws.readyState !== WebSocket.OPEN) {
-    printError("Nicht verbunden. Warte auf Reconnect...");
+    printError(t("tui.notConnected"));
     showPrompt();
     return;
   }
@@ -462,7 +479,6 @@ function sendChat(text: string): void {
   printUser(text);
   ws.send(JSON.stringify({ type: "chat", text }));
 
-  // Add to history
   if (inputHistory[0] !== text) {
     inputHistory.unshift(text);
     if (inputHistory.length > 100) inputHistory.pop();
@@ -484,13 +500,11 @@ async function fetchInitialModel(): Promise<void> {
 }
 
 export async function startTUI(): Promise<void> {
-  // Clear screen and draw header
   console.clear();
   drawHeader();
-  console.log(`${C.dim}Verbinde mit ${baseUrl}...${C.reset}\n`);
+  console.log(`${C.dim}${t("tui.connecting")} ${baseUrl}...${C.reset}\n`);
   drawHelp();
 
-  // Setup readline
   rl = createInterface({
     input: process.stdin,
     output: process.stdout,
@@ -498,7 +512,6 @@ export async function startTUI(): Promise<void> {
     historySize: 100,
   });
 
-  // Handle input
   rl.on("line", (line) => {
     const text = line.trim();
     if (!text) {
@@ -514,27 +527,23 @@ export async function startTUI(): Promise<void> {
   });
 
   rl.on("close", () => {
-    console.log(`\n${C.dim}Tschüss! 👋${C.reset}\n`);
+    console.log(`\n${C.dim}${t("tui.bye")}${C.reset}\n`);
     process.exit(0);
   });
 
-  // Handle Ctrl+C gracefully
   process.on("SIGINT", () => {
-    console.log(`\n${C.dim}Tschüss! 👋${C.reset}\n`);
+    console.log(`\n${C.dim}${t("tui.bye")}${C.reset}\n`);
     process.exit(0);
   });
 
-  // Handle key events for history navigation
   if (process.stdin.isTTY) {
-    process.stdin.setRawMode(false); // Let readline handle raw mode
+    process.stdin.setRawMode(false);
   }
 
-  // Fetch initial model info, then connect
   await fetchInitialModel();
   connectWebSocket();
 }
 
-// If run directly
 const isDirectRun = process.argv[1]?.includes("tui");
 if (isDirectRun) {
   startTUI().catch(console.error);

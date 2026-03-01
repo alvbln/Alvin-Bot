@@ -4,17 +4,24 @@
  * Alvin Bot CLI — Setup, manage, and chat with your AI agent.
  *
  * Usage:
- *   npx alvin-bot setup    — Interactive setup wizard
- *   npx alvin-bot tui      — Terminal chat UI
- *   npx alvin-bot doctor   — Check configuration
- *   npx alvin-bot update   — Pull latest & rebuild
- *   npx alvin-bot start    — Start the bot
+ *   alvin-bot setup    — Interactive setup wizard
+ *   alvin-bot tui      — Terminal chat UI
+ *   alvin-bot doctor   — Check configuration
+ *   alvin-bot update   — Pull latest & rebuild
+ *   alvin-bot start    — Start the bot
+ *
+ * Flags:
+ *   --lang en|de       — Language (default: en, auto-detects from LANG env)
  */
 
 import { createInterface } from "readline";
 import { existsSync, writeFileSync, readFileSync, mkdirSync } from "fs";
 import { resolve } from "path";
 import { execSync } from "child_process";
+import { initI18n, t, getLocale } from "../dist/i18n.js";
+
+// Init i18n early
+initI18n();
 
 const rl = createInterface({ input: process.stdin, output: process.stdout });
 const ask = (q) => new Promise((r) => rl.question(q, r));
@@ -32,7 +39,7 @@ const PROVIDERS = [
   {
     key: "groq",
     name: "Groq (Llama 3.3 70B)",
-    desc: "Extrem schnell, kostenlos, guter Allrounder",
+    desc: () => t("provider.groq.desc"),
     free: true,
     envKey: "GROQ_API_KEY",
     signup: "https://console.groq.com",
@@ -42,7 +49,7 @@ const PROVIDERS = [
   {
     key: "nvidia-llama-3.3-70b",
     name: "NVIDIA NIM (Llama 3.3 70B)",
-    desc: "Kostenlos, schnell, gehostet bei NVIDIA",
+    desc: () => t("provider.nvidia.desc"),
     free: true,
     envKey: "NVIDIA_API_KEY",
     signup: "https://build.nvidia.com",
@@ -52,7 +59,7 @@ const PROVIDERS = [
   {
     key: "gemini-2.5-flash",
     name: "Google Gemini (2.5 Flash)",
-    desc: "Schnell, kostenloser Tier verfügbar, Vision-Support",
+    desc: () => t("provider.gemini.desc"),
     free: true,
     envKey: "GOOGLE_API_KEY",
     signup: "https://aistudio.google.com",
@@ -62,7 +69,7 @@ const PROVIDERS = [
   {
     key: "openai",
     name: "OpenAI (GPT-4o)",
-    desc: "GPT-4o, kostenpflichtig (pay-per-use)",
+    desc: () => t("provider.openai.desc"),
     free: false,
     envKey: "OPENAI_API_KEY",
     signup: "https://platform.openai.com",
@@ -71,8 +78,8 @@ const PROVIDERS = [
   },
   {
     key: "openrouter",
-    name: "OpenRouter (100+ Modelle)",
-    desc: "Zugang zu Claude, GPT-4, Llama, Mistral und mehr",
+    name: "OpenRouter (100+ Models)",
+    desc: () => t("provider.openrouter.desc"),
     free: false,
     envKey: "OPENROUTER_API_KEY",
     signup: "https://openrouter.ai",
@@ -82,9 +89,9 @@ const PROVIDERS = [
   {
     key: "claude-sdk",
     name: "Claude Agent SDK (Premium)",
-    desc: "Voller Agent mit Tool Use (Bash, Dateien, Web) — braucht Claude Max ($200/Mo)",
+    desc: () => t("provider.claude.desc"),
     free: false,
-    envKey: null, // Uses CLI auth
+    envKey: null,
     signup: "https://claude.ai",
     model: "claude-sonnet-4-20250514",
     needsCLI: true,
@@ -96,101 +103,96 @@ const PROVIDERS = [
 async function setup() {
   console.log(LOGO);
 
-  // ── Prerequisites ──────────────────────────────────────────────────────
-  console.log("🔍 Voraussetzungen prüfen...\n");
+  // ── Prerequisites
+  console.log(t("setup.checkingPrereqs"));
 
   let hasNode = false;
   try {
     const nodeVersion = execSync("node --version", { encoding: "utf-8" }).trim();
     const major = parseInt(nodeVersion.slice(1));
     hasNode = major >= 18;
-    console.log(`  ${hasNode ? "✅" : "❌"} Node.js ${nodeVersion}${major < 18 ? " (brauche ≥18!)" : ""}`);
+    console.log(`  ${hasNode ? "✅" : "❌"} Node.js ${nodeVersion}${major < 18 ? ` (${t("setup.needVersion")})` : ""}`);
   } catch {
-    console.log("  ❌ Node.js nicht gefunden — installieren: https://nodejs.org");
+    console.log(`  ❌ ${t("setup.nodeNotFound")}`);
   }
 
   if (!hasNode) {
-    console.log("\n❌ Node.js ≥ 18 wird benötigt. Bitte zuerst installieren.");
+    console.log(`\n❌ ${t("setup.nodeRequired")}`);
     rl.close();
     return;
   }
 
-  // ── Step 1: Telegram Bot ──────────────────────────────────────────────
-  console.log("\n━━━ Schritt 1: Telegram Bot ━━━");
-  console.log("Erstelle einen Bot bei https://t.me/BotFather");
-  console.log("Sende /newbot, folge den Schritten, kopiere den Token.\n");
-  const botToken = (await ask("Bot Token: ")).trim();
+  // ── Step 1: Telegram Bot
+  console.log(`\n━━━ ${t("setup.step1")} ━━━`);
+  console.log(t("setup.step1.intro") + "\n");
+  const botToken = (await ask(t("setup.botToken"))).trim();
 
   if (!botToken) {
-    console.log("❌ Bot Token ist erforderlich.");
+    console.log(`❌ ${t("setup.botTokenRequired")}`);
     rl.close();
     return;
   }
 
-  // ── Step 2: User ID ───────────────────────────────────────────────────
-  console.log("\n━━━ Schritt 2: Deine Telegram User ID ━━━");
-  console.log("Bekomme sie von https://t.me/userinfobot\n");
-  const userId = (await ask("Deine User ID: ")).trim();
+  // ── Step 2: User ID
+  console.log(`\n━━━ ${t("setup.step2")} ━━━`);
+  console.log(t("setup.step2.intro") + "\n");
+  const userId = (await ask(t("setup.userId"))).trim();
 
   if (!userId) {
-    console.log("❌ User ID ist erforderlich.");
+    console.log(`❌ ${t("setup.userIdRequired")}`);
     rl.close();
     return;
   }
 
-  // ── Step 3: AI Provider ───────────────────────────────────────────────
-  console.log("\n━━━ Schritt 3: AI Provider wählen ━━━");
-  console.log("Welchen AI-Dienst möchtest du nutzen?\n");
+  // ── Step 3: AI Provider
+  console.log(`\n━━━ ${t("setup.step3")} ━━━`);
+  console.log(t("setup.step3.intro") + "\n");
 
   for (let i = 0; i < PROVIDERS.length; i++) {
     const p = PROVIDERS[i];
     const badge = p.free ? "🆓" : "💰";
     const premium = p.needsCLI ? " ⭐" : "";
     console.log(`  ${i + 1}. ${badge} ${p.name}${premium}`);
-    console.log(`     ${p.desc}`);
+    console.log(`     ${p.desc()}`);
     if (p.signup) console.log(`     → ${p.signup}`);
     console.log("");
   }
 
-  const providerChoice = parseInt((await ask("Deine Wahl (1-6): ")).trim()) || 1;
+  const providerChoice = parseInt((await ask(t("setup.yourChoice"))).trim()) || 1;
   const provider = PROVIDERS[Math.max(0, Math.min(providerChoice - 1, PROVIDERS.length - 1))];
 
-  console.log(`\n✅ Provider: ${provider.name}`);
+  console.log(`\n✅ ${t("setup.providerSelected")} ${provider.name}`);
 
-  // Check & auto-install Claude CLI if needed
+  // Check Claude CLI if needed
   let hasClaude = false;
   if (provider.needsCLI) {
     try {
       execSync("claude --version", { encoding: "utf-8", stdio: "pipe" });
       hasClaude = true;
-      console.log("  ✅ Claude CLI bereits installiert");
+      console.log("  ✅ Claude CLI ✓");
     } catch {
-      console.log("  ⚠️  Claude Agent SDK (CLI) nicht gefunden.");
+      console.log(`  ⚠️  ${t("setup.claudeNotFound")}`);
       console.log("");
-      const installClaude = (await ask("  Soll ich die Claude CLI jetzt automatisch installieren? (j/n): ")).trim().toLowerCase();
-      if (installClaude === "j" || installClaude === "y" || installClaude === "ja") {
-        console.log("\n  📦 Installiere @anthropic-ai/claude-code ...");
+      const yesChars = getLocale() === "de" ? ["j", "ja"] : ["y", "yes"];
+      const installClaude = (await ask(`  ${t("setup.installClaude")}`)).trim().toLowerCase();
+      if (yesChars.includes(installClaude)) {
+        console.log(`\n  ${t("setup.installingClaude")}`);
         try {
           execSync("npm install -g @anthropic-ai/claude-code", { stdio: "inherit" });
-          console.log("  ✅ Claude CLI installiert!");
-          console.log("\n  🔐 Jetzt einloggen — dies öffnet deinen Browser:");
-          console.log("     (Benötigt ein Claude Max Abo für $200/Mo)\n");
+          console.log(`  ✅ ${t("setup.claudeInstalled")}`);
+          console.log(`\n  ${t("setup.claudeLogin")}\n`);
           try {
             execSync("claude login", { stdio: "inherit", timeout: 120_000 });
             hasClaude = true;
-            console.log("  ✅ Claude Login erfolgreich!");
+            console.log(`  ✅ ${t("setup.claudeLoginOk")}`);
           } catch {
-            console.log("  ⚠️  Login abgebrochen/fehlgeschlagen. Du kannst das später mit 'claude login' nachholen.");
+            console.log(`  ⚠️  ${t("setup.claudeLoginFailed")}`);
           }
         } catch {
-          console.log("  ❌ Installation fehlgeschlagen. Manuell installieren:");
-          console.log("     npm install -g @anthropic-ai/claude-code");
-          console.log("     claude login");
+          console.log(`  ❌ ${t("setup.claudeInstallFailed")}`);
         }
       } else {
-        console.log("  ℹ️  Kein Problem! Du kannst das später nachholen:");
-        console.log("     npm install -g @anthropic-ai/claude-code && claude login");
-        console.log("     Der Bot startet im Text-only Mode ohne Claude CLI.");
+        console.log(`  ℹ️  ${t("setup.claudeSkipped")}`);
       }
     }
   }
@@ -198,55 +200,50 @@ async function setup() {
   // Get API key if needed
   let providerApiKey = "";
   if (provider.envKey) {
-    console.log(`\n📋 API Key für ${provider.name}:`);
-    console.log(`   Registrieren (kostenlos): ${provider.signup}`);
-    console.log(`   Keine Kreditkarte nötig!\n`);
+    console.log(`\n${t("setup.apiKeyPrompt")} ${provider.name}:`);
+    console.log(`   ${t("setup.signupFree")} ${provider.signup}`);
+    console.log(`   ${t("setup.noCreditCard")}\n`);
     providerApiKey = (await ask(`${provider.envKey}: `)).trim();
 
     if (!providerApiKey) {
-      console.log("  ⚠️  Ohne API Key kann dieser Provider nicht genutzt werden.");
+      console.log(`  ⚠️  ${t("setup.noApiKey")}`);
       if (provider.key !== "groq") {
-        console.log("  ℹ️  Groq wird als kostenloser Fallback registriert.");
+        console.log(`  ℹ️  ${t("setup.groqFallbackNote")}`);
       }
     }
   }
 
-  // ── Step 4: Fallback & Extras ─────────────────────────────────────────
-  console.log("\n━━━ Schritt 4: Fallback-Provider & Extras ━━━\n");
+  // ── Step 4: Fallback & Extras
+  console.log(`\n━━━ ${t("setup.step4")} ━━━\n`);
 
-  // Groq als universeller Fallback
   let groqKey = "";
   if (provider.key !== "groq") {
-    console.log("  💡 Groq ist kostenlos und dient als Heartbeat & Fallback.");
-    console.log("     Registriere dich gratis auf https://console.groq.com\n");
-    groqKey = (await ask("Groq API Key (empfohlen, kostenlos): ")).trim();
+    console.log(`  ${t("setup.groqFallback")}\n`);
+    groqKey = (await ask(t("setup.groqKeyPrompt"))).trim();
     if (!groqKey) {
-      console.log("  ℹ️  Ohne Groq-Key kein automatischer Heartbeat/Fallback.");
-      console.log("     Du kannst den Key später über /setup oder die Web UI nachtragen.\n");
+      console.log(`  ℹ️  ${t("setup.noGroqKey")}\n`);
     }
   } else {
-    groqKey = providerApiKey; // Already have it
+    groqKey = providerApiKey;
   }
 
-  // Additional fallback providers
-  console.log("  📋 Weitere API Keys? (Enter zum Überspringen)\n");
+  console.log(`  ${t("setup.extraKeys")}\n`);
   const extraKeys = {};
   if (provider.key !== "nvidia-llama-3.3-70b" && provider.key !== "nvidia-kimi-k2.5") {
-    const nk = (await ask("  NVIDIA API Key (kostenlos @ build.nvidia.com): ")).trim();
+    const nk = (await ask(`  ${t("setup.nvidiaKeyPrompt")}`)).trim();
     if (nk) extraKeys["NVIDIA_API_KEY"] = nk;
   }
   if (provider.key !== "gemini-2.5-flash") {
-    const gk = (await ask("  Google API Key (kostenlos @ aistudio.google.com): ")).trim();
+    const gk = (await ask(`  ${t("setup.googleKeyPrompt")}`)).trim();
     if (gk) extraKeys["GOOGLE_API_KEY"] = gk;
   }
   if (provider.key !== "openai" && provider.key !== "gpt-4o") {
-    const ok = (await ask("  OpenAI API Key (optional): ")).trim();
+    const ok = (await ask(`  ${t("setup.openaiKeyPrompt")}`)).trim();
     if (ok) extraKeys["OPENAI_API_KEY"] = ok;
   }
 
   // Fallback order
-  console.log("\n  🔄 Fallback-Reihenfolge:");
-  console.log("     Wenn dein primärer Provider ausfällt, werden diese der Reihe nach probiert.");
+  console.log(`\n  ${t("setup.fallbackOrder")}`);
   const availableFallbacks = [];
   if (groqKey && provider.key !== "groq") availableFallbacks.push("groq");
   if (extraKeys["NVIDIA_API_KEY"]) availableFallbacks.push("nvidia-llama-3.3-70b");
@@ -254,31 +251,31 @@ async function setup() {
   if (extraKeys["OPENAI_API_KEY"]) availableFallbacks.push("gpt-4o");
 
   if (availableFallbacks.length > 0) {
-    console.log(`     Standard: ${availableFallbacks.join(" → ")}`);
-    const customOrder = (await ask("     Andere Reihenfolge? (kommagetrennt, Enter = Standard): ")).trim();
+    console.log(`     ${t("setup.defaultOrder")} ${availableFallbacks.join(" → ")}`);
+    const customOrder = (await ask(`     ${t("setup.customOrder")}`)).trim();
     if (customOrder) {
       availableFallbacks.length = 0;
       availableFallbacks.push(...customOrder.split(",").map(s => s.trim()).filter(Boolean));
     }
   } else {
-    console.log("     Keine Fallback-Provider konfiguriert.");
+    console.log(`     ${t("setup.noFallbacks")}`);
   }
 
   console.log("");
-  const webPassword = (await ask("Web UI Passwort (leer = kein Schutz): ")).trim();
+  const webPassword = (await ask(t("setup.webPassword"))).trim();
 
-  // ── Step 5: Platform choice ───────────────────────────────────────────
-  console.log("\n━━━ Schritt 5: Plattformen ━━━");
-  console.log("Telegram ist automatisch dabei. Weitere Plattformen?\n");
-  console.log("  1. Nur Telegram (Standard)");
-  console.log("  2. + WhatsApp (braucht Chrome/Chromium)");
-  console.log("  3. Später konfigurieren (via Web UI)\n");
+  // ── Step 5: Platforms
+  console.log(`\n━━━ ${t("setup.step5")} ━━━`);
+  console.log(`${t("setup.step5.intro")}\n`);
+  console.log(`  1. ${t("setup.platform.telegramOnly")}`);
+  console.log(`  2. ${t("setup.platform.whatsapp")}`);
+  console.log(`  3. ${t("setup.platform.later")}\n`);
 
-  const platformChoice = parseInt((await ask("Deine Wahl (1-3): ")).trim()) || 1;
+  const platformChoice = parseInt((await ask(t("setup.platformChoice"))).trim()) || 1;
   const enableWhatsApp = platformChoice === 2;
 
-  // ── Write .env ────────────────────────────────────────────────────────
-  console.log("\n📝 Konfiguration schreiben...");
+  // ── Write .env
+  console.log(`\n${t("setup.writingConfig")}`);
 
   const envLines = [
     "# === Telegram ===",
@@ -289,22 +286,18 @@ async function setup() {
     `PRIMARY_PROVIDER=${provider.key}`,
   ];
 
-  // Provider-specific keys
   if (provider.envKey && providerApiKey) {
     envLines.push(`${provider.envKey}=${providerApiKey}`);
   }
 
-  // Groq key (for heartbeat + fallback)
   if (groqKey && provider.key !== "groq") {
     envLines.push(`GROQ_API_KEY=${groqKey}`);
   }
 
-  // Extra provider keys
   for (const [envKey, value] of Object.entries(extraKeys)) {
     envLines.push(`${envKey}=${value}`);
   }
 
-  // Fallback order
   if (availableFallbacks.length > 0) {
     envLines.push(`FALLBACK_PROVIDERS=${availableFallbacks.join(",")}`);
   }
@@ -329,43 +322,20 @@ async function setup() {
   const envContent = envLines.join("\n") + "\n";
   const envPath = resolve(process.cwd(), ".env");
 
-  // Backup existing .env
   if (existsSync(envPath)) {
     const backup = `${envPath}.backup-${Date.now()}`;
     writeFileSync(backup, readFileSync(envPath));
-    console.log(`  📋 Backup: ${backup}`);
+    console.log(`  ${t("setup.backup")} ${backup}`);
   }
 
   writeFileSync(envPath, envContent);
-  console.log(`  ✅ .env geschrieben`);
+  console.log(`  ✅ ${t("setup.envWritten")}`);
 
   // Create SOUL.md if not exists
   const soulPath = resolve(process.cwd(), "SOUL.md");
   if (!existsSync(soulPath)) {
-    writeFileSync(soulPath, `# SOUL.md — Bot Persönlichkeit
-
-> Editiere diese Datei um die Persönlichkeit deines Bots anzupassen.
-> Wird beim Start geladen und in jeden System-Prompt injiziert.
-
-## Wer bin ich?
-
-Ich bin ein autonomer KI-Assistent. Direkt, hilfreich, mit eigenem Charakter.
-
-## Wie ich kommuniziere
-
-- Direkt und ehrlich — kein Gelaber
-- Mit Humor — trockener Witz hier und da
-- Auf Augenhöhe — kompetenter Freund, nicht unterwürfiger Butler
-- Deutsch ist Standard, Englisch wenn der User Englisch schreibt
-
-## Meine Prinzipien
-
-- Erst machen, dann erklären
-- Fehler sofort zugeben
-- Meinungen haben und äußern
-- Privatsphäre respektieren
-`);
-    console.log("  ✅ SOUL.md erstellt (Persönlichkeit anpassbar)");
+    writeFileSync(soulPath, t("soul.default"));
+    console.log(`  ✅ ${t("setup.soulCreated")}`);
   }
 
   // Create docs directory
@@ -375,41 +345,41 @@ Ich bin ein autonomer KI-Assistent. Direkt, hilfreich, mit eigenem Charakter.
     mkdirSync(memoryDir, { recursive: true });
   }
 
-  // ── Build ─────────────────────────────────────────────────────────────
-  console.log("\n🔨 Building...");
+  // ── Build
+  console.log(`\n${t("setup.building")}`);
   try {
     execSync("npm run build", { stdio: "inherit" });
-    console.log("  ✅ Build erfolgreich");
+    console.log(`  ✅ ${t("setup.buildOk")}`);
   } catch {
-    console.log("  ❌ Build fehlgeschlagen — siehe Fehler oben");
+    console.log(`  ❌ ${t("setup.buildFailed")}`);
   }
 
-  // ── Summary ───────────────────────────────────────────────────────────
+  // ── Summary
   const providerInfo = provider.needsCLI && !hasClaude
-    ? `\n  ⚠️  Claude CLI fehlt — installiere sie für vollen Agent-Modus:\n      npm i -g @anthropic-ai/claude-code && claude login\n`
+    ? `\n  ⚠️  ${t("setup.claudeMissing")}\n`
     : "";
 
   console.log(`
-━━━ Setup Abgeschlossen! ━━━
+━━━ ${t("setup.done")} ━━━
 
   🤖 Provider: ${provider.name}
-  💬 Telegram: @... (prüfe bei @BotFather)
-  🌐 Web UI: http://localhost:3100${webPassword ? " (passwortgeschützt)" : ""}
-${enableWhatsApp ? "  📱 WhatsApp: Scan QR code in Web UI → Platforms\n" : ""}${providerInfo}
-Starten:
-  npm run dev                       (Entwicklung, Hot Reload)
-  npm start                         (Produktion)
-  pm2 start ecosystem.config.cjs    (Produktion mit Auto-Restart)
+  💬 Telegram: @... (check @BotFather)
+  🌐 Web UI: http://localhost:3100${webPassword ? ` (${t("setup.passwordProtected")})` : ""}
+${enableWhatsApp ? `  📱 ${t("setup.scanQr")}\n` : ""}${providerInfo}
+Start:
+  npm run dev                       (development, hot reload)
+  npm start                         (production)
+  pm2 start ecosystem.config.cjs    (production, auto-restart)
 
-Befehle im Bot:
-  /help     — Alle Befehle anzeigen
-  /model    — AI-Modell wechseln
-  /effort   — Denktiefe einstellen
-  /imagine  — Bilder generieren
-  /web      — Web-Suche
-  /cron     — Geplante Aufgaben
+Bot commands:
+  /help     — Show all commands
+  /model    — Switch AI model
+  /effort   — Set thinking depth
+  /imagine  — Generate images
+  /web      — Web search
+  /cron     — Scheduled tasks
 
-Viel Spaß! 🤖
+${t("setup.haveFun")}
 `);
 
   rl.close();
@@ -418,25 +388,22 @@ Viel Spaß! 🤖
 // ── Doctor ──────────────────────────────────────────────────────────────────
 
 async function doctor() {
-  console.log("🩺 Alvin Bot — Health Check\n");
+  console.log(`${t("doctor.title")}\n`);
 
-  // Node
   try {
     const v = execSync("node --version", { encoding: "utf-8" }).trim();
     console.log(`  ✅ Node.js ${v}`);
   } catch {
-    console.log("  ❌ Node.js nicht gefunden");
+    console.log("  ❌ Node.js not found");
   }
 
-  // Claude CLI (optional)
   try {
     execSync("claude --version", { encoding: "utf-8", stdio: "pipe" });
-    console.log("  ✅ Claude CLI (Agent SDK verfügbar)");
+    console.log(`  ✅ ${t("doctor.claudeCli")}`);
   } catch {
-    console.log("  ⚠️  Claude CLI nicht installiert (optional — nur für Agent-Modus)");
+    console.log(`  ⚠️  ${t("doctor.claudeCliMissing")}`);
   }
 
-  // .env
   const envPath = resolve(process.cwd(), ".env");
   if (existsSync(envPath)) {
     const env = readFileSync(envPath, "utf-8");
@@ -445,39 +412,34 @@ async function doctor() {
     console.log(`  ${check("ALLOWED_USERS") ? "✅" : "❌"} ALLOWED_USERS`);
     console.log(`  ${check("PRIMARY_PROVIDER") ? "✅" : "⚠️ "} PRIMARY_PROVIDER`);
 
-    // Check which provider keys are set
     const keys = ["GROQ_API_KEY", "NVIDIA_API_KEY", "GOOGLE_API_KEY", "OPENAI_API_KEY", "OPENROUTER_API_KEY"];
     const setKeys = keys.filter(k => check(k));
     if (setKeys.length > 0) {
       console.log(`  ✅ API Keys: ${setKeys.map(k => k.replace("_API_KEY", "")).join(", ")}`);
     } else {
-      // Check if claude-sdk is primary (doesn't need key)
       const primary = env.match(/PRIMARY_PROVIDER=(.+)/)?.[1]?.trim();
       if (primary === "claude-sdk") {
-        console.log("  ℹ️  Provider: Claude SDK (nutzt CLI Auth, kein API Key nötig)");
+        console.log(`  ℹ️  ${t("doctor.claudeSdkNote")}`);
       } else {
-        console.log("  ⚠️  Keine API Keys gesetzt — mindestens einen Provider konfigurieren!");
+        console.log(`  ⚠️  ${t("doctor.noApiKeys")}`);
       }
     }
   } else {
-    console.log("  ❌ .env nicht gefunden — starte: node bin/cli.js setup");
+    console.log(`  ❌ ${t("doctor.noEnv")}`);
   }
 
-  // Build
   if (existsSync(resolve(process.cwd(), "dist/index.js"))) {
-    console.log("  ✅ Build vorhanden (dist/)");
+    console.log(`  ✅ ${t("doctor.buildPresent")}`);
   } else {
-    console.log("  ❌ Nicht gebaut — starte: npm run build");
+    console.log(`  ❌ ${t("doctor.buildMissing")}`);
   }
 
-  // SOUL.md
   if (existsSync(resolve(process.cwd(), "SOUL.md"))) {
-    console.log("  ✅ SOUL.md (Persönlichkeit)");
+    console.log(`  ✅ ${t("doctor.soul")}`);
   } else {
-    console.log("  ⚠️  SOUL.md fehlt — Standard-Persönlichkeit wird genutzt");
+    console.log(`  ⚠️  ${t("doctor.soulMissing")}`);
   }
 
-  // Plugins
   const pluginsDir = resolve(process.cwd(), "plugins");
   if (existsSync(pluginsDir)) {
     try {
@@ -485,11 +447,10 @@ async function doctor() {
       const plugins = readdirSync(pluginsDir).filter(d => statSync(resolve(pluginsDir, d)).isDirectory());
       console.log(`  ✅ Plugins: ${plugins.length} (${plugins.join(", ")})`);
     } catch {
-      console.log("  ⚠️  Plugin-Verzeichnis nicht lesbar");
+      console.log("  ⚠️  Plugin directory not readable");
     }
   }
 
-  // WhatsApp
   const envContent = existsSync(envPath) ? readFileSync(envPath, "utf-8") : "";
   if (envContent.includes("WHATSAPP_ENABLED=true")) {
     const chromePaths = [
@@ -497,7 +458,8 @@ async function doctor() {
       "/usr/bin/google-chrome", "/usr/bin/chromium",
     ];
     const hasChrome = chromePaths.some(p => existsSync(p));
-    console.log(`  ${hasChrome ? "✅" : "⚠️ "} WhatsApp (Chrome: ${hasChrome ? "gefunden" : "nicht gefunden"})`);
+    const chromeStatus = hasChrome ? t("doctor.chromeFound") : t("doctor.chromeNotFound");
+    console.log(`  ${hasChrome ? "✅" : "⚠️ "} WhatsApp (Chrome: ${chromeStatus})`);
   }
 
   console.log("");
@@ -506,27 +468,26 @@ async function doctor() {
 // ── Update ──────────────────────────────────────────────────────────────────
 
 async function update() {
-  console.log("🔄 Alvin Bot aktualisieren...\n");
+  console.log(`${t("update.title")}\n`);
 
   try {
     const isGit = existsSync(resolve(process.cwd(), ".git"));
 
     if (isGit) {
-      console.log("  📥 Neueste Änderungen laden...");
+      console.log(`  ${t("update.pulling")}`);
       execSync("git pull", { stdio: "inherit" });
-      console.log("\n  📦 Abhängigkeiten installieren...");
+      console.log(`\n  ${t("update.installing")}`);
       execSync("npm install", { stdio: "inherit" });
-      console.log("\n  🔨 Building...");
+      console.log(`\n  ${t("update.building")}`);
       execSync("npm run build", { stdio: "inherit" });
-      console.log("\n  ✅ Update abgeschlossen!");
-      console.log("  Neustarten mit: pm2 restart alvin-bot");
+      console.log(`\n  ✅ ${t("update.done")}`);
     } else {
-      console.log("  📦 Update via npm...");
+      console.log(`  ${t("update.npm")}`);
       execSync("npm update alvin-bot", { stdio: "inherit" });
-      console.log("\n  ✅ Update abgeschlossen!");
+      console.log(`\n  ✅ ${t("update.done")}`);
     }
   } catch (err) {
-    console.error(`\n  ❌ Update fehlgeschlagen: ${err.message}`);
+    console.error(`\n  ❌ ${t("update.failed")} ${err.message}`);
   }
 }
 
@@ -568,19 +529,20 @@ switch (cmd) {
     break;
   default:
     console.log(`
-🤖 Alvin Bot CLI
+${t("cli.title")}
 
-Befehle:
-  setup     Interaktiver Setup-Wizard
-  tui       Terminal Chat UI  ✨
-  chat      Alias für tui
-  doctor    Konfiguration prüfen
-  update    Aktualisieren & neu bauen
-  start     Bot starten
-  version   Version anzeigen
+${t("cli.commands")}
+  setup     ${t("cli.setup")}
+  tui       ${t("cli.tui")}
+  chat      ${t("cli.chatAlias")}
+  doctor    ${t("cli.doctorDesc")}
+  update    ${t("cli.updateDesc")}
+  start     ${t("cli.startDesc")}
+  version   ${t("cli.versionDesc")}
 
-Beispiel:
-  node bin/cli.js setup
-  node bin/cli.js tui
+${t("cli.example")}
+  alvin-bot setup
+  alvin-bot tui
+  alvin-bot tui --lang de
 `);
 }
