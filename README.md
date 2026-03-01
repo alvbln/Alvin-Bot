@@ -4,7 +4,55 @@
 
 Alvin Bot is an open-source, self-hosted AI agent that lives where you chat. Built on a multi-model engine with full system access, memory, plugins, and a rich web dashboard. Not just a chatbot — an autonomous agent that remembers, acts, and learns.
 
+
 ---
+
+## 📸 Preview
+
+<table>
+<tr>
+<td align="center"><b>💬 Chat (Dark Mode)</b><br><img src="docs/screenshots/01-Chat-Dark-Conversation.png" width="400"></td>
+<td align="center"><b>📊 Dashboard</b><br><img src="docs/screenshots/03-Dashboard-Overview.png" width="400"></td>
+</tr>
+<tr>
+<td align="center"><b>🤖 AI Models & Providers</b><br><img src="docs/screenshots/04-AI-Models-and-Providers.png" width="400"></td>
+<td align="center"><b>🎭 Personality Editor</b><br><img src="docs/screenshots/05-Personality-Editor.png" width="400"></td>
+</tr>
+<tr>
+<td align="center"><b>💬 Telegram</b><br><img src="docs/screenshots/TG.png" width="400"></td>
+<td align="center"><b>📱 Messaging Platforms</b><br><img src="docs/screenshots/12-Messaging-Platforms.png" width="400"></td>
+</tr>
+<tr>
+<td align="center"><b>🔧 Custom Tools</b><br><img src="docs/screenshots/10-Custom-Tools.png" width="400"></td>
+<td align="center"><b>🩺 Health & Maintenance</b><br><img src="docs/screenshots/15-Maintenance-and-Health.png" width="400"></td>
+</tr>
+</table>
+
+<details>
+<summary><b>🖼️ More Screenshots</b> (click to expand)</summary>
+<br>
+
+| Feature | Screenshot |
+|---------|-----------|
+| Login | <img src="docs/screenshots/00-Login.png" width="500"> |
+| Chat (Light) | <img src="docs/screenshots/02-Chat.png" width="500"> |
+| Memory Manager | <img src="docs/screenshots/06-Memory-Manager.png" width="500"> |
+| Active Sessions | <img src="docs/screenshots/07-Active-Sessions.png" width="500"> |
+| File Browser | <img src="docs/screenshots/08-File-Browser.png" width="500"> |
+| Scheduled Jobs | <img src="docs/screenshots/09-Scheduled-Jobs.png" width="500"> |
+| Plugins & MCP | <img src="docs/screenshots/11-Plugins-and-MCP.png" width="500"> |
+| WhatsApp Groups | <img src="docs/screenshots/12.1-Messaging-Platforms-WhatsApp-Groups-List.png" width="500"> |
+| WA Group Details | <img src="docs/screenshots/12.2-Messaging-Platforms-WA-Group-Details.png" width="500"> |
+| User Management | <img src="docs/screenshots/13-User-Management.png" width="500"> |
+| Web Terminal | <img src="docs/screenshots/14-Web-Terminal.png" width="500"> |
+| Settings & Env | <img src="docs/screenshots/16-Settings-and-Env.png" width="500"> |
+| Telegram Commands | <img src="docs/screenshots/TG-commands.png" width="500"> |
+| macOS Installer | <img src="docs/screenshots/_Mac-Installer.png" width="500"> |
+
+</details>
+
+---
+
 
 ## ✨ Features
 
@@ -90,7 +138,7 @@ Download the pre-built installer for your platform:
 
 | Platform | File | Architecture |
 |----------|------|-------------|
-| macOS | [`Alvin Bot-3.0.1-arm64.dmg`](https://github.com/alvbln/alvin-bot/releases/download/v3.0.1/Alvin.Bot-3.0.1-arm64.dmg) | Apple Silicon (M1+) |
+| macOS | [`Alvin Bot-3.1.1-arm64.dmg`](https://github.com/alvbln/alvin-bot/releases/download/v3.1.1/Alvin.Bot-3.1.1-arm64.dmg) | Apple Silicon (M1+) |
 | Windows | Coming soon | x64 |
 | Linux | Coming soon | x64 |
 
