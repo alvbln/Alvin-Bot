@@ -1,11 +1,11 @@
 {
   "name": "alvin-bot",
-  "version": "3.1.0",
+  "version": "3.1.1",
   "description": "Alvin Bot — Your personal AI agent on Telegram, WhatsApp, Discord, Signal, and Web.",
   "type": "module",
   "main": "dist/index.js",
   "bin": {
-    "alvin-bot": "./bin/cli.js"
+    "alvin-bot": "bin/cli.js"
   },
   "scripts": {
     "dev": "tsx src/index.ts",
@@ -156,7 +156,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/alvbln/alvin-bot"
+    "url": "git+https://github.com/alvbln/alvin-bot.git"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.2.50",
