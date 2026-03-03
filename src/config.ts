@@ -1,5 +1,19 @@
-import "dotenv/config";
+import dotenv from "dotenv";
+import { resolve } from "path";
 import os from "os";
+import { existsSync } from "fs";
+
+// Load .env from ~/.alvin-bot/.env (primary) with cwd fallback (dev mode)
+const dataEnv = resolve(process.env.ALVIN_DATA_DIR || resolve(os.homedir(), ".alvin-bot"), ".env");
+const cwdEnv = resolve(process.cwd(), ".env");
+
+if (existsSync(dataEnv)) {
+  dotenv.config({ path: dataEnv });
+} else if (existsSync(cwdEnv)) {
+  dotenv.config({ path: cwdEnv });
+} else {
+  dotenv.config(); // default behavior
+}
 
 export const config = {
   // Telegram

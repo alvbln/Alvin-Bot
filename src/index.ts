@@ -21,6 +21,43 @@ seedDefaults();
 // ── Normal imports (safe now — DATA_DIR is ready) ──────────────────
 import { Bot, InlineKeyboard } from "grammy";
 import { config } from "./config.js";
+
+// ── Pre-flight config validation ──────────────────────────────────────
+const configErrors: string[] = [];
+
+if (!config.botToken) {
+  configErrors.push("BOT_TOKEN is missing. Get one from @BotFather on Telegram.");
+}
+
+if (config.allowedUsers.length === 0) {
+  configErrors.push("ALLOWED_USERS is missing or invalid. Set your numeric Telegram user ID (get it from @userinfobot).");
+}
+
+// Check if the chosen provider has a corresponding API key
+const providerKeyMap: Record<string, string> = {
+  groq: "GROQ_API_KEY",
+  "nvidia-llama-3.3-70b": "NVIDIA_API_KEY",
+  "gemini-2.5-flash": "GOOGLE_API_KEY",
+  openai: "OPENAI_API_KEY",
+  "gpt-4o": "OPENAI_API_KEY",
+  openrouter: "OPENROUTER_API_KEY",
+};
+const requiredKey = providerKeyMap[config.primaryProvider];
+if (requiredKey) {
+  const keyName = requiredKey.replace("_API_KEY", "").toLowerCase() as keyof typeof config.apiKeys;
+  if (!config.apiKeys[keyName]) {
+    configErrors.push(`${requiredKey} is missing. Your provider "${config.primaryProvider}" needs this key to work.`);
+  }
+}
+
+if (configErrors.length > 0) {
+  console.error("\n❌ Configuration errors:\n");
+  for (const err of configErrors) {
+    console.error(`   • ${err}`);
+  }
+  console.error(`\n   Run 'alvin-bot setup' to fix this, or edit ~/.alvin-bot/.env manually.\n`);
+  process.exit(1);
+}
 import { authMiddleware } from "./middleware/auth.js";
 import { registerCommands } from "./handlers/commands.js";
 import { handleMessage } from "./handlers/message.js";

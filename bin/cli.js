@@ -137,6 +137,18 @@ async function setup() {
     return;
   }
 
+  // Validate bot token format (123456:ABC-DEF...)
+  if (!/^\d+:[A-Za-z0-9_-]+$/.test(botToken)) {
+    console.log(`\n  ⚠️  That doesn't look like a valid bot token.`);
+    console.log(`  Expected format: 123456789:ABCdefGHI-jklMNO`);
+    console.log(`  Get one from @BotFather on Telegram.\n`);
+    const proceed = (await ask(`  Continue anyway? (y/n): `)).trim().toLowerCase();
+    if (proceed !== "y" && proceed !== "yes" && proceed !== "j" && proceed !== "ja") {
+      rl.close();
+      return;
+    }
+  }
+
   // ── Step 2: User ID
   console.log(`\n━━━ ${t("setup.step2")} ━━━`);
   console.log(t("setup.step2.intro") + "\n");
@@ -146,6 +158,19 @@ async function setup() {
     console.log(`❌ ${t("setup.userIdRequired")}`);
     rl.close();
     return;
+  }
+
+  // Validate user ID is numeric
+  const userIds = userId.split(",").map(s => s.trim());
+  const invalidIds = userIds.filter(id => !/^\d+$/.test(id));
+  if (invalidIds.length > 0) {
+    console.log(`\n  ⚠️  User IDs must be numbers, got: ${invalidIds.join(", ")}`);
+    console.log(`  Send /start to @userinfobot on Telegram to get your numeric ID.\n`);
+    const proceed = (await ask(`  Continue anyway? (y/n): `)).trim().toLowerCase();
+    if (proceed !== "y" && proceed !== "yes" && proceed !== "j" && proceed !== "ja") {
+      rl.close();
+      return;
+    }
   }
 
   // ── Step 3: AI Provider
@@ -163,7 +188,7 @@ async function setup() {
   }
 
   const providerChoice = parseInt((await ask(t("setup.yourChoice"))).trim()) || 1;
-  const provider = PROVIDERS[Math.max(0, Math.min(providerChoice - 1, PROVIDERS.length - 1))];
+  let provider = PROVIDERS[Math.max(0, Math.min(providerChoice - 1, PROVIDERS.length - 1))];
 
   console.log(`\n✅ ${t("setup.providerSelected")} ${provider.name}`);
 
@@ -210,9 +235,26 @@ async function setup() {
     providerApiKey = (await ask(`${provider.envKey}: `)).trim();
 
     if (!providerApiKey) {
-      console.log(`  ⚠️  ${t("setup.noApiKey")}`);
-      if (provider.key !== "groq") {
-        console.log(`  ℹ️  ${t("setup.groqFallbackNote")}`);
+      console.log(`\n  ❌  No API key provided for ${provider.name}.`);
+      console.log(`  The bot CANNOT work without an API key for your chosen provider.`);
+      console.log(`  Get one free at: ${provider.signup}\n`);
+      const retry = (await ask(`  Enter API key (or press Enter to switch to Groq): `)).trim();
+      if (retry) {
+        providerApiKey = retry;
+      } else if (provider.key !== "groq") {
+        console.log(`  ℹ️  Switching to Groq (free) as primary provider.`);
+        provider = PROVIDERS[0]; // Switch to Groq
+        console.log(`  Get a free Groq key at: https://console.groq.com\n`);
+        providerApiKey = (await ask(`  GROQ_API_KEY: `)).trim();
+        if (!providerApiKey) {
+          console.log(`\n  ❌  Cannot continue without at least one API key.`);
+          rl.close();
+          return;
+        }
+      } else {
+        console.log(`\n  ❌  Cannot continue without at least one API key.`);
+        rl.close();
+        return;
       }
     }
   }
@@ -324,7 +366,14 @@ async function setup() {
   }
 
   const envContent = envLines.join("\n") + "\n";
-  const envPath = resolve(process.cwd(), ".env");
+
+  // Ensure DATA_DIR exists
+  if (!existsSync(DATA_DIR)) {
+    mkdirSync(DATA_DIR, { recursive: true });
+  }
+
+  // Write .env to ~/.alvin-bot/.env (works for both global npm install and local dev)
+  const envPath = resolve(DATA_DIR, ".env");
 
   if (existsSync(envPath)) {
     const backup = `${envPath}.backup-${Date.now()}`;
@@ -333,7 +382,15 @@ async function setup() {
   }
 
   writeFileSync(envPath, envContent);
-  console.log(`  ✅ ${t("setup.envWritten")}`);
+  console.log(`  ✅ Config saved to ${envPath}`);
+
+  // Also write to cwd if we're in a dev/git environment (convenience)
+  const cwdEnvPath = resolve(process.cwd(), ".env");
+  const isDevMode = existsSync(resolve(process.cwd(), ".git"));
+  if (isDevMode && cwdEnvPath !== envPath) {
+    writeFileSync(cwdEnvPath, envContent);
+    console.log(`  ✅ Dev copy saved to ${cwdEnvPath}`);
+  }
 
   // Create ~/.alvin-bot/ data directory
   const memoryDir = resolve(DATA_DIR, "memory");
@@ -384,13 +441,20 @@ async function setup() {
     console.log("  ✅ CLAUDE.md initialized from example");
   }
 
-  // ── Build
-  console.log(`\n${t("setup.building")}`);
-  try {
-    execSync("npm run build", { stdio: "inherit" });
-    console.log(`  ✅ ${t("setup.buildOk")}`);
-  } catch {
-    console.log(`  ❌ ${t("setup.buildFailed")}`);
+  // ── Build (only for local/dev installs — global npm installs already have dist/)
+  const isGlobalInstall = !existsSync(resolve(process.cwd(), "tsconfig.json"));
+  if (!isGlobalInstall) {
+    console.log(`\n${t("setup.building")}`);
+    try {
+      execSync("npm run build", { stdio: "inherit" });
+      console.log(`  ✅ ${t("setup.buildOk")}`);
+    } catch {
+      console.log(`\n  ❌ ${t("setup.buildFailed")}`);
+      console.log(`  The bot cannot start without a successful build.`);
+      console.log(`  Try running 'npm run build' manually to see the error.\n`);
+      rl.close();
+      return;
+    }
   }
 
   // ── Summary
@@ -398,17 +462,28 @@ async function setup() {
     ? `\n  ⚠️  ${t("setup.claudeMissing")}\n`
     : "";
 
+  const startCmds = isGlobalInstall
+    ? `  alvin-bot start                  (start the bot)
+  alvin-bot doctor                 (check configuration)
+
+  # Keep running permanently:
+  npm install -g pm2
+  pm2 start "alvin-bot start" --name alvin-bot
+  pm2 save && pm2 startup`
+    : `  npm run dev                       (development, hot reload)
+  npm start                         (production)
+  pm2 start ecosystem.config.cjs    (production, auto-restart)`;
+
   console.log(`
 ━━━ ${t("setup.done")} ━━━
 
   🤖 Provider: ${provider.name}
   💬 Telegram: @... (check @BotFather)
   🌐 Web UI: http://localhost:3100${webPassword ? ` (${t("setup.passwordProtected")})` : ""}
+  📁 Config: ${envPath}
 ${enableWhatsApp ? `  📱 ${t("setup.scanQr")}\n` : ""}${providerInfo}
 Start:
-  npm run dev                       (development, hot reload)
-  npm start                         (production)
-  pm2 start ecosystem.config.cjs    (production, auto-restart)
+${startCmds}
 
 Bot commands:
   /help     — Show all commands
@@ -443,12 +518,42 @@ async function doctor() {
     console.log(`  ⚠️  ${t("doctor.claudeCliMissing")}`);
   }
 
-  const envPath = resolve(process.cwd(), ".env");
-  if (existsSync(envPath)) {
+  // Check .env — prefer ~/.alvin-bot/.env, fallback to cwd
+  const dataEnvPath = resolve(DATA_DIR, ".env");
+  const cwdEnvPath = resolve(process.cwd(), ".env");
+  const envPath = existsSync(dataEnvPath) ? dataEnvPath : existsSync(cwdEnvPath) ? cwdEnvPath : null;
+
+  if (envPath) {
+    console.log(`  ✅ .env found: ${envPath}`);
     const env = readFileSync(envPath, "utf-8");
     const check = (key) => env.includes(`${key}=`) && !env.match(new RegExp(`${key}=\\s*$`, 'm'));
-    console.log(`  ${check("BOT_TOKEN") ? "✅" : "❌"} BOT_TOKEN`);
-    console.log(`  ${check("ALLOWED_USERS") ? "✅" : "❌"} ALLOWED_USERS`);
+
+    // Validate BOT_TOKEN format
+    const tokenMatch = env.match(/BOT_TOKEN=(.+)/);
+    const token = tokenMatch?.[1]?.trim();
+    if (!token) {
+      console.log(`  ❌ BOT_TOKEN is missing`);
+    } else if (!/^\d+:[A-Za-z0-9_-]+$/.test(token)) {
+      console.log(`  ⚠️  BOT_TOKEN format looks wrong (expected: 123456:ABCdef...)`);
+    } else {
+      console.log(`  ✅ BOT_TOKEN`);
+    }
+
+    // Validate ALLOWED_USERS
+    const usersMatch = env.match(/ALLOWED_USERS=(.+)/);
+    const usersRaw = usersMatch?.[1]?.trim();
+    if (!usersRaw) {
+      console.log(`  ❌ ALLOWED_USERS is missing`);
+    } else {
+      const ids = usersRaw.split(",").map(s => s.trim());
+      const invalid = ids.filter(id => !/^\d+$/.test(id));
+      if (invalid.length > 0) {
+        console.log(`  ⚠️  ALLOWED_USERS has non-numeric values: ${invalid.join(", ")}`);
+      } else {
+        console.log(`  ✅ ALLOWED_USERS (${ids.length} user${ids.length > 1 ? "s" : ""})`);
+      }
+    }
+
     console.log(`  ${check("PRIMARY_PROVIDER") ? "✅" : "⚠️ "} PRIMARY_PROVIDER`);
 
     const keys = ["GROQ_API_KEY", "NVIDIA_API_KEY", "GOOGLE_API_KEY", "OPENAI_API_KEY", "OPENROUTER_API_KEY"];
@@ -464,10 +569,16 @@ async function doctor() {
       }
     }
   } else {
-    console.log(`  ❌ ${t("doctor.noEnv")}`);
+    console.log(`  ❌ No .env found (checked ${dataEnvPath} and ${cwdEnvPath})`);
+    console.log(`     Run 'alvin-bot setup' to create one.`);
   }
 
-  if (existsSync(resolve(process.cwd(), "dist/index.js"))) {
+  // Check build — in BOT_ROOT (npm global) or cwd (dev)
+  const distPaths = [
+    resolve(process.cwd(), "dist/index.js"),
+    resolve(import.meta.dirname || ".", "../dist/index.js"),
+  ];
+  if (distPaths.some(p => existsSync(p))) {
     console.log(`  ✅ ${t("doctor.buildPresent")}`);
   } else {
     console.log(`  ❌ ${t("doctor.buildMissing")}`);
@@ -490,7 +601,7 @@ async function doctor() {
     }
   }
 
-  const envContent = existsSync(envPath) ? readFileSync(envPath, "utf-8") : "";
+  const envContent = envPath ? readFileSync(envPath, "utf-8") : "";
   if (envContent.includes("WHATSAPP_ENABLED=true")) {
     const chromePaths = [
       "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
