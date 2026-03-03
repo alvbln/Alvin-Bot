@@ -492,10 +492,9 @@ export class WhatsAppAdapter implements PlatformAdapter {
         const textMention = text && (
           text.includes("@alvin") ||
           text.includes("@bot") ||
-          text.includes("@mr.levin") ||
           text.toLowerCase().includes(botName.toLowerCase()) ||
-          text.toLowerCase().includes("mr. levin") ||
-          text.toLowerCase().includes("mr.levin")
+          text.toLowerCase().includes("alvin bot") ||
+          text.toLowerCase().includes("alvin-bot")
         );
         // Check WhatsApp native mentions (mentionedIds array)
         const mentionedIds: string[] = msg.mentionedIds?.map((m: any) => m?._serialized || String(m)) || [];

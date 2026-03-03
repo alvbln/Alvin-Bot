@@ -27,7 +27,7 @@ const CRYPTO_MAP = {
 
 async function fetchJSON(url, headers = {}) {
   const res = await fetch(url, {
-    headers: { "User-Agent": "MrLevin/1.0", ...headers },
+    headers: { "User-Agent": "AlvinBot/1.0", ...headers },
   });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return res.json();

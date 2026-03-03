@@ -23,7 +23,7 @@ export default {
 
           const response = await fetch(
             `https://wttr.in/${encodeURIComponent(location)}?format=j1`,
-            { headers: { "User-Agent": "MrLevin/1.0" } }
+            { headers: { "User-Agent": "AlvinBot/1.0" } }
           );
 
           if (!response.ok) {
@@ -99,7 +99,7 @@ export default {
         const location = params.location || "Berlin";
         const response = await fetch(
           `https://wttr.in/${encodeURIComponent(location)}?format=j1`,
-          { headers: { "User-Agent": "MrLevin/1.0" } }
+          { headers: { "User-Agent": "AlvinBot/1.0" } }
         );
 
         if (!response.ok) return `Weather not found for "${location}"`;
