@@ -131,11 +131,10 @@ export function registerCommands(bot: Bot): void {
   bot.command("webui", async (ctx) => {
     const port = getWebPort();
     const url = `http://localhost:${port}`;
-    const keyboard = new InlineKeyboard().url("Open Web UI", url);
     await ctx.reply(
       `🌐 *Web UI* is running on port ${port}.\n\n` +
-      `Open in your browser:\n\`${url}\``,
-      { parse_mode: "Markdown", reply_markup: keyboard }
+      `Open in your browser:\n${url}`,
+      { parse_mode: "Markdown" }
     );
   });
 
