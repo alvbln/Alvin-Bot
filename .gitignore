@@ -12,6 +12,10 @@ docs/MEMORY.md
 # User profiles (contain Telegram IDs, usernames)
 docs/users/
 
+# User-customized config (examples are tracked instead)
+SOUL.md
+docs/tools.json
+
 # Cron jobs (may contain personal chat IDs)
 docs/cron-jobs.json
 

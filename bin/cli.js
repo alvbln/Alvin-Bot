@@ -15,7 +15,7 @@
  */
 
 import { createInterface } from "readline";
-import { existsSync, writeFileSync, readFileSync, mkdirSync } from "fs";
+import { existsSync, writeFileSync, readFileSync, mkdirSync, copyFileSync } from "fs";
 import { resolve } from "path";
 import { execSync } from "child_process";
 import { initI18n, t, getLocale } from "../dist/i18n.js";
@@ -343,6 +343,21 @@ async function setup() {
   const memoryDir = resolve(docsDir, "memory");
   if (!existsSync(memoryDir)) {
     mkdirSync(memoryDir, { recursive: true });
+  }
+
+  // Copy tools.example.json → tools.json if not exists
+  const toolsPath = resolve(docsDir, "tools.json");
+  const toolsExample = resolve(docsDir, "tools.example.json");
+  if (!existsSync(toolsPath) && existsSync(toolsExample)) {
+    copyFileSync(toolsExample, toolsPath);
+    console.log("  ✅ Custom tools initialized from example");
+  }
+
+  // Copy SOUL.example.md → SOUL.md if not exists (and no default was created above)
+  const soulExample = resolve(process.cwd(), "SOUL.example.md");
+  if (!existsSync(soulPath) && existsSync(soulExample)) {
+    copyFileSync(soulExample, soulPath);
+    console.log("  ✅ SOUL.md initialized from example");
   }
 
   // ── Build
