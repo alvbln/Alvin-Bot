@@ -113,10 +113,22 @@ function runHealthCheck(): HealthIssue[] {
     });
   }
 
-  // 3. Check TOOLS.md or tools.json validity
+  // 3. Check TOOLS.md validity (legacy tools.json as fallback)
   const toolsMd = resolve(BOT_ROOT, "TOOLS.md");
   const toolsJson = resolve(DOCS_DIR, "tools.json");
-  if (!fs.existsSync(toolsMd) && fs.existsSync(toolsJson)) {
+  if (fs.existsSync(toolsMd)) {
+    // Validate TOOLS.md has at least one ## heading (tool definition)
+    const content = fs.readFileSync(toolsMd, "utf-8");
+    if (!content.includes("## ")) {
+      issues.push({
+        severity: "warning",
+        category: "Tools",
+        message: "TOOLS.md enthält keine Tool-Definitionen (## Überschriften fehlen)",
+        fix: "TOOLS.md aus TOOLS.example.md neu erstellen",
+        fixAction: "fix-tools-json",
+      });
+    }
+  } else if (fs.existsSync(toolsJson)) {
     try {
       JSON.parse(fs.readFileSync(toolsJson, "utf-8"));
     } catch {
@@ -128,6 +140,14 @@ function runHealthCheck(): HealthIssue[] {
         fixAction: "fix-tools-json",
       });
     }
+  } else {
+    issues.push({
+      severity: "info",
+      category: "Tools",
+      message: "Keine Custom Tools konfiguriert (TOOLS.md fehlt)",
+      fix: "TOOLS.md aus Beispiel erstellen",
+      fixAction: "fix-tools-json",
+    });
   }
 
   // 4. Check custom-models.json validity

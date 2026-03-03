@@ -120,7 +120,7 @@ function whichTool(name: string): string | null {
   }
 }
 
-/** Load custom tool names from TOOLS.md or docs/tools.json */
+/** Load custom tool names from TOOLS.md (with legacy tools.json fallback) */
 function loadCustomTools(): string[] {
   // Prefer TOOLS.md — extract tool names from ## headings
   if (fs.existsSync(TOOLS_MD)) {

@@ -345,6 +345,20 @@ async function setup() {
     mkdirSync(memoryDir, { recursive: true });
   }
 
+  // Initialize docs/MEMORY.md if not exists
+  const memoryMdPath = resolve(docsDir, "MEMORY.md");
+  if (!existsSync(memoryMdPath)) {
+    writeFileSync(memoryMdPath, "# Long-term Memory\n\n> This file is your agent's long-term memory. Add important context here.\n> It persists across sessions and is read at every startup.\n");
+    console.log("  ✅ docs/MEMORY.md created");
+  }
+
+  // Initialize docs/custom-models.json if not exists
+  const customModelsPath = resolve(docsDir, "custom-models.json");
+  if (!existsSync(customModelsPath)) {
+    writeFileSync(customModelsPath, "[]");
+    console.log("  ✅ docs/custom-models.json initialized");
+  }
+
   // Copy TOOLS.example.md → TOOLS.md if not exists
   const toolsMdPath = resolve(docsDir, "..", "TOOLS.md");
   const toolsMdExample = resolve(docsDir, "..", "TOOLS.example.md");
