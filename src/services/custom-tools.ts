@@ -34,6 +34,7 @@ import fs from "fs";
 import { execSync } from "child_process";
 import { resolve, dirname } from "path";
 import { fileURLToPath } from "url";
+import { isSelfRestartCommand, scheduleGracefulRestart } from "./restart.js";
 
 const BOT_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const TOOLS_CONFIG = resolve(BOT_ROOT, "docs", "tools.json");
@@ -89,6 +90,12 @@ function substituteParams(template: string, params: Record<string, unknown>): st
 async function executeShellTool(tool: CustomToolDef, params: Record<string, unknown>): Promise<string> {
   if (!tool.command) throw new Error("No command defined");
   const cmd = substituteParams(tool.command, params);
+
+  // Intercept self-restart: use graceful internal restart instead of pm2 kill
+  if (isSelfRestartCommand(cmd)) {
+    scheduleGracefulRestart();
+    return "Bot restart scheduled. Grammy will commit the Telegram offset before exiting.";
+  }
 
   try {
     const result = execSync(cmd, {

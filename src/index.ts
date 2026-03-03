@@ -16,6 +16,7 @@ import { startScheduler, stopScheduler, setNotifyCallback } from "./services/cro
 import { discoverTools } from "./services/tool-discovery.js";
 import { startHeartbeat } from "./services/heartbeat.js";
 import { loadSkills } from "./services/skills.js";
+import { registerShutdownHandler } from "./services/restart.js";
 
 // Discover available system tools (cached for prompt injection)
 discoverTools();
@@ -125,28 +126,25 @@ bot.catch((err) => {
   }
 });
 
-// Graceful shutdown — notify active users
+// Graceful shutdown — stops Grammy (commits Telegram offset), then exits
 let isShuttingDown = false;
 const shutdown = async () => {
   if (isShuttingDown) return;
   isShuttingDown = true;
   console.log("Graceful shutdown initiated...");
 
-  // Stop scheduler, unload plugins & disconnect MCP
+  // Clean up and exit — PM2 will auto-restart
   stopScheduler();
-  await unloadPlugins().catch(err => console.error("Plugin unload error:", err));
-  await disconnectMCP().catch(err => console.error("MCP disconnect error:", err));
-
-  // Give pending operations 5 seconds to complete
-  setTimeout(() => {
-    console.log("Forcing exit.");
-    process.exit(0);
-  }, 5000);
-
   bot.stop();
-  console.log("Bot stopped. Goodbye! 👋");
+  await unloadPlugins().catch(() => {});
+  await disconnectMCP().catch(() => {});
+
+  console.log("Goodbye! 👋");
   process.exit(0);
 };
+
+// Register for graceful self-restart (used by tool-executor when AI triggers restart)
+registerShutdownHandler(shutdown);
 
 process.on("SIGINT", shutdown);
 process.on("SIGTERM", shutdown);
@@ -306,6 +304,7 @@ startScheduler();
 import { setTelegramConnected } from "./platforms/telegram.js";
 
 await bot.start({
+  drop_pending_updates: true,
   onStart: () => {
     const me = bot.botInfo;
     setTelegramConnected(me.first_name, me.username);

@@ -505,8 +505,9 @@ export async function handleDoctorAPI(
 
   // POST /api/restart — restart the bot (legacy)
   if (urlPath === "/api/bot/restart" && req.method === "POST") {
+    const { scheduleGracefulRestart } = await import("../services/restart.js");
     res.end(JSON.stringify({ ok: true, note: "Bot wird neugestartet..." }));
-    setTimeout(() => process.exit(0), 500); // PM2 auto-restarts
+    scheduleGracefulRestart(500);
     return true;
   }
 
@@ -598,12 +599,9 @@ export async function handleDoctorAPI(
       }
 
       if (action === "restart" || action === "reload") {
+        const { scheduleGracefulRestart } = await import("../services/restart.js");
         res.end(JSON.stringify({ ok: true, message: `Bot wird ${action === "restart" ? "neugestartet" : "neu geladen"}...` }));
-        setTimeout(() => {
-          try {
-            execSync(`pm2 ${action} ${processName} --update-env`, { timeout: 15000, stdio: "pipe" });
-          } catch { /* PM2 might kill us during restart */ }
-        }, 300);
+        scheduleGracefulRestart(500);
         return true;
       }
     } catch (err) {

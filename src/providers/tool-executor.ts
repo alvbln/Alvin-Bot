@@ -11,6 +11,7 @@
 import { execSync } from "child_process";
 import fs from "fs";
 import { resolve } from "path";
+import { isSelfRestartCommand, scheduleGracefulRestart } from "../services/restart.js";
 
 // ── Tool Definitions (OpenAI function calling format) ───────────────────────
 
@@ -238,6 +239,12 @@ export function executeTool(
 // ── Individual Tool Implementations ─────────────────────────────────────────
 
 function executeShell(command: string, cwd?: string): ToolResult {
+  // Intercept self-restart: use graceful internal restart instead of pm2 kill
+  if (isSelfRestartCommand(command)) {
+    scheduleGracefulRestart();
+    return { name: "run_shell", result: "Bot restart scheduled. Grammy will commit the Telegram offset before exiting." };
+  }
+
   // Security: block obviously dangerous commands
   const blocked = ["rm -rf /", "mkfs", "dd if=/dev/zero", "> /dev/sda"];
   if (blocked.some(b => command.includes(b))) {

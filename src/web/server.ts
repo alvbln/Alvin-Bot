@@ -987,8 +987,9 @@ async function handleAPI(req: http.IncomingMessage, res: http.ServerResponse, ur
 
   // POST /api/restart — restart the bot process
   if (urlPath === "/api/restart" && req.method === "POST") {
+    const { scheduleGracefulRestart } = await import("../services/restart.js");
     res.end(JSON.stringify({ ok: true, note: "Restarting..." }));
-    setTimeout(() => process.exit(0), 500); // PM2 will auto-restart
+    scheduleGracefulRestart(500);
     return;
   }
 
