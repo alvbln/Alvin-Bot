@@ -360,6 +360,14 @@ async function setup() {
     console.log("  ✅ SOUL.md initialized from example");
   }
 
+  // Copy CLAUDE.example.md → CLAUDE.md if not exists
+  const claudePath = resolve(process.cwd(), "CLAUDE.md");
+  const claudeExample = resolve(process.cwd(), "CLAUDE.example.md");
+  if (!existsSync(claudePath) && existsSync(claudeExample)) {
+    copyFileSync(claudeExample, claudePath);
+    console.log("  ✅ CLAUDE.md initialized from example");
+  }
+
   // ── Build
   console.log(`\n${t("setup.building")}`);
   try {
