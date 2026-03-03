@@ -16,8 +16,14 @@ exports.default = async function(context) {
 
   // Files and directories to remove (personal/runtime data)
   const toRemove = [
+    // Personal config (user creates these from examples at setup)
+    'SOUL.md',
+    'TOOLS.md',
+    'CLAUDE.md',
+    'docs/tools.json',
+    // Runtime data
     'docs/memory',
-    'docs/MEMORY.md', 
+    'docs/MEMORY.md',
     'docs/users',
     'docs/whatsapp-groups.json',
     'docs/cron-jobs.json',
@@ -25,7 +31,7 @@ exports.default = async function(context) {
     'backups',
     '.env',
     '.wwebjs_cache',
-    'CLAUDE.md',
+    // Dev/build files
     'telegram-agent-setup-prompt.md',
     '.npmignore',
     '.gitignore',
