@@ -38,6 +38,12 @@ import { isSelfRestartCommand, scheduleGracefulRestart } from "./restart.js";
 
 const BOT_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const TOOLS_CONFIG = resolve(BOT_ROOT, "docs", "tools.json");
+const TOOLS_EXAMPLE = resolve(BOT_ROOT, "docs", "tools.example.json");
+
+// Auto-initialize tools.json from example if missing
+if (!fs.existsSync(TOOLS_CONFIG) && fs.existsSync(TOOLS_EXAMPLE)) {
+  fs.copyFileSync(TOOLS_EXAMPLE, TOOLS_CONFIG);
+}
 
 // ── Types ───────────────────────────────────────────────
 
