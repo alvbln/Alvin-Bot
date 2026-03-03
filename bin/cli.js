@@ -51,14 +51,15 @@ const PROVIDERS = [
     needsCLI: false,
   },
   {
-    key: "nvidia-llama-3.3-70b",
-    name: "NVIDIA NIM (Llama 3.3 70B)",
+    key: "nvidia-kimi-k2.5",
+    name: "NVIDIA NIM (Kimi K2.5 — Best Tool Use)",
     desc: () => t("provider.nvidia.desc"),
     free: true,
     envKey: "NVIDIA_API_KEY",
     signup: "https://build.nvidia.com",
-    model: "meta/llama-3.3-70b-instruct",
+    model: "moonshotai/kimi-k2.5",
     needsCLI: false,
+    fallbackModel: "meta/llama-3.3-70b-instruct",
   },
   {
     key: "gemini-2.5-flash",
@@ -128,17 +129,14 @@ async function setup() {
 
   // ── Step 1: Telegram Bot
   console.log(`\n━━━ ${t("setup.step1")} ━━━`);
-  console.log(t("setup.step1.intro") + "\n");
+  console.log(t("setup.step1.intro"));
+  console.log(`  (Press Enter to skip — WebUI-only mode)\n`);
   const botToken = (await ask(t("setup.botToken"))).trim();
 
   if (!botToken) {
-    console.log(`❌ ${t("setup.botTokenRequired")}`);
-    rl.close();
-    return;
-  }
-
-  // Validate bot token format (123456:ABC-DEF...)
-  if (!/^\d+:[A-Za-z0-9_-]+$/.test(botToken)) {
+    console.log(`  ℹ️  Skipping Telegram — bot will run in WebUI-only mode.`);
+    console.log(`  You can add BOT_TOKEN to ~/.alvin-bot/.env later.\n`);
+  } else if (!/^\d+:[A-Za-z0-9_-]+$/.test(botToken)) {
     console.log(`\n  ⚠️  That doesn't look like a valid bot token.`);
     console.log(`  Expected format: 123456789:ABCdefGHI-jklMNO`);
     console.log(`  Get one from @BotFather on Telegram.\n`);
@@ -150,26 +148,43 @@ async function setup() {
   }
 
   // ── Step 2: User ID
-  console.log(`\n━━━ ${t("setup.step2")} ━━━`);
-  console.log(t("setup.step2.intro") + "\n");
-  const userId = (await ask(t("setup.userId"))).trim();
+  let userId = "";
+  if (botToken) {
+    console.log(`\n━━━ ${t("setup.step2")} ━━━`);
+    console.log(t("setup.step2.intro"));
+    console.log(`  💡 Send /start to @userinfobot on Telegram to find your ID.`);
+    console.log(`  (Press Enter to skip — you can add it later)\n`);
+    userId = (await ask(t("setup.userId"))).trim();
 
-  if (!userId) {
-    console.log(`❌ ${t("setup.userIdRequired")}`);
-    rl.close();
-    return;
-  }
+    if (!userId) {
+      console.log(`  ℹ️  Skipping — add ALLOWED_USERS to ~/.alvin-bot/.env later.\n`);
+    } else {
+      // Validate user ID is numeric
+      const userIds = userId.split(",").map(s => s.trim());
+      const invalidIds = userIds.filter(id => !/^\d+$/.test(id));
+      if (invalidIds.length > 0) {
+        console.log(`\n  ⚠️  User IDs must be numbers, got: ${invalidIds.join(", ")}`);
+        console.log(`  Send /start to @userinfobot on Telegram to get your numeric ID.\n`);
+        const proceed = (await ask(`  Continue anyway? (y/n): `)).trim().toLowerCase();
+        if (proceed !== "y" && proceed !== "yes" && proceed !== "j" && proceed !== "ja") {
+          rl.close();
+          return;
+        }
+      }
 
-  // Validate user ID is numeric
-  const userIds = userId.split(",").map(s => s.trim());
-  const invalidIds = userIds.filter(id => !/^\d+$/.test(id));
-  if (invalidIds.length > 0) {
-    console.log(`\n  ⚠️  User IDs must be numbers, got: ${invalidIds.join(", ")}`);
-    console.log(`  Send /start to @userinfobot on Telegram to get your numeric ID.\n`);
-    const proceed = (await ask(`  Continue anyway? (y/n): `)).trim().toLowerCase();
-    if (proceed !== "y" && proceed !== "yes" && proceed !== "j" && proceed !== "ja") {
-      rl.close();
-      return;
+      // Warn if user ID matches bot token prefix (common mistake)
+      const botIdPrefix = botToken.split(":")[0];
+      const userIdList = userId.split(",").map(s => s.trim());
+      if (userIdList.includes(botIdPrefix)) {
+        console.log(`\n  ⚠️  "${botIdPrefix}" looks like the bot's own ID, not yours!`);
+        console.log(`  The bot token starts with the bot's ID. You need YOUR user ID.`);
+        console.log(`  Send /start to @userinfobot on Telegram to get your ID.\n`);
+        const proceed = (await ask(`  Continue anyway? (y/n): `)).trim().toLowerCase();
+        if (proceed !== "y" && proceed !== "yes" && proceed !== "j" && proceed !== "ja") {
+          userId = "";
+          console.log(`  ℹ️  Cleared — add ALLOWED_USERS to ~/.alvin-bot/.env later.\n`);
+        }
+      }
     }
   }
 
@@ -235,26 +250,22 @@ async function setup() {
     providerApiKey = (await ask(`${provider.envKey}: `)).trim();
 
     if (!providerApiKey) {
-      console.log(`\n  ❌  No API key provided for ${provider.name}.`);
-      console.log(`  The bot CANNOT work without an API key for your chosen provider.`);
+      console.log(`\n  ⚠️  No API key provided for ${provider.name}.`);
+      console.log(`  AI chat won't work until you add one.`);
       console.log(`  Get one free at: ${provider.signup}\n`);
-      const retry = (await ask(`  Enter API key (or press Enter to switch to Groq): `)).trim();
+      const retry = (await ask(`  Enter API key (or press Enter to skip for now): `)).trim();
       if (retry) {
         providerApiKey = retry;
       } else if (provider.key !== "groq") {
         console.log(`  ℹ️  Switching to Groq (free) as primary provider.`);
         provider = PROVIDERS[0]; // Switch to Groq
         console.log(`  Get a free Groq key at: https://console.groq.com\n`);
-        providerApiKey = (await ask(`  GROQ_API_KEY: `)).trim();
+        providerApiKey = (await ask(`  GROQ_API_KEY (or press Enter to skip): `)).trim();
         if (!providerApiKey) {
-          console.log(`\n  ❌  Cannot continue without at least one API key.`);
-          rl.close();
-          return;
+          console.log(`  ℹ️  Skipping — bot will start but AI chat won't work until configured.\n`);
         }
       } else {
-        console.log(`\n  ❌  Cannot continue without at least one API key.`);
-        rl.close();
-        return;
+        console.log(`  ℹ️  Skipping — bot will start but AI chat won't work until configured.\n`);
       }
     }
   }
@@ -293,6 +304,10 @@ async function setup() {
   const availableFallbacks = [];
   if (groqKey && provider.key !== "groq") availableFallbacks.push("groq");
   if (extraKeys["NVIDIA_API_KEY"]) availableFallbacks.push("nvidia-llama-3.3-70b");
+  // If NVIDIA is primary, add llama as fallback automatically
+  if (provider.key === "nvidia-kimi-k2.5" && !availableFallbacks.includes("nvidia-llama-3.3-70b")) {
+    availableFallbacks.push("nvidia-llama-3.3-70b");
+  }
   if (extraKeys["GOOGLE_API_KEY"]) availableFallbacks.push("gemini-2.5-flash");
   if (extraKeys["OPENAI_API_KEY"]) availableFallbacks.push("gpt-4o");
 
@@ -325,8 +340,8 @@ async function setup() {
 
   const envLines = [
     "# === Telegram ===",
-    `BOT_TOKEN=${botToken}`,
-    `ALLOWED_USERS=${userId}`,
+    `BOT_TOKEN=${botToken || ""}`,
+    `ALLOWED_USERS=${userId || ""}`,
     "",
     "# === AI Provider ===",
     `PRIMARY_PROVIDER=${provider.key}`,

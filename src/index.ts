@@ -22,21 +22,25 @@ seedDefaults();
 import { Bot, InlineKeyboard } from "grammy";
 import { config } from "./config.js";
 
-// ── Pre-flight config validation ──────────────────────────────────────
-const configErrors: string[] = [];
+// ── Pre-flight config validation (warnings, not fatal) ──────────────
+const hasTelegram = !!config.botToken;
+let hasProvider = true;
 
-if (!config.botToken) {
-  configErrors.push("BOT_TOKEN is missing. Get one from @BotFather on Telegram.");
+if (!hasTelegram) {
+  console.warn("⚠️  BOT_TOKEN not set — Telegram disabled. WebUI + Cron still active.");
+  console.warn("   Run 'alvin-bot setup' or set BOT_TOKEN in ~/.alvin-bot/.env");
 }
 
-if (config.allowedUsers.length === 0) {
-  configErrors.push("ALLOWED_USERS is missing or invalid. Set your numeric Telegram user ID (get it from @userinfobot).");
+if (config.allowedUsers.length === 0 && hasTelegram) {
+  console.warn("⚠️  ALLOWED_USERS not set — nobody can message the Telegram bot yet.");
+  console.warn("   Send /start to @userinfobot on Telegram to find your ID.");
 }
 
 // Check if the chosen provider has a corresponding API key
 const providerKeyMap: Record<string, string> = {
   groq: "GROQ_API_KEY",
   "nvidia-llama-3.3-70b": "NVIDIA_API_KEY",
+  "nvidia-kimi-k2.5": "NVIDIA_API_KEY",
   "gemini-2.5-flash": "GOOGLE_API_KEY",
   openai: "OPENAI_API_KEY",
   "gpt-4o": "OPENAI_API_KEY",
@@ -46,17 +50,11 @@ const requiredKey = providerKeyMap[config.primaryProvider];
 if (requiredKey) {
   const keyName = requiredKey.replace("_API_KEY", "").toLowerCase() as keyof typeof config.apiKeys;
   if (!config.apiKeys[keyName]) {
-    configErrors.push(`${requiredKey} is missing. Your provider "${config.primaryProvider}" needs this key to work.`);
+    hasProvider = false;
+    console.warn(`⚠️  ${requiredKey} is missing — AI chat won't work until configured.`);
+    console.warn(`   Your provider "${config.primaryProvider}" needs this key.`);
+    console.warn(`   Run 'alvin-bot setup' or edit ~/.alvin-bot/.env`);
   }
-}
-
-if (configErrors.length > 0) {
-  console.error("\n❌ Configuration errors:\n");
-  for (const err of configErrors) {
-    console.error(`   • ${err}`);
-  }
-  console.error(`\n   Run 'alvin-bot setup' to fix this, or edit ~/.alvin-bot/.env manually.\n`);
-  process.exit(1);
 }
 import { authMiddleware } from "./middleware/auth.js";
 import { registerCommands } from "./handlers/commands.js";
@@ -82,9 +80,14 @@ discoverTools();
 // Load skill files
 loadSkills();
 
-// Initialize multi-model engine
-const registry = initEngine();
-console.log(`Engine initialized. Primary: ${registry.getActiveKey()}`);
+// Initialize multi-model engine (skip if no provider key)
+let registry: ReturnType<typeof initEngine> | null = null;
+if (hasProvider) {
+  registry = initEngine();
+  console.log(`Engine initialized. Primary: ${registry.getActiveKey()}`);
+} else {
+  console.warn("⚠️  Engine not initialized — no AI provider configured.");
+}
 
 // Load plugins
 const pluginResult = await loadPlugins();
@@ -110,90 +113,94 @@ if (hasMCPConfig()) {
   }
 }
 
-const bot = new Bot(config.botToken);
+// Telegram bot instance (null if no BOT_TOKEN)
+let bot: Bot | null = null;
 
-// Auth middleware — alle Messages durchlaufen das
-bot.use(authMiddleware);
+if (hasTelegram) {
+  bot = new Bot(config.botToken);
 
-// Commands registrieren
-registerCommands(bot);
-registerPluginCommands(bot);
+  // Auth middleware — alle Messages durchlaufen das
+  bot.use(authMiddleware);
 
-// ── WhatsApp Approval Callbacks ──────────────────────────────────────────────
+  // Commands registrieren
+  registerCommands(bot);
+  registerPluginCommands(bot);
 
-bot.callbackQuery(/^wa:approve:(.+)$/, async (ctx) => {
-  const approvalId = ctx.match![1];
-  const { removePendingApproval, getWhatsAppAdapter } = await import("./platforms/whatsapp.js");
-  const pending = removePendingApproval(approvalId);
-  if (!pending) {
-    await ctx.answerCallbackQuery("⏰ Anfrage abgelaufen");
-    await ctx.editMessageText(ctx.msg?.text + "\n\n⏰ _Abgelaufen_", { parse_mode: "Markdown" }).catch(() => {});
-    return;
-  }
+  // ── WhatsApp Approval Callbacks ──────────────────────────────────────────────
 
-  await ctx.answerCallbackQuery("✅ Freigegeben");
-  await ctx.editMessageText(
-    ctx.msg?.text + `\n\n✅ Freigegeben`,
-    { parse_mode: "HTML" }
-  ).catch(() => {});
+  bot.callbackQuery(/^wa:approve:(.+)$/, async (ctx) => {
+    const approvalId = ctx.match![1];
+    const { removePendingApproval, getWhatsAppAdapter } = await import("./platforms/whatsapp.js");
+    const pending = removePendingApproval(approvalId);
+    if (!pending) {
+      await ctx.answerCallbackQuery("⏰ Anfrage abgelaufen");
+      await ctx.editMessageText(ctx.msg?.text + "\n\n⏰ _Abgelaufen_", { parse_mode: "Markdown" }).catch(() => {});
+      return;
+    }
 
-  // Process the message through the platform handler
-  const adapter = getWhatsAppAdapter();
-  if (adapter) {
-    adapter.processApprovedMessage(pending.incoming).catch(err =>
-      console.error("WhatsApp approved message processing error:", err)
-    );
-  }
-});
+    await ctx.answerCallbackQuery("✅ Freigegeben");
+    await ctx.editMessageText(
+      ctx.msg?.text + `\n\n✅ Freigegeben`,
+      { parse_mode: "HTML" }
+    ).catch(() => {});
 
-bot.callbackQuery(/^wa:deny:(.+)$/, async (ctx) => {
-  const approvalId = ctx.match![1];
-  const { removePendingApproval } = await import("./platforms/whatsapp.js");
-  const pending = removePendingApproval(approvalId);
+    // Process the message through the platform handler
+    const adapter = getWhatsAppAdapter();
+    if (adapter) {
+      adapter.processApprovedMessage(pending.incoming).catch(err =>
+        console.error("WhatsApp approved message processing error:", err)
+      );
+    }
+  });
 
-  await ctx.answerCallbackQuery("❌ Abgelehnt");
-  await ctx.editMessageText(
-    (ctx.msg?.text || "") + `\n\n❌ Abgelehnt`,
-    { parse_mode: "HTML" }
-  ).catch(() => {});
+  bot.callbackQuery(/^wa:deny:(.+)$/, async (ctx) => {
+    const approvalId = ctx.match![1];
+    const { removePendingApproval } = await import("./platforms/whatsapp.js");
+    const pending = removePendingApproval(approvalId);
 
-  // Clean up temp media files
-  if (pending?.incoming.media?.path) {
-    const fs = await import("fs");
-    fs.unlink(pending.incoming.media.path, () => {});
-  }
-});
+    await ctx.answerCallbackQuery("❌ Abgelehnt");
+    await ctx.editMessageText(
+      (ctx.msg?.text || "") + `\n\n❌ Abgelehnt`,
+      { parse_mode: "HTML" }
+    ).catch(() => {});
 
-// Content handlers (Reihenfolge wichtig: spezifisch vor allgemein)
-bot.on("message:voice", handleVoice);
-bot.on("message:video", handleVideo);
-bot.on("message:video_note", handleVideo);
-bot.on("message:photo", handlePhoto);
-bot.on("message:document", handleDocument);
-bot.on("message:text", handleMessage);
+    // Clean up temp media files
+    if (pending?.incoming.media?.path) {
+      const fs = await import("fs");
+      fs.unlink(pending.incoming.media.path, () => {});
+    }
+  });
 
-// Error handling — log but don't crash
-bot.catch((err) => {
-  const ctx = err.ctx;
-  const e = err.error;
-  console.error(`Error handling update ${ctx?.update?.update_id}:`, e);
+  // Content handlers (Reihenfolge wichtig: spezifisch vor allgemein)
+  bot.on("message:voice", handleVoice);
+  bot.on("message:video", handleVideo);
+  bot.on("message:video_note", handleVideo);
+  bot.on("message:photo", handlePhoto);
+  bot.on("message:document", handleDocument);
+  bot.on("message:text", handleMessage);
 
-  // Try to notify the user
-  if (ctx?.chat?.id) {
-    ctx.reply("⚠️ Ein interner Fehler ist aufgetreten. Bitte versuche es erneut.").catch(() => {});
-  }
-});
+  // Error handling — log but don't crash
+  bot.catch((err) => {
+    const ctx = err.ctx;
+    const e = err.error;
+    console.error(`Error handling update ${ctx?.update?.update_id}:`, e);
 
-// Graceful shutdown — stops Grammy (commits Telegram offset), then exits
+    // Try to notify the user
+    if (ctx?.chat?.id) {
+      ctx.reply("⚠️ Ein interner Fehler ist aufgetreten. Bitte versuche es erneut.").catch(() => {});
+    }
+  });
+}
+
+// Graceful shutdown
 let isShuttingDown = false;
 const shutdown = async () => {
   if (isShuttingDown) return;
   isShuttingDown = true;
   console.log("Graceful shutdown initiated...");
 
-  // Clean up and exit — PM2 will auto-restart
   stopScheduler();
-  bot.stop();
+  if (bot) bot.stop();
   await unloadPlugins().catch(() => {});
   await disconnectMCP().catch(() => {});
 
@@ -231,8 +238,9 @@ async function startOptionalPlatforms() {
     }
 
     // Wire WhatsApp approval flow — routes to best available channel
-    if (loaded.includes("whatsapp")) {
+    if (loaded.includes("whatsapp") && bot) {
       const { setApprovalRequestFn, setApprovalChannel, getWhatsAppAdapter } = await import("./platforms/whatsapp.js");
+      const telegramBot = bot; // capture for closure
 
       setApprovalRequestFn(async (pending) => {
         const mediaTag = pending.mediaType ? ` [${pending.mediaType}]` : "";
@@ -255,7 +263,7 @@ async function startOptionalPlatforms() {
               .text("✅ Freigeben", `wa:approve:${pending.id}`)
               .text("❌ Ablehnen", `wa:deny:${pending.id}`);
 
-            await bot.api.sendMessage(ownerChatId, msgText, {
+            await telegramBot.api.sendMessage(ownerChatId, msgText, {
               parse_mode: "HTML",
               reply_markup: keyboard,
             });
@@ -325,15 +333,15 @@ async function startOptionalPlatforms() {
 
 startOptionalPlatforms().catch(err => console.error("Platform startup error:", err));
 
-// Start Web UI
+// Start Web UI (ALWAYS — regardless of Telegram/AI config)
 const webServer = startWebServer();
 
 // Start Cron Scheduler
 setNotifyCallback(async (target, text) => {
   try {
-    if (target.platform === "telegram" && target.chatId) {
+    if (target.platform === "telegram" && target.chatId && bot) {
       await bot.api.sendMessage(Number(target.chatId), text, { parse_mode: "Markdown" }).catch(() =>
-        bot.api.sendMessage(Number(target.chatId), text)
+        bot!.api.sendMessage(Number(target.chatId), text)
       );
     } else if (["whatsapp", "discord", "signal"].includes(target.platform) && target.chatId) {
       // Route through platform adapters
@@ -341,16 +349,12 @@ setNotifyCallback(async (target, text) => {
       const adapter = getAdapter(target.platform);
       if (adapter) {
         await adapter.sendText(target.chatId, text);
-      } else {
+      } else if (bot && config.allowedUsers.length > 0) {
         console.warn(`Cron notify: ${target.platform} adapter not loaded, falling back to Telegram`);
-        // Fallback: send to first allowed Telegram user
-        if (config.allowedUsers.length > 0) {
-          await bot.api.sendMessage(config.allowedUsers[0], `[${target.platform}] ${text}`).catch(() => {});
-        }
+        await bot.api.sendMessage(config.allowedUsers[0], `[${target.platform}] ${text}`).catch(() => {});
       }
     } else if (target.platform === "web") {
       // Web notifications are handled by the WebSocket clients polling cron status
-      // Nothing to do here
     }
   } catch (err) {
     console.error(`Cron notify error (${target.platform}):`, err);
@@ -358,19 +362,28 @@ setNotifyCallback(async (target, text) => {
 });
 startScheduler();
 
-// Start
+// Start Telegram polling (if configured)
 import { setTelegramConnected } from "./platforms/telegram.js";
 
-await bot.start({
-  drop_pending_updates: true,
-  onStart: () => {
-    const me = bot.botInfo;
-    setTelegramConnected(me.first_name, me.username);
-    console.log(`🤖 Alvin Bot v3.0.0 gestartet (@${me.username})`);
-    console.log(`   Provider: ${registry.getActiveKey()}`);
-    console.log(`   Users: ${config.allowedUsers.length} authorized`);
+if (bot) {
+  await bot.start({
+    drop_pending_updates: true,
+    onStart: () => {
+      const me = bot!.botInfo;
+      setTelegramConnected(me.first_name, me.username);
+      console.log(`🤖 Alvin Bot started (@${me.username})`);
+      console.log(`   Provider: ${registry?.getActiveKey() || "none"}`);
+      console.log(`   Users: ${config.allowedUsers.length} authorized`);
 
-    // Start heartbeat monitor
-    startHeartbeat();
-  },
-});
+      // Start heartbeat monitor
+      startHeartbeat();
+    },
+  });
+} else {
+  console.log(`🤖 Alvin Bot started (WebUI-only mode)`);
+  console.log(`   Provider: ${registry?.getActiveKey() || "none"}`);
+  console.log(`   WebUI: http://localhost:${process.env.WEB_PORT || 3100}`);
+
+  // Start heartbeat monitor even without Telegram
+  startHeartbeat();
+}

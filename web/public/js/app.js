@@ -584,7 +584,29 @@ async function loadDashboard() {
   const data = await res.json();
   const tok = data.tokens || {};
   const fmtTokens = (n) => n >= 1000000 ? (n/1000000).toFixed(1) + 'M' : n >= 1000 ? (n/1000).toFixed(1) + 'k' : String(n || 0);
+  // Setup status cards (only show if something is unconfigured)
+  const setup = data.setup || {};
+  let setupHtml = '';
+  if (!setup.telegram || !setup.provider) {
+    const tgStatus = setup.telegram
+      ? `<span style="color:var(--green)">✅ Connected</span>`
+      : `<span style="color:var(--yellow)">⚠️ Not configured</span> — <a href="#" onclick="navigateTo('platforms');return false" style="color:var(--accent)">Set up</a>`;
+    const aiStatus = setup.provider
+      ? `<span style="color:var(--green)">✅ ${data.model.name}</span>`
+      : `<span style="color:var(--yellow)">⚠️ Not configured</span> — <a href="#" onclick="navigateTo('models');return false" style="color:var(--accent)">Set up</a>`;
+    setupHtml = `
+      <div class="card" style="grid-column:1/-1;border:1px solid var(--yellow);background:var(--bg2)">
+        <h3>${icon('alert-triangle', 14)} Setup Status</h3>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:8px">
+          <div><strong>Telegram:</strong> ${tgStatus}</div>
+          <div><strong>AI Provider:</strong> ${aiStatus}</div>
+        </div>
+      </div>
+    `;
+  }
+
   document.getElementById('dashboard-cards').innerHTML = `
+    ${setupHtml}
     <div class="card"><h3>${icon('bot', 14)} ${t('dashboard.model')}</h3><div class="value">${data.model.name}</div><div class="sub">${data.model.model}</div></div>
     <div class="card"><h3>${icon('clock', 14)} ${t('dashboard.uptime')}</h3><div class="value">${Math.floor(data.bot.uptime/3600)}h ${Math.floor(data.bot.uptime%3600/60)}m</div><div class="sub">v${data.bot.version}</div></div>
     <div class="card"><h3>${icon('zap', 14)} ${t('dashboard.tokens')}</h3><div class="value">${fmtTokens(tok.total)}</div><div class="sub">${fmtTokens(tok.totalInput)} ${t('dashboard.tokens.in')} · ${fmtTokens(tok.totalOutput)} ${t('dashboard.tokens.out')} · $${(tok.totalCost || 0).toFixed(4)}</div></div>

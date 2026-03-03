@@ -208,8 +208,13 @@ async function handleAPI(req: http.IncomingMessage, res: http.ServerResponse, ur
 
   // GET /api/status
   if (urlPath === "/api/status") {
-    const registry = getRegistry();
-    const active = registry.getActive().getInfo();
+    let modelInfo = { name: "Not configured", model: "none", status: "unconfigured" };
+    try {
+      const registry = getRegistry();
+      const active = registry.getActive().getInfo();
+      modelInfo = { name: active.name, model: active.model, status: active.status };
+    } catch { /* engine not initialized — no provider configured */ }
+
     const memory = getMemoryStats();
     const index = getIndexStats();
     const plugins = getLoadedPlugins();
@@ -227,9 +232,10 @@ async function handleAPI(req: http.IncomingMessage, res: http.ServerResponse, ur
       totalCost += s.totalCost || 0;
     }
 
+    const { config: appConfig } = await import("../config.js");
     res.end(JSON.stringify({
       bot: { version: "3.0.0", uptime: process.uptime() },
-      model: { name: active.name, model: active.model, status: active.status },
+      model: modelInfo,
       memory: { ...memory, vectors: index.entries, indexSize: index.sizeBytes },
       plugins: plugins.length,
       mcp: mcp.length,
@@ -240,6 +246,10 @@ async function handleAPI(req: http.IncomingMessage, res: http.ServerResponse, ur
         totalOutput: totalOutputTokens,
         total: totalInputTokens + totalOutputTokens,
         totalCost,
+      },
+      setup: {
+        telegram: !!appConfig.botToken,
+        provider: modelInfo.status !== "unconfigured",
       },
     }));
     return;

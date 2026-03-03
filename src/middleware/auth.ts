@@ -29,7 +29,10 @@ export async function authMiddleware(
   // ── DM Auth ─────────────────────────────────────
   if (chatType === "private") {
     if (!userId || !config.allowedUsers.includes(userId)) {
-      await ctx.reply("Zugriff verweigert.");
+      console.log(`Unauthorized DM attempt from user ID: ${userId || "unknown"} (username: ${ctx.from?.username || "none"})`);
+      await ctx.reply(
+        `Hi! I'm not set up to chat with you yet.\n\nAsk my admin to add your user ID: ${userId || "unknown"}`
+      );
       return;
     }
     await next();
