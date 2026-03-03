@@ -260,8 +260,8 @@ alvin-bot/
 ├── web/public/                  # Web UI (HTML/CSS/JS, zero build step)
 ├── plugins/                     # Plugin directory (6 built-in)
 ├── docs/
-│   ├── tools.json               # Custom tool definitions
 │   └── custom-models.json       # Custom model configurations
+├── TOOLS.md                     # Custom tool definitions (Markdown)
 ├── SOUL.md                      # Agent personality
 ├── bin/cli.js                   # CLI entry point
 └── ecosystem.config.cjs         # PM2 configuration

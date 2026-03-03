@@ -14,6 +14,7 @@ import { resolve, dirname } from "path";
 import { fileURLToPath } from "url";
 
 const BOT_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
+const TOOLS_MD = resolve(BOT_ROOT, "TOOLS.md");
 const TOOLS_JSON = resolve(BOT_ROOT, "docs", "tools.json");
 
 interface DiscoveredTool {
@@ -119,8 +120,22 @@ function whichTool(name: string): string | null {
   }
 }
 
-/** Load custom tool definitions from docs/tools.json */
+/** Load custom tool names from TOOLS.md or docs/tools.json */
 function loadCustomTools(): string[] {
+  // Prefer TOOLS.md — extract tool names from ## headings
+  if (fs.existsSync(TOOLS_MD)) {
+    try {
+      const content = fs.readFileSync(TOOLS_MD, "utf-8");
+      const names: string[] = [];
+      for (const match of content.matchAll(/^## (.+)$/gm)) {
+        const name = match[1].trim().replace(/\s+/g, "_").toLowerCase();
+        if (name) names.push(name);
+      }
+      if (names.length > 0) return names;
+    } catch { /* fall through */ }
+  }
+
+  // Legacy fallback: docs/tools.json
   try {
     const data = JSON.parse(fs.readFileSync(TOOLS_JSON, "utf-8"));
     const tools = data.tools || data.items || (Array.isArray(data) ? data : []);
@@ -197,7 +212,7 @@ export function discoverTools(forceRescan = false): ToolReport {
 
   // Custom tools
   if (customTools.length > 0) {
-    lines.push(`### 🛠️ Custom Tools (${customTools.length} definiert in tools.json)`);
+    lines.push(`### 🛠️ Custom Tools (${customTools.length} definiert in TOOLS.md)`);
     lines.push(`Verfügbar über die Web UI oder direkt per Name. Beispiele: ${customTools.slice(0, 10).join(", ")}${customTools.length > 10 ? "..." : ""}`);
     lines.push("");
   }

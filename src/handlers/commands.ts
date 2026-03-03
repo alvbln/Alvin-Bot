@@ -979,7 +979,7 @@ export function registerCommands(bot: Bot): void {
       await ctx.reply(
         "🔧 *Custom Tools*\n\n" +
         "Keine Tools konfiguriert.\n" +
-        "Erstelle `docs/tools.json` (siehe `docs/tools.example.json`).",
+        "Erstelle `TOOLS.md` (siehe `TOOLS.example.md`).",
         { parse_mode: "Markdown" }
       );
       return;

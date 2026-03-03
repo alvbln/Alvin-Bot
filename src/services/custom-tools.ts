@@ -1,33 +1,23 @@
 /**
- * Custom Tool Registration — Users define their own tools via config.
+ * Custom Tool Registration — Users define their own tools via Markdown.
  *
- * Configuration via docs/tools.json:
- * {
- *   "tools": [
- *     {
- *       "name": "deploy_app",
- *       "description": "Deploy the application",
- *       "command": "ssh server 'cd /app && git pull && pm2 restart all'",
- *       "timeout": 30000
- *     },
- *     {
- *       "name": "check_server",
- *       "description": "Check server status",
- *       "type": "http",
- *       "url": "https://api.example.com/health",
- *       "method": "GET",
- *       "headers": { "Authorization": "Bearer ..." }
- *     },
- *     {
- *       "name": "quick_note",
- *       "description": "Send a quick Telegram command",
- *       "command": "echo '{{text}}' >> ~/notes.txt",
- *       "parameters": {
- *         "text": { "type": "string", "description": "Note text" }
- *       }
- *     }
- *   ]
- * }
+ * Configuration via TOOLS.md (Markdown format):
+ *
+ * ## tool_name
+ * Tool description (first line after heading)
+ * ```
+ * shell command here
+ * ```
+ * **Type:** http (optional, default: shell)
+ * **URL:** https://example.com/api (for HTTP tools)
+ * **Method:** GET|POST|PUT|DELETE (default: GET)
+ * **Headers:** Key: Value (one per line)
+ * **Body:** request body
+ * **Timeout:** 30s, 5m, or milliseconds
+ * **Parameters:**
+ * - `name` (type, required): description
+ *
+ * Legacy: Also supports docs/tools.json as fallback.
  */
 
 import fs from "fs";
@@ -37,12 +27,18 @@ import { fileURLToPath } from "url";
 import { isSelfRestartCommand, scheduleGracefulRestart } from "./restart.js";
 
 const BOT_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
-const TOOLS_CONFIG = resolve(BOT_ROOT, "docs", "tools.json");
-const TOOLS_EXAMPLE = resolve(BOT_ROOT, "docs", "tools.example.json");
+const TOOLS_MD = resolve(BOT_ROOT, "TOOLS.md");
+const TOOLS_MD_EXAMPLE = resolve(BOT_ROOT, "TOOLS.example.md");
+const TOOLS_JSON = resolve(BOT_ROOT, "docs", "tools.json");
+const TOOLS_JSON_EXAMPLE = resolve(BOT_ROOT, "docs", "tools.example.json");
 
-// Auto-initialize tools.json from example if missing
-if (!fs.existsSync(TOOLS_CONFIG) && fs.existsSync(TOOLS_EXAMPLE)) {
-  fs.copyFileSync(TOOLS_EXAMPLE, TOOLS_CONFIG);
+// Auto-initialize TOOLS.md from example if missing (prefer MD over JSON)
+if (!fs.existsSync(TOOLS_MD) && fs.existsSync(TOOLS_MD_EXAMPLE)) {
+  fs.copyFileSync(TOOLS_MD_EXAMPLE, TOOLS_MD);
+}
+// Legacy fallback: also init tools.json if someone depends on it
+if (!fs.existsSync(TOOLS_JSON) && fs.existsSync(TOOLS_JSON_EXAMPLE)) {
+  fs.copyFileSync(TOOLS_JSON_EXAMPLE, TOOLS_JSON);
 }
 
 // ── Types ───────────────────────────────────────────────
@@ -70,15 +66,190 @@ interface ToolsConfig {
   tools: CustomToolDef[];
 }
 
+// ── Markdown Parser ─────────────────────────────────────
+
+function parseTimeout(value: string): number {
+  const trimmed = value.trim().toLowerCase();
+  const match = trimmed.match(/^(\d+(?:\.\d+)?)\s*(ms|s|m|h)?$/);
+  if (!match) return 30000;
+  const num = parseFloat(match[1]);
+  switch (match[2]) {
+    case "h": return num * 3600000;
+    case "m": return num * 60000;
+    case "s": return num * 1000;
+    case "ms": return num;
+    default: return num > 1000 ? num : num * 1000; // bare number: assume seconds if small
+  }
+}
+
+function parseToolsMd(content: string): CustomToolDef[] {
+  const tools: CustomToolDef[] = [];
+  // Split by ## headings (tool boundaries)
+  const sections = content.split(/^## /m).slice(1); // skip preamble before first ##
+
+  for (const section of sections) {
+    const lines = section.split("\n");
+    const name = lines[0].trim().replace(/\s+/g, "_").toLowerCase();
+    if (!name) continue;
+
+    const tool: CustomToolDef = { name, description: "" };
+
+    // First non-empty line after heading = description
+    let i = 1;
+    while (i < lines.length && !lines[i].trim()) i++;
+    if (i < lines.length && !lines[i].startsWith("```") && !lines[i].startsWith("**")) {
+      tool.description = lines[i].trim();
+      i++;
+    }
+
+    // Parse remaining lines
+    let inCodeBlock = false;
+    let codeLines: string[] = [];
+    let inHeaders = false;
+    const headerLines: string[] = [];
+    let inParams = false;
+    const paramEntries: Array<{ name: string; type: string; description: string; required: boolean }> = [];
+
+    for (; i < lines.length; i++) {
+      const line = lines[i];
+
+      // Code block (command)
+      if (line.startsWith("```")) {
+        if (inCodeBlock) {
+          tool.command = codeLines.join("\n").trim();
+          inCodeBlock = false;
+          codeLines = [];
+        } else {
+          inCodeBlock = true;
+        }
+        continue;
+      }
+      if (inCodeBlock) {
+        codeLines.push(line);
+        continue;
+      }
+
+      // Bold-key fields: **Key:** value
+      const boldMatch = line.match(/^\*\*(\w[\w\s]*):\*\*\s*(.*)/);
+      if (boldMatch) {
+        const key = boldMatch[1].trim().toLowerCase();
+        const value = boldMatch[2].trim();
+
+        // End previous multi-line sections
+        if (key !== "headers") inHeaders = false;
+        if (key !== "parameters") inParams = false;
+
+        switch (key) {
+          case "type":
+            tool.type = value.toLowerCase() as "shell" | "http";
+            break;
+          case "url":
+            tool.url = value;
+            break;
+          case "method":
+            tool.method = value.toUpperCase();
+            break;
+          case "headers":
+            inHeaders = true;
+            if (value) headerLines.push(value);
+            break;
+          case "body":
+            tool.body = value;
+            break;
+          case "timeout":
+            tool.timeout = parseTimeout(value);
+            break;
+          case "parameters":
+            inParams = true;
+            break;
+        }
+        continue;
+      }
+
+      // Header continuation lines (Key: Value)
+      if (inHeaders && line.match(/^\s*-?\s*\S+:\s/)) {
+        headerLines.push(line.replace(/^\s*-?\s*/, "").trim());
+        continue;
+      } else if (inHeaders && line.trim()) {
+        inHeaders = false;
+      }
+
+      // Parameter entries: - `name` (type, required): description
+      if (inParams && line.match(/^\s*-\s*`/)) {
+        const paramMatch = line.match(/^\s*-\s*`(\w+)`\s*\(([^)]+)\)\s*:?\s*(.*)/);
+        if (paramMatch) {
+          const pName = paramMatch[1];
+          const pMeta = paramMatch[2];
+          const pDesc = paramMatch[3].trim();
+          const parts = pMeta.split(",").map(s => s.trim().toLowerCase());
+          const pType = parts.find(p => ["string", "number", "boolean", "integer"].includes(p)) || "string";
+          const pRequired = parts.includes("required");
+          paramEntries.push({ name: pName, type: pType, description: pDesc, required: pRequired });
+        }
+        continue;
+      } else if (inParams && line.trim() && !line.startsWith(" ")) {
+        inParams = false;
+      }
+    }
+
+    // Assemble headers
+    if (headerLines.length > 0) {
+      tool.headers = {};
+      for (const h of headerLines) {
+        const colonIdx = h.indexOf(":");
+        if (colonIdx > 0) {
+          tool.headers[h.slice(0, colonIdx).trim()] = h.slice(colonIdx + 1).trim();
+        }
+      }
+    }
+
+    // Assemble parameters
+    if (paramEntries.length > 0) {
+      tool.parameters = {};
+      for (const p of paramEntries) {
+        tool.parameters[p.name] = { type: p.type, description: p.description, required: p.required };
+      }
+    }
+
+    tools.push(tool);
+  }
+
+  return tools;
+}
+
 // ── Config Loading ──────────────────────────────────────
 
 function loadToolsConfig(): ToolsConfig {
-  try {
-    const raw = fs.readFileSync(TOOLS_CONFIG, "utf-8");
-    return JSON.parse(raw);
-  } catch {
-    return { tools: [] };
+  // Prefer TOOLS.md (Markdown format)
+  if (fs.existsSync(TOOLS_MD)) {
+    try {
+      const content = fs.readFileSync(TOOLS_MD, "utf-8");
+      const tools = parseToolsMd(content);
+      return { tools };
+    } catch {
+      // Fall through to JSON
+    }
   }
+
+  // Legacy fallback: docs/tools.json
+  if (fs.existsSync(TOOLS_JSON)) {
+    try {
+      const raw = fs.readFileSync(TOOLS_JSON, "utf-8");
+      return JSON.parse(raw);
+    } catch {
+      // ignore
+    }
+  }
+
+  return { tools: [] };
+}
+
+/**
+ * Get the path of the active tools config file.
+ */
+export function getToolsConfigPath(): string {
+  if (fs.existsSync(TOOLS_MD)) return TOOLS_MD;
+  return TOOLS_JSON;
 }
 
 // ── Template Substitution ───────────────────────────────
@@ -201,5 +372,5 @@ export function listCustomTools(): Array<{ name: string; description: string; ty
  * Check if custom tools config exists.
  */
 export function hasCustomTools(): boolean {
-  return fs.existsSync(TOOLS_CONFIG);
+  return fs.existsSync(TOOLS_MD) || fs.existsSync(TOOLS_JSON);
 }

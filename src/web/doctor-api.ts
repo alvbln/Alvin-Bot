@@ -25,7 +25,7 @@ const BACKUP_FILES = [
   ".env",
   "SOUL.md",
   "CLAUDE.md",
-  "docs/tools.json",
+  "TOOLS.md",
   "docs/custom-models.json",
   "docs/cron-jobs.json",
   "docs/mcp.json",
@@ -113,11 +113,12 @@ function runHealthCheck(): HealthIssue[] {
     });
   }
 
-  // 3. Check tools.json validity
-  const toolsFile = resolve(DOCS_DIR, "tools.json");
-  if (fs.existsSync(toolsFile)) {
+  // 3. Check TOOLS.md or tools.json validity
+  const toolsMd = resolve(BOT_ROOT, "TOOLS.md");
+  const toolsJson = resolve(DOCS_DIR, "tools.json");
+  if (!fs.existsSync(toolsMd) && fs.existsSync(toolsJson)) {
     try {
-      JSON.parse(fs.readFileSync(toolsFile, "utf-8"));
+      JSON.parse(fs.readFileSync(toolsJson, "utf-8"));
     } catch {
       issues.push({
         severity: "error",
@@ -244,6 +245,12 @@ function autoRepair(action: string): { ok: boolean; message: string } {
       }
 
       case "fix-tools-json": {
+        // Reset to empty — prefer creating TOOLS.md
+        const toolsMdPath = resolve(BOT_ROOT, "TOOLS.md");
+        if (!fs.existsSync(toolsMdPath)) {
+          fs.writeFileSync(toolsMdPath, "# Custom Tools\n\n> Define your own tools here. Each `##` heading creates a new tool.\n");
+          return { ok: true, message: "TOOLS.md mit leerem Toolset erstellt" };
+        }
         fs.writeFileSync(resolve(DOCS_DIR, "tools.json"), JSON.stringify({ tools: [] }, null, 2));
         return { ok: true, message: "tools.json auf leeres Toolset zurückgesetzt" };
       }

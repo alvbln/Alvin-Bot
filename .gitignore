@@ -14,6 +14,7 @@ docs/users/
 
 # User-customized config (examples are tracked instead)
 SOUL.md
+TOOLS.md
 docs/tools.json
 
 # Cron jobs (may contain personal chat IDs)

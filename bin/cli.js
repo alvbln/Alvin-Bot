@@ -345,12 +345,12 @@ async function setup() {
     mkdirSync(memoryDir, { recursive: true });
   }
 
-  // Copy tools.example.json → tools.json if not exists
-  const toolsPath = resolve(docsDir, "tools.json");
-  const toolsExample = resolve(docsDir, "tools.example.json");
-  if (!existsSync(toolsPath) && existsSync(toolsExample)) {
-    copyFileSync(toolsExample, toolsPath);
-    console.log("  ✅ Custom tools initialized from example");
+  // Copy TOOLS.example.md → TOOLS.md if not exists
+  const toolsMdPath = resolve(docsDir, "..", "TOOLS.md");
+  const toolsMdExample = resolve(docsDir, "..", "TOOLS.example.md");
+  if (!existsSync(toolsMdPath) && existsSync(toolsMdExample)) {
+    copyFileSync(toolsMdExample, toolsMdPath);
+    console.log("  ✅ Custom tools initialized from example (TOOLS.md)");
   }
 
   // Copy SOUL.example.md → SOUL.md if not exists (and no default was created above)
