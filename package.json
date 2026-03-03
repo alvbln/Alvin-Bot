@@ -1,6 +1,6 @@
 {
   "name": "alvin-bot",
-  "version": "3.4.2",
+  "version": "3.4.3",
   "description": "Alvin Bot — Your personal AI agent on Telegram, WhatsApp, Discord, Signal, and Web.",
   "type": "module",
   "main": "dist/index.js",
