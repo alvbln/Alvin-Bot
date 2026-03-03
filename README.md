@@ -120,7 +120,7 @@ alvin-bot start          # Start the bot
 ### Option 2: From source
 
 ```bash
-git clone https://github.com/alvbln/alvin-bot.git
+git clone https://github.com/alvbln/Alvin-Bot.git
 cd alvin-bot
 npm install
 node bin/cli.js setup   # Interactive wizard
@@ -138,14 +138,14 @@ Download the pre-built installer for your platform:
 
 | Platform | File | Architecture |
 |----------|------|-------------|
-| macOS | [`Alvin Bot-3.1.1-arm64.dmg`](https://github.com/alvbln/alvin-bot/releases/download/v3.1.1/Alvin.Bot-3.1.1-arm64.dmg) | Apple Silicon (M1+) |
+| macOS | [`Alvin Bot-3.2.0-arm64.dmg`](https://github.com/alvbln/Alvin-Bot/releases/download/v3.2.0/Alvin.Bot-3.2.0-arm64.dmg) | Apple Silicon (M1+) |
 | Windows | Coming soon | x64 |
 | Linux | Coming soon | x64 |
 
 **Build from source:**
 
 ```bash
-git clone https://github.com/alvbln/alvin-bot.git
+git clone https://github.com/alvbln/Alvin-Bot.git
 cd alvin-bot
 npm install
 npm run electron:build:full   # Builds DMG/EXE/AppImage
@@ -161,7 +161,7 @@ The desktop app includes:
 ### Docker
 
 ```bash
-git clone https://github.com/alvbln/alvin-bot.git
+git clone https://github.com/alvbln/Alvin-Bot.git
 cd alvin-bot
 cp .env.example .env    # Edit with your tokens
 docker compose up -d
@@ -205,7 +205,7 @@ pm2 start ecosystem.config.cjs
 
 ---
 
-## 🏗️ Architecture (v3.0)
+## 🏗️ Architecture
 
 ```
                     ┌──────────────┐
@@ -464,14 +464,14 @@ alvin-bot version   # Show version
   - [x] Command Palette (Cmd+K / Ctrl+K) with fuzzy search
 - [x] **Phase 12** — Native Installers (Non-Techie Friendly)
   - [x] Electron wrapper (embedded Node.js + WebUI + tray icon)
-  - [x] macOS `.dmg` build via electron-builder (arm64, 151 MB)
+  - [x] macOS `.dmg` build via electron-builder (arm64)
   - [ ] Windows `.exe` (NSIS) via electron-builder
   - [ ] Linux `.AppImage` + `.deb` via electron-builder
   - [x] Auto-update mechanism (electron-updater)
   - [x] GUI Setup Wizard (provider selection, Telegram token, first-run experience)
-  - [x] Homebrew formula (`brew install alvin-bot`)
-  - [x] Scoop manifest for Windows
-  - [x] One-line install script (`curl -fsSL https://install.alvin-bot.dev | sh`)
+  - [ ] Homebrew formula (`brew install alvin-bot`)
+  - [ ] Scoop manifest for Windows
+  - [ ] One-line install script
   - [x] Docker Compose polish (production-ready `docker-compose.yml`)
 - [x] **Phase 13** — npm publish (security audit)
 
@@ -499,7 +499,7 @@ MIT — See [LICENSE](LICENSE).
 Issues and PRs welcome! Please read the existing code style before contributing.
 
 ```bash
-git clone https://github.com/alvbln/alvin-bot.git
+git clone https://github.com/alvbln/Alvin-Bot.git
 cd alvin-bot
 npm install
 npm run dev    # Development with hot reload

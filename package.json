@@ -156,7 +156,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/alvbln/alvin-bot.git"
+    "url": "git+https://github.com/alvbln/Alvin-Bot.git"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.2.50",
@@ -175,7 +175,7 @@
     "tsx": "^4.19.0",
     "typescript": "^5.9.3"
   },
-  "homepage": "https://github.com/alvbln/alvin-bot",
+  "homepage": "https://github.com/alvbln/Alvin-Bot",
   "engines": {
     "node": ">=18.0.0"
   },
