@@ -20,6 +20,7 @@ TOOLS.md
 telegram-agent-setup-prompt.md
 
 # Personal/runtime data
+docs/tools.json
 docs/memory/*.md
 !docs/memory/.gitkeep
 docs/MEMORY.md
