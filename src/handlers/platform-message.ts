@@ -49,7 +49,7 @@ export async function handlePlatformMessage(
       fs.unlink(msg.media.path, () => {});
 
       if (!transcript.trim()) {
-        await adapter.sendText(msg.chatId, "Konnte die Sprachnachricht nicht verstehen. 🤷");
+        await adapter.sendText(msg.chatId, "Could not understand the voice message. 🤷");
         return;
       }
 
@@ -58,7 +58,7 @@ export async function handlePlatformMessage(
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : String(err);
       console.error("Voice transcription error:", errMsg);
-      await adapter.sendText(msg.chatId, `⚠️ Sprachnachricht-Fehler: ${errMsg}`);
+      await adapter.sendText(msg.chatId, `⚠️ Voice message error: ${errMsg}`);
       if (msg.media.path) fs.unlink(msg.media.path, () => {});
       return;
     }
@@ -182,7 +182,7 @@ export async function handlePlatformMessage(
           session.lastActivity = Date.now();
           break;
         case "error":
-          await adapter.sendText(msg.chatId, `⚠️ Fehler: ${chunk.error}`);
+          await adapter.sendText(msg.chatId, `⚠️ Error: ${chunk.error}`);
           return;
       }
     }
@@ -206,7 +206,7 @@ export async function handlePlatformMessage(
   } catch (err) {
     const errorMsg = err instanceof Error ? err.message : String(err);
     console.error(`Platform message error (${msg.platform}):`, errorMsg);
-    await adapter.sendText(msg.chatId, `⚠️ Fehler: ${errorMsg}`);
+    await adapter.sendText(msg.chatId, `⚠️ Error: ${errorMsg}`);
   } finally {
     if (typingInterval) clearInterval(typingInterval);
     session.isProcessing = false;
@@ -233,7 +233,7 @@ async function handlePlatformCommand(
     case "/new": {
       const { resetSession } = await import("../services/session.js");
       resetSession(userId);
-      await adapter.sendText(msg.chatId, "🔄 Neuer Chat gestartet.");
+      await adapter.sendText(msg.chatId, "🔄 New chat started.");
       return true;
     }
     case "/status": {
@@ -258,17 +258,17 @@ async function handlePlatformCommand(
         session.effort = level as any;
         await adapter.sendText(msg.chatId, `🧠 Effort: ${level}`);
       } else {
-        await adapter.sendText(msg.chatId, `🧠 Aktuell: ${session.effort}\nOptionen: /effort low|medium|high|max`);
+        await adapter.sendText(msg.chatId, `🧠 Current: ${session.effort}\nOptions: /effort low|medium|high|max`);
       }
       return true;
     }
     case "/help": {
       await adapter.sendText(msg.chatId,
-        "🤖 Alvin Bot — Befehle\n\n" +
-        "/new — Neuer Chat\n" +
-        "/status — Session-Info\n" +
-        "/effort <low|medium|high|max> — Denktiefe\n" +
-        "/help — Diese Hilfe\n\n" +
+        "🤖 Alvin Bot — Commands\n\n" +
+        "/new — New chat\n" +
+        "/status — Session info\n" +
+        "/effort <low|medium|high|max> — Thinking depth\n" +
+        "/help — This help\n\n" +
         "For all features use the Web Dashboard or Telegram."
       );
       return true;

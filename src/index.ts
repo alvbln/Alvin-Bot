@@ -138,9 +138,9 @@ if (hasTelegram) {
       return;
     }
 
-    await ctx.answerCallbackQuery("✅ Freigegeben");
+    await ctx.answerCallbackQuery("✅ Approved");
     await ctx.editMessageText(
-      ctx.msg?.text + `\n\n✅ Freigegeben`,
+      ctx.msg?.text + `\n\n✅ Approved`,
       { parse_mode: "HTML" }
     ).catch(() => {});
 
@@ -187,7 +187,7 @@ if (hasTelegram) {
 
     // Try to notify the user
     if (ctx?.chat?.id) {
-      ctx.reply("⚠️ Ein interner Fehler ist aufgetreten. Bitte versuche es erneut.").catch(() => {});
+      ctx.reply("⚠️ An internal error occurred. Please try again.").catch(() => {});
     }
   });
 }
@@ -256,11 +256,11 @@ async function startOptionalPlatforms() {
               `💬 <b>WhatsApp Approval</b>\n\n` +
               `<b>Gruppe:</b> ${pending.groupName}\n` +
               `<b>Von:</b> ${pending.senderName} (+${pending.senderNumber})\n` +
-              `<b>Nachricht:</b>${mediaTag}\n` +
-              `<blockquote>${pending.preview || "(kein Text)"}</blockquote>`;
+              `<b>Message:</b>${mediaTag}\n` +
+              `<blockquote>${pending.preview || "(no text)"}</blockquote>`;
 
             const keyboard = new InlineKeyboard()
-              .text("✅ Freigeben", `wa:approve:${pending.id}`)
+              .text("✅ Approve", `wa:approve:${pending.id}`)
               .text("❌ Ablehnen", `wa:deny:${pending.id}`);
 
             await telegramBot.api.sendMessage(ownerChatId, msgText, {
@@ -284,8 +284,8 @@ async function startOptionalPlatforms() {
                 `🔐 *WhatsApp Approval*\n\n` +
                 `*Gruppe:* ${pending.groupName}\n` +
                 `*Von:* ${pending.senderName} (+${pending.senderNumber})\n` +
-                `*Nachricht:*${mediaTag}\n` +
-                `> ${pending.preview || "(kein Text)"}\n\n` +
+                `*Message:*${mediaTag}\n` +
+                `> ${pending.preview || "(no text)"}\n\n` +
                 `Antworte *ok* oder *nein*`;
 
               await adapter.sendText(ownerWaId, plainText);
@@ -303,7 +303,7 @@ async function startOptionalPlatforms() {
             const { getAdapter } = await import("./platforms/index.js");
             const discord = getAdapter("discord");
             if (discord) {
-              await discord.sendText("owner", `🔐 WhatsApp Approval\n\nGruppe: ${pending.groupName}\nVon: ${pending.senderName} (+${pending.senderNumber})\nNachricht:${mediaTag}\n> ${pending.preview || "(kein Text)"}\n\nReagiere mit ✅ oder ❌`);
+              await discord.sendText("owner", `🔐 WhatsApp Approval\n\nGroup: ${pending.groupName}\nFrom: ${pending.senderName} (+${pending.senderNumber})\nMessage:${mediaTag}\n> ${pending.preview || "(no text)"}\n\nReact with ✅ or ❌`);
               setApprovalChannel("discord");
               sent = true;
             }
@@ -316,7 +316,7 @@ async function startOptionalPlatforms() {
             const { getAdapter } = await import("./platforms/index.js");
             const signal = getAdapter("signal");
             if (signal) {
-              await signal.sendText("owner", `🔐 WhatsApp Approval\n\nGruppe: ${pending.groupName}\nVon: ${pending.senderName}\nNachricht: ${pending.preview || "(kein Text)"}\n\nAntworte ok oder nein`);
+              await signal.sendText("owner", `🔐 WhatsApp Approval\n\nGroup: ${pending.groupName}\nFrom: ${pending.senderName}\nMessage: ${pending.preview || "(no text)"}\n\nReply ok or no`);
               setApprovalChannel("signal");
               sent = true;
             }

@@ -45,7 +45,7 @@ export async function handleMessage(ctx: Context): Promise<void> {
     const quotedText = replyTo.text.length > 500
       ? replyTo.text.slice(0, 500) + "..."
       : replyTo.text;
-    text = `[Bezug auf vorherige Nachricht: "${quotedText}"]\n\n${text}`;
+    text = `[Replying to previous message: "${quotedText}"]\n\n${text}`;
   }
 
   const userId = ctx.from!.id;
@@ -165,7 +165,7 @@ export async function handleMessage(ctx: Context): Promise<void> {
           break;
 
         case "error":
-          await ctx.reply(`Fehler: ${chunk.error}`);
+          await ctx.reply(`Error: ${chunk.error}`);
           break;
       }
     }
@@ -197,7 +197,7 @@ export async function handleMessage(ctx: Context): Promise<void> {
     if (errorMsg.includes("abort")) {
       await ctx.reply("Anfrage abgebrochen.");
     } else {
-      await ctx.reply(`Fehler: ${errorMsg}`);
+      await ctx.reply(`Error: ${errorMsg}`);
     }
   } finally {
     clearInterval(typingInterval);

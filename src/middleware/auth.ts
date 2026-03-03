@@ -65,7 +65,7 @@ export async function authMiddleware(
         try {
           await ctx.api.sendMessage(
             adminId,
-            `🔔 *Neue Gruppenanfrage*\n\n` +
+            `🔔 *New group request*\n\n` +
             `*Gruppe:* ${chatTitle}\n` +
             `*Chat-ID:* \`${chatId}\`\n` +
             `*Added by:* ${userId}\n\n` +

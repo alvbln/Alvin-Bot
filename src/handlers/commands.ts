@@ -443,7 +443,7 @@ export function registerCommands(bot: Bot): void {
     }
 
     await ctx.editMessageText(
-      `🔄 *Fallback-Reihenfolge*\n\n` +
+      `🔄 *Fallback Order*\n\n` +
       `Provider werden in dieser Reihenfolge versucht.\n` +
       `Nutze ⬆️/⬇️ zum Umsortieren.\n\n` +
       `_Last changed: telegram (${new Date().toLocaleString("en-US")})_`,
@@ -478,7 +478,7 @@ export function registerCommands(bot: Bot): void {
     }
 
     await ctx.editMessageText(
-      `🔄 *Fallback-Reihenfolge*\n\n` +
+      `🔄 *Fallback Order*\n\n` +
       `Provider werden in dieser Reihenfolge versucht.\n` +
       `Nutze ⬆️/⬇️ zum Umsortieren.\n\n` +
       `_Last changed: telegram (${new Date().toLocaleString("en-US")})_`,
@@ -707,7 +707,7 @@ export function registerCommands(bot: Bot): void {
         .row()
         .text("🔄 Auto-detect", "lang:auto");
 
-      await ctx.reply(`🌐 *Sprache / Language:* ${session.language === "de" ? "Deutsch" : "English"}`, {
+      await ctx.reply(`🌐 *Language:* ${session.language === "de" ? "Deutsch" : "English"}`, {
         parse_mode: "Markdown",
         reply_markup: keyboard,
       });
@@ -722,7 +722,7 @@ export function registerCommands(bot: Bot): void {
       session.language = arg;
       const { setExplicitLanguage } = await import("../services/language-detect.js");
       setExplicitLanguage(userId, arg);
-      await ctx.reply(arg === "de" ? "✅ Sprache: Deutsch (fixiert)" : "✅ Language: English (fixed)");
+      await ctx.reply(arg === "de" ? "✅ Language: Deutsch (fixed)" : "✅ Language: English (fixed)");
     } else {
       await ctx.reply("Use: `/lang de`, `/lang en`, or `/lang auto`", { parse_mode: "Markdown" });
     }
@@ -750,7 +750,7 @@ export function registerCommands(bot: Bot): void {
       .text(lang === "de" ? "✅ Deutsch" : "Deutsch", "lang:de")
       .text(lang === "en" ? "✅ English" : "English", "lang:en");
 
-    await ctx.editMessageText(`🌐 *Sprache / Language:* ${lang === "de" ? "Deutsch" : "English"}`, {
+    await ctx.editMessageText(`🌐 *Language:* ${lang === "de" ? "Deutsch" : "English"}`, {
       parse_mode: "Markdown",
       reply_markup: keyboard,
     });
@@ -1522,7 +1522,7 @@ export function registerCommands(bot: Bot): void {
         }
 
         await ctx.reply(
-          `🔐 *Sudo / Admin-Rechte*\n\n` +
+          `🔐 *Sudo / Admin Access*\n\n` +
           `*Status:* ${statusIcon} ${status.configured ? (status.verified ? "Configured & verified" : "Configured, not verified") : "Not set up"}\n` +
           `*Storage:* ${status.storageMethod}\n` +
           `*System:* ${status.platform} (${status.user})\n` +
@@ -1626,7 +1626,7 @@ export function registerCommands(bot: Bot): void {
     const action = ctx.match![1];
     if (action === "verify") {
       const result = await verifyPassword();
-      await ctx.answerCallbackQuery(result.ok ? "✅ Sudo funktioniert!" : `❌ ${result.error}`);
+      await ctx.answerCallbackQuery(result.ok ? "✅ Sudo works!" : `❌ ${result.error}`);
     } else if (action === "revoke") {
       revokePassword();
       await ctx.editMessageText("🔴 Sudo access revoked. Password deleted.");
@@ -1682,7 +1682,7 @@ export function registerCommands(bot: Bot): void {
         const status = await getSudoStatus();
         const statusIcon = status.configured ? (status.verified ? "✅" : "⚠️") : "❌";
         await ctx.editMessageText(
-          `🔐 *Sudo / Admin-Rechte*\n\n` +
+          `🔐 *Sudo / Admin Access*\n\n` +
           `*Status:* ${statusIcon} ${status.configured ? (status.verified ? "Active & verified" : "Configured") : "Not set up"}\n` +
           `*Storage:* ${status.storageMethod}\n\n` +
           `Setup: \`/setup sudo <system-password>\`\n` +

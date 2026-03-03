@@ -162,7 +162,7 @@ export async function handleDocument(ctx: Context): Promise<void> {
           session.lastActivity = Date.now();
           break;
         case "error":
-          await ctx.reply(`Fehler: ${chunk.error}`);
+          await ctx.reply(`Error: ${chunk.error}`);
           break;
       }
     }
@@ -194,7 +194,7 @@ export async function handleDocument(ctx: Context): Promise<void> {
     if (errorMsg.includes("abort")) {
       await ctx.reply("Anfrage abgebrochen.");
     } else {
-      await ctx.reply(`Fehler: ${errorMsg}`);
+      await ctx.reply(`Error: ${errorMsg}`);
     }
   } finally {
     clearInterval(typingInterval);

@@ -142,7 +142,7 @@ Always ask yourself first: "Can I solve this with my own intelligence?" If yes ‚
 export function buildSystemPrompt(isSDK: boolean, language: "de" | "en" = "de", chatId?: number | string): string {
   const langInstruction = language === "en"
     ? "Respond in English. If the user writes in another language, mirror their language naturally."
-    : "Antworte auf Deutsch. Wenn der User in einer anderen Sprache schreibt, wechsle nat√ºrlich in seine Sprache.";
+    : "Reply in the language the user writes in. Match their language naturally.";
 
   // Current date/time context
   const now = new Date();

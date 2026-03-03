@@ -171,7 +171,7 @@ export function matchApprovalResponse(text: string): { id: string; approved: boo
 
   // Support: "ok", "ja", "yes", "go", "1", "✅" → approve
   // Support: "nein", "no", "nope", "2", "❌" → deny
-  const approveWords = ["ok", "ja", "yes", "go", "1", "✅", "freigeben", "approve"];
+  const approveWords = ["ok", "ja", "yes", "go", "1", "✅", "approve", "approve"];
   const denyWords = ["nein", "no", "nope", "2", "❌", "ablehnen", "deny", "stop"];
 
   // Check if response references a specific ID (e.g., "ok wa_abc123")
@@ -360,7 +360,7 @@ export class WhatsAppAdapter implements PlatformAdapter {
         const myId = info?.wid?._serialized;
         if (myId) {
           await this.sendText(myId,
-            "🤖 *Alvin Bot ist jetzt auf WhatsApp verbunden!*\n\n" +
+            "🤖 *Alvin Bot is now connected on WhatsApp!*\n\n" +
             "Schreib hier (Eigene Nachrichten) um mit mir zu chatten.\n" +
             "In Gruppenchats: aktiviere Gruppen im Web UI."
           );
@@ -438,7 +438,7 @@ export class WhatsAppAdapter implements PlatformAdapter {
           const pending = removePendingApproval(match.id);
           if (pending) {
             if (match.approved) {
-              await this.sendText(chat.id._serialized, `✅ Freigegeben: ${pending.senderName} in ${pending.groupName}`);
+              await this.sendText(chat.id._serialized, `✅ Approved: ${pending.senderName} in ${pending.groupName}`);
               if (this.handler) await this.handler(pending.incoming);
             } else {
               await this.sendText(chat.id._serialized, `❌ Abgelehnt: ${pending.senderName}`);
@@ -585,10 +585,10 @@ export class WhatsAppAdapter implements PlatformAdapter {
         let preview = text || "";
         if (preview.length > 200) preview = preview.slice(0, 200) + "…";
         if (hasMedia && !preview) {
-          const mediaLabels: Record<string, string> = { ptt: "🎤 Sprachnachricht", audio: "🎵 Audio", image: "📷 Bild", document: "📄 Dokument", video: "🎬 Video", sticker: "🏷 Sticker" };
+          const mediaLabels: Record<string, string> = { ptt: "🎤 Voice message", audio: "🎵 Audio", image: "📷 Image", document: "📄 Document", video: "🎬 Video", sticker: "🏷 Sticker" };
           preview = mediaLabels[msgType] || `📎 ${msgType}`;
         } else if (hasMedia) {
-          preview = `📎 +Medien: ${preview}`;
+          preview = `📎 +Media: ${preview}`;
         }
 
         const pending: PendingApproval = {

@@ -78,7 +78,7 @@ export async function handleVoice(ctx: Context): Promise<void> {
     fs.unlink(audioPath, () => {});
 
     if (!transcript.trim()) {
-      await ctx.reply("Konnte die Sprachnachricht nicht verstehen.");
+      await ctx.reply("Could not understand the voice message.");
       return;
     }
 
@@ -125,7 +125,7 @@ export async function handleVoice(ctx: Context): Promise<void> {
           session.lastActivity = Date.now();
           break;
         case "error":
-          await ctx.reply(`Fehler: ${chunk.error}`);
+          await ctx.reply(`Error: ${chunk.error}`);
           break;
       }
     }
@@ -153,7 +153,7 @@ export async function handleVoice(ctx: Context): Promise<void> {
     if (errorMsg.includes("abort")) {
       await ctx.reply("Anfrage abgebrochen.");
     } else {
-      await ctx.reply(`Fehler: ${errorMsg}`);
+      await ctx.reply(`Error: ${errorMsg}`);
     }
   } finally {
     clearInterval(typingInterval);

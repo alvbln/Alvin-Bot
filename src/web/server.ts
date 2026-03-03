@@ -860,7 +860,7 @@ async function handleAPI(req: http.IncomingMessage, res: http.ServerResponse, ur
       }
       if (!fs.existsSync(absPath)) {
         res.statusCode = 404;
-        res.end(JSON.stringify({ error: "Datei nicht gefunden" }));
+        res.end(JSON.stringify({ error: "File not found" }));
         return;
       }
       const stat = fs.statSync(absPath);
