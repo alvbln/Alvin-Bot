@@ -12,11 +12,8 @@
  */
 
 import fs from "fs";
-import { resolve, dirname } from "path";
-import { fileURLToPath } from "url";
-
-const BOT_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
-const SKILLS_DIR = resolve(BOT_ROOT, "skills");
+import { resolve } from "path";
+import { SKILLS_DIR } from "../paths.js";
 
 // ── Types ───────────────────────────────────────────────
 

@@ -51,20 +51,20 @@ You wake up fresh every session. These files are your memory.
 ### Reading
 
 - **New session** (no sessionId / after `/new`):
-  Read `docs/MEMORY.md` for long-term context
-  Read `docs/memory/YYYY-MM-DD.md` (today + yesterday) if available
+  Read `~/.alvin-bot/memory/MEMORY.md` for long-term context
+  Read `~/.alvin-bot/memory/YYYY-MM-DD.md` (today + yesterday) if available
 
 - **Ongoing session:** Context is already in the conversation
 
 ### Writing
 
-**`docs/memory/YYYY-MM-DD.md`** — Daily session logs:
+**`~/.alvin-bot/memory/YYYY-MM-DD.md`** — Daily session logs:
 - After complex tasks: write a summary
 - On important decisions or insights
 - On topic changes: short checkpoint
 - Format: Append (don't overwrite), with timestamp
 
-**`docs/MEMORY.md`** — Curated long-term memory:
+**`~/.alvin-bot/memory/MEMORY.md`** — Curated long-term memory:
 - "ALWAYS when X, then Y" rules
 - User preferences
 - Project decisions
@@ -83,8 +83,8 @@ Your context window is limited. **Checkpoints protect against data loss.**
 ### After Compacting — Restore Context
 
 **If the conversation history seems thin** (user refers to something you can't see):
-1. Read `docs/memory/YYYY-MM-DD.md` (today + yesterday)
-2. Read `docs/MEMORY.md`
+1. Read `~/.alvin-bot/memory/YYYY-MM-DD.md` (today + yesterday)
+2. Read `~/.alvin-bot/memory/MEMORY.md`
 3. Only THEN respond
 
 ## Cron Jobs — Scheduled Tasks
@@ -142,11 +142,11 @@ The working directory (`cwd`) changes based on the `/dir` command — it's not a
 - **AI:** Multi-Provider (Claude SDK, Groq, Gemini, GPT-4o, NVIDIA NIM, Ollama, OpenRouter)
 - **Web UI:** Express (auth via `WEB_PASSWORD` env var)
 - **TUI:** `alvin-bot tui` — Terminal chat via WebSocket
-- **Cron:** In-app scheduler (30s loop), jobs in `docs/cron-jobs.json`
+- **Cron:** In-app scheduler (30s loop), jobs in `~/.alvin-bot/cron-jobs.json`
 - **PM2:** Process management, config in `ecosystem.config.cjs`
 
 ## Security Rules
 
 - **No personal data in code:** Telegram IDs, paths, tokens → only in `.env`
-- **`.gitignore` protects:** `.env`, `docs/users/`, `docs/cron-jobs.json`, `docs/memory/`, `data/`
+- **`.gitignore` protects:** `.env`, `data/` (personal data lives in `~/.alvin-bot/`, outside the repo)
 - **Never commit secrets** — always check `git diff --cached` before committing

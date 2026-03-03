@@ -19,7 +19,7 @@ SOUL.md
 TOOLS.md
 telegram-agent-setup-prompt.md
 
-# Personal/runtime data
+# Legacy data locations (now in ~/.alvin-bot/)
 docs/tools.json
 docs/memory/*.md
 !docs/memory/.gitkeep
@@ -27,6 +27,8 @@ docs/MEMORY.md
 docs/users/
 docs/whatsapp-groups.json
 docs/cron-jobs.json
+docs/custom-models.json
+docs/mcp.json
 data/
 backups/
 .wwebjs_cache/

@@ -4,38 +4,28 @@ electron/dist/
 .env
 *.js.map
 
-# Memory (persönliche Session-Daten)
-docs/memory/*.md
-docs/MEMORY.md
-!docs/memory/.gitkeep
-
-# User profiles (contain Telegram IDs, usernames)
-docs/users/
-
 # User-customized config (examples are tracked instead)
 SOUL.md
 TOOLS.md
+CLAUDE.md
+
+# Legacy data locations (now in ~/.alvin-bot/)
+docs/memory/*.md
+docs/MEMORY.md
+!docs/memory/.gitkeep
+docs/users/
 docs/tools.json
-
-# Cron jobs (may contain personal chat IDs)
 docs/cron-jobs.json
-
-# Backups (contain personal data snapshots)
+docs/whatsapp-groups.json
+docs/custom-models.json
+docs/mcp.json
+data/
 backups/
-
-# Scripts with personal config
 scripts/
 
-# Access control data (contains group IDs, approvals)
-data/
-
-# WhatsApp auth
-data/whatsapp-auth/
+# WhatsApp / Electron
 .wwebjs_cache/
-docs/whatsapp-groups.json
-data/wa-media/
 release/
 .prod-node-modules/
 .electron-prod/
-CLAUDE.md
 BACKLOG.md

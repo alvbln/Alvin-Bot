@@ -10,13 +10,8 @@
 
 import fs from "fs";
 import path from "path";
-import { resolve, dirname } from "path";
-import { fileURLToPath } from "url";
-
-const BOT_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
-const DOCS_DIR = resolve(BOT_ROOT, "docs");
-const MEMORY_DIR = resolve(DOCS_DIR, "memory");
-const MEMORY_FILE = resolve(DOCS_DIR, "MEMORY.md");
+import { resolve } from "path";
+import { MEMORY_DIR, MEMORY_FILE } from "../paths.js";
 
 // Ensure dirs exist
 if (!fs.existsSync(MEMORY_DIR)) fs.mkdirSync(MEMORY_DIR, { recursive: true });

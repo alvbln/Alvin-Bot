@@ -23,12 +23,8 @@
 
 import { spawn, type ChildProcess } from "child_process";
 import fs from "fs";
-import { resolve, dirname } from "path";
-import { fileURLToPath } from "url";
 import { EventEmitter } from "events";
-
-const BOT_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
-const MCP_CONFIG = resolve(BOT_ROOT, "docs", "mcp.json");
+import { MCP_CONFIG } from "../paths.js";
 
 // ── Types ───────────────────────────────────────────────
 

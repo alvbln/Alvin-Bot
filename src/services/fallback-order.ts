@@ -10,12 +10,8 @@
  */
 
 import fs from "fs";
-import { resolve, dirname } from "path";
-import { fileURLToPath } from "url";
-
-const BOT_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
-const FALLBACK_FILE = resolve(BOT_ROOT, "docs", "fallback-order.json");
-const ENV_FILE = resolve(BOT_ROOT, ".env");
+import { dirname } from "path";
+import { FALLBACK_FILE, ENV_FILE, DATA_DIR } from "../paths.js";
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
@@ -66,10 +62,9 @@ export function setFallbackOrder(
     updatedBy,
   };
 
-  // Ensure docs dir exists
-  const docsDir = resolve(BOT_ROOT, "docs");
-  if (!fs.existsSync(docsDir)) {
-    fs.mkdirSync(docsDir, { recursive: true });
+  // Ensure data dir exists
+  if (!fs.existsSync(DATA_DIR)) {
+    fs.mkdirSync(DATA_DIR, { recursive: true });
   }
 
   // Write JSON

@@ -10,15 +10,10 @@
  */
 
 import fs from "fs";
-import { resolve, dirname } from "path";
-import { fileURLToPath } from "url";
-
-const BOT_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
-const ACCESS_FILE = resolve(BOT_ROOT, "data", "access.json");
-const DATA_DIR = resolve(BOT_ROOT, "data");
+import { ACCESS_FILE, RUNTIME_DIR } from "../paths.js";
 
 // Ensure data dir exists
-if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+if (!fs.existsSync(RUNTIME_DIR)) fs.mkdirSync(RUNTIME_DIR, { recursive: true });
 
 interface GroupInfo {
   chatId: number;

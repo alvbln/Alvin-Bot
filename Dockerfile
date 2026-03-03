@@ -32,15 +32,16 @@ RUN npm ci --omit=dev && npm cache clean --force
 # Copy built output + runtime files
 COPY --from=builder /app/dist/ dist/
 COPY bin/ bin/
-COPY CLAUDE.md SOUL.md ./
+COPY CLAUDE.md SOUL.example.md TOOLS.example.md ./
 
-# Create data directories
-RUN mkdir -p docs/memory data && chown -R alvinbot:alvinbot /app
+# Create data directory (personal data lives here, mount as volume)
+RUN mkdir -p /data && chown -R alvinbot:alvinbot /app /data
 
 # Switch to non-root user
 USER alvinbot
 
 ENV NODE_ENV=production
+ENV ALVIN_DATA_DIR=/data
 
 # Health check: verify the process is running
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \

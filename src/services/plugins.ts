@@ -25,12 +25,9 @@
 
 import fs from "fs";
 import path from "path";
-import { resolve, dirname } from "path";
-import { fileURLToPath } from "url";
+import { resolve } from "path";
 import type { Bot, Context } from "grammy";
-
-const BOT_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
-const PLUGINS_DIR = resolve(BOT_ROOT, "plugins");
+import { PLUGINS_DIR } from "../paths.js";
 
 // ── Types ───────────────────────────────────────────────
 

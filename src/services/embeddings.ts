@@ -13,15 +13,9 @@
 
 import fs from "fs";
 import path from "path";
-import { resolve, dirname } from "path";
-import { fileURLToPath } from "url";
+import { resolve } from "path";
 import { config } from "../config.js";
-
-const BOT_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
-const DOCS_DIR = resolve(BOT_ROOT, "docs");
-const MEMORY_DIR = resolve(DOCS_DIR, "memory");
-const MEMORY_FILE = resolve(DOCS_DIR, "MEMORY.md");
-const INDEX_FILE = resolve(MEMORY_DIR, ".embeddings.json");
+import { MEMORY_DIR, MEMORY_FILE, EMBEDDINGS_IDX as INDEX_FILE } from "../paths.js";
 
 // ── Types ───────────────────────────────────────────────
 

@@ -19,12 +19,8 @@
 import type { PlatformAdapter, IncomingMessage, MessageHandler } from "./types.js";
 import fs from "fs";
 import { resolve, dirname, join } from "path";
-import { fileURLToPath } from "url";
 import { tmpdir } from "os";
-
-const BOT_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
-const AUTH_DIR = resolve(BOT_ROOT, "data", "whatsapp-auth");
-const GROUP_CONFIG_FILE = resolve(BOT_ROOT, "docs", "whatsapp-groups.json");
+import { WHATSAPP_AUTH as AUTH_DIR, WA_GROUPS as GROUP_CONFIG_FILE, WA_MEDIA_DIR, DATA_DIR } from "../paths.js";
 
 // ── Group Whitelist Config ──────────────────────────────────────────────────
 
@@ -63,7 +59,7 @@ function loadGroupConfig(): GroupConfig {
 }
 
 function saveGroupConfig(config: GroupConfig): void {
-  const dir = resolve(BOT_ROOT, "docs");
+  const dir = dirname(GROUP_CONFIG_FILE);
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(GROUP_CONFIG_FILE, JSON.stringify(config, null, 2));
 }
@@ -523,8 +519,8 @@ export class WhatsAppAdapter implements PlatformAdapter {
       try {
         const media = await msg.downloadMedia();
         if (media?.data) {
-          // Store in project data dir (persistent) instead of OS temp (volatile)
-          const tmpDir = resolve(BOT_ROOT, "data", "wa-media");
+          // Store in data dir (persistent) instead of OS temp (volatile)
+          const tmpDir = WA_MEDIA_DIR;
           if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true });
 
           if (isVoice) {

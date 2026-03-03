@@ -22,23 +22,16 @@
 
 import fs from "fs";
 import { execSync } from "child_process";
-import { resolve, dirname } from "path";
-import { fileURLToPath } from "url";
 import { isSelfRestartCommand, scheduleGracefulRestart } from "./restart.js";
-
-const BOT_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
-const TOOLS_MD = resolve(BOT_ROOT, "TOOLS.md");
-const TOOLS_MD_EXAMPLE = resolve(BOT_ROOT, "TOOLS.example.md");
-const TOOLS_JSON = resolve(BOT_ROOT, "docs", "tools.json");
-const TOOLS_JSON_EXAMPLE = resolve(BOT_ROOT, "docs", "tools.example.json");
+import { TOOLS_MD, TOOLS_JSON, TOOLS_EXAMPLE_MD, TOOLS_EXAMPLE_JSON } from "../paths.js";
 
 // Auto-initialize TOOLS.md from example if missing (prefer MD over JSON)
-if (!fs.existsSync(TOOLS_MD) && fs.existsSync(TOOLS_MD_EXAMPLE)) {
-  fs.copyFileSync(TOOLS_MD_EXAMPLE, TOOLS_MD);
+if (!fs.existsSync(TOOLS_MD) && fs.existsSync(TOOLS_EXAMPLE_MD)) {
+  fs.copyFileSync(TOOLS_EXAMPLE_MD, TOOLS_MD);
 }
 // Legacy fallback: also init tools.json if someone depends on it
-if (!fs.existsSync(TOOLS_JSON) && fs.existsSync(TOOLS_JSON_EXAMPLE)) {
-  fs.copyFileSync(TOOLS_JSON_EXAMPLE, TOOLS_JSON);
+if (!fs.existsSync(TOOLS_JSON) && fs.existsSync(TOOLS_EXAMPLE_JSON)) {
+  fs.copyFileSync(TOOLS_EXAMPLE_JSON, TOOLS_JSON);
 }
 
 // ── Types ───────────────────────────────────────────────

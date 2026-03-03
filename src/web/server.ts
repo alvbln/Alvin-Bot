@@ -11,8 +11,7 @@
 import http from "http";
 import fs from "fs";
 import path from "path";
-import { resolve, dirname } from "path";
-import { fileURLToPath } from "url";
+import { resolve } from "path";
 import { execSync } from "child_process";
 import { WebSocketServer, WebSocket } from "ws";
 import { getRegistry } from "../engine.js";
@@ -28,12 +27,7 @@ import { config } from "../config.js";
 import type { QueryOptions, StreamChunk } from "../providers/types.js";
 import { handleSetupAPI } from "./setup-api.js";
 import { handleDoctorAPI } from "./doctor-api.js";
-
-const BOT_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
-const ENV_FILE = resolve(BOT_ROOT, ".env");
-const PUBLIC_DIR = resolve(BOT_ROOT, "web", "public");
-const DOCS_DIR = resolve(BOT_ROOT, "docs");
-const MEMORY_DIR = resolve(DOCS_DIR, "memory");
+import { BOT_ROOT, ENV_FILE, PUBLIC_DIR, MEMORY_DIR, MEMORY_FILE, SOUL_FILE, DATA_DIR, MCP_CONFIG, SKILLS_DIR } from "../paths.js";
 
 const WEB_PORT = parseInt(process.env.WEB_PORT || "3100");
 const WEB_PASSWORD = process.env.WEB_PASSWORD || "";
@@ -112,7 +106,7 @@ async function handleAPI(req: http.IncomingMessage, res: http.ServerResponse, ur
 
   // GET /api/setup-check — is the bot fully configured?
   if (urlPath === "/api/setup-check") {
-    const envPath = resolve(dirname(fileURLToPath(import.meta.url)), "../../.env");
+    const envPath = ENV_FILE;
     let env: Record<string, string> = {};
     try {
       const lines = fs.readFileSync(envPath, "utf-8").split("\n");
@@ -161,7 +155,7 @@ async function handleAPI(req: http.IncomingMessage, res: http.ServerResponse, ur
   if (urlPath === "/api/setup-wizard" && req.method === "POST") {
     try {
       const data = JSON.parse(body);
-      const envPath = resolve(dirname(fileURLToPath(import.meta.url)), "../../.env");
+      const envPath = ENV_FILE;
       let content = fs.existsSync(envPath) ? fs.readFileSync(envPath, "utf-8") : "";
 
       const setEnv = (key: string, value: string) => {
@@ -386,7 +380,7 @@ async function handleAPI(req: http.IncomingMessage, res: http.ServerResponse, ur
     try {
       const { file, content } = JSON.parse(body);
       if (file === "MEMORY.md") {
-        fs.writeFileSync(resolve(DOCS_DIR, "MEMORY.md"), content);
+        fs.writeFileSync(MEMORY_FILE, content);
       } else if (file.endsWith(".md") && !file.includes("..")) {
         fs.writeFileSync(resolve(MEMORY_DIR, file), content);
       } else {
@@ -487,7 +481,7 @@ async function handleAPI(req: http.IncomingMessage, res: http.ServerResponse, ur
     const servers = getMCPStatus();
     const tools = getMCPTools();
     // Read raw config for editing
-    const configPath = resolve(dirname(fileURLToPath(import.meta.url)), "../../docs/mcp.json");
+    const configPath = MCP_CONFIG;
     let rawConfig: Record<string, unknown> = { servers: {} };
     try { rawConfig = JSON.parse(fs.readFileSync(configPath, "utf-8")); } catch {}
     res.end(JSON.stringify({ servers, tools, config: rawConfig, hasConfig: hasMCPConfig() }));
@@ -499,7 +493,7 @@ async function handleAPI(req: http.IncomingMessage, res: http.ServerResponse, ur
     try {
       const { name, command, args, url: serverUrl, env, headers } = JSON.parse(body);
       if (!name) { res.statusCode = 400; res.end(JSON.stringify({ error: "Name required" })); return; }
-      const configPath = resolve(dirname(fileURLToPath(import.meta.url)), "../../docs/mcp.json");
+      const configPath = MCP_CONFIG;
       let config: { servers: Record<string, unknown> } = { servers: {} };
       try { config = JSON.parse(fs.readFileSync(configPath, "utf-8")); } catch {}
       const entry: Record<string, unknown> = {};
@@ -520,7 +514,7 @@ async function handleAPI(req: http.IncomingMessage, res: http.ServerResponse, ur
   if (urlPath === "/api/mcp/remove" && req.method === "POST") {
     try {
       const { name } = JSON.parse(body);
-      const configPath = resolve(dirname(fileURLToPath(import.meta.url)), "../../docs/mcp.json");
+      const configPath = MCP_CONFIG;
       let config: { servers: Record<string, unknown> } = { servers: {} };
       try { config = JSON.parse(fs.readFileSync(configPath, "utf-8")); } catch {}
       delete config.servers[name];
@@ -611,7 +605,7 @@ async function handleAPI(req: http.IncomingMessage, res: http.ServerResponse, ur
     try {
       const { id, name, description, triggers, category, content, priority } = JSON.parse(body);
       if (!id || !name) { res.statusCode = 400; res.end(JSON.stringify({ error: "id and name required" })); return; }
-      const skillsDir = resolve(dirname(fileURLToPath(import.meta.url)), "../../skills");
+      const skillsDir = SKILLS_DIR;
       const skillDir = resolve(skillsDir, id);
       if (!fs.existsSync(skillDir)) fs.mkdirSync(skillDir, { recursive: true });
       const frontmatter = [
@@ -639,10 +633,10 @@ async function handleAPI(req: http.IncomingMessage, res: http.ServerResponse, ur
   if (urlPath === "/api/skills/update" && req.method === "POST") {
     try {
       const { id, content } = JSON.parse(body);
-      const skillPath = resolve(dirname(fileURLToPath(import.meta.url)), "../../skills", id, "SKILL.md");
+      const skillPath = resolve(SKILLS_DIR, id, "SKILL.md");
       if (!fs.existsSync(skillPath)) {
         // Try flat file
-        const flatPath = resolve(dirname(fileURLToPath(import.meta.url)), "../../skills", id + ".md");
+        const flatPath = resolve(SKILLS_DIR, id + ".md");
         if (fs.existsSync(flatPath)) {
           fs.writeFileSync(flatPath, content);
         } else {
@@ -665,8 +659,8 @@ async function handleAPI(req: http.IncomingMessage, res: http.ServerResponse, ur
   if (urlPath === "/api/skills/delete" && req.method === "POST") {
     try {
       const { id } = JSON.parse(body);
-      const skillDir = resolve(dirname(fileURLToPath(import.meta.url)), "../../skills", id);
-      const flatFile = resolve(dirname(fileURLToPath(import.meta.url)), "../../skills", id + ".md");
+      const skillDir = resolve(SKILLS_DIR, id);
+      const flatFile = resolve(SKILLS_DIR, id + ".md");
       if (fs.existsSync(skillDir)) {
         fs.rmSync(skillDir, { recursive: true });
       } else if (fs.existsSync(flatFile)) {
@@ -964,7 +958,7 @@ async function handleAPI(req: http.IncomingMessage, res: http.ServerResponse, ur
   if (urlPath === "/api/soul/save" && req.method === "POST") {
     try {
       const { content } = JSON.parse(body);
-      const soulPath = resolve(BOT_ROOT, "SOUL.md");
+      const soulPath = SOUL_FILE;
       fs.writeFileSync(soulPath, content);
       reloadSoul();
       res.end(JSON.stringify({ ok: true }));
@@ -1119,7 +1113,7 @@ function handleWebSocket(wss: WebSocketServer): void {
           // Handle file upload — save to temp and reference in prompt
           if (file?.dataUrl && file?.name) {
             try {
-              const dataDir = resolve(BOT_ROOT, "data", "web-uploads");
+              const dataDir = resolve(DATA_DIR, "web-uploads");
               if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
               const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
               const filePath = resolve(dataDir, `${Date.now()}_${safeName}`);

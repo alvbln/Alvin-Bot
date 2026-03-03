@@ -10,12 +10,8 @@
 
 import { execSync } from "child_process";
 import fs from "fs";
-import { resolve, dirname } from "path";
-import { fileURLToPath } from "url";
-
-const BOT_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
-const TOOLS_MD = resolve(BOT_ROOT, "TOOLS.md");
-const TOOLS_JSON = resolve(BOT_ROOT, "docs", "tools.json");
+import { resolve } from "path";
+import { TOOLS_MD, TOOLS_JSON, PLUGINS_DIR } from "../paths.js";
 
 interface DiscoveredTool {
   name: string;
@@ -147,11 +143,10 @@ function loadCustomTools(): string[] {
 
 /** Get list of loaded plugins (read plugin directory) */
 function discoverPlugins(): string[] {
-  const pluginsDir = resolve(BOT_ROOT, "plugins");
   try {
-    return fs.readdirSync(pluginsDir)
-      .filter(d => fs.statSync(resolve(pluginsDir, d)).isDirectory())
-      .filter(d => fs.existsSync(resolve(pluginsDir, d, "index.js")));
+    return fs.readdirSync(PLUGINS_DIR)
+      .filter(d => fs.statSync(resolve(PLUGINS_DIR, d)).isDirectory())
+      .filter(d => fs.existsSync(resolve(PLUGINS_DIR, d, "index.js")));
   } catch {
     return [];
   }

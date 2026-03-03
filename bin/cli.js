@@ -16,9 +16,13 @@
 
 import { createInterface } from "readline";
 import { existsSync, writeFileSync, readFileSync, mkdirSync, copyFileSync } from "fs";
-import { resolve } from "path";
+import { resolve, join } from "path";
+import { homedir } from "os";
 import { execSync } from "child_process";
 import { initI18n, t, getLocale } from "../dist/i18n.js";
+
+// Data directory — same logic as src/paths.ts
+const DATA_DIR = process.env.ALVIN_DATA_DIR || join(homedir(), ".alvin-bot");
 
 // Init i18n early
 initI18n();
@@ -331,50 +335,48 @@ async function setup() {
   writeFileSync(envPath, envContent);
   console.log(`  ✅ ${t("setup.envWritten")}`);
 
-  // Create SOUL.md if not exists
-  const soulPath = resolve(process.cwd(), "SOUL.md");
-  if (!existsSync(soulPath)) {
-    writeFileSync(soulPath, t("soul.default"));
-    console.log(`  ✅ ${t("setup.soulCreated")}`);
-  }
-
-  // Create docs directory
-  const docsDir = resolve(process.cwd(), "docs");
-  const memoryDir = resolve(docsDir, "memory");
+  // Create ~/.alvin-bot/ data directory
+  const memoryDir = resolve(DATA_DIR, "memory");
   if (!existsSync(memoryDir)) {
     mkdirSync(memoryDir, { recursive: true });
   }
 
-  // Initialize docs/MEMORY.md if not exists
-  const memoryMdPath = resolve(docsDir, "MEMORY.md");
+  // Create soul.md if not exists
+  const soulPath = resolve(DATA_DIR, "soul.md");
+  if (!existsSync(soulPath)) {
+    const soulExample = resolve(process.cwd(), "SOUL.example.md");
+    if (existsSync(soulExample)) {
+      copyFileSync(soulExample, soulPath);
+      console.log("  ✅ soul.md initialized from example");
+    } else {
+      writeFileSync(soulPath, t("soul.default"));
+      console.log(`  ✅ ${t("setup.soulCreated")}`);
+    }
+  }
+
+  // Initialize memory/MEMORY.md if not exists
+  const memoryMdPath = resolve(DATA_DIR, "memory", "MEMORY.md");
   if (!existsSync(memoryMdPath)) {
     writeFileSync(memoryMdPath, "# Long-term Memory\n\n> This file is your agent's long-term memory. Add important context here.\n> It persists across sessions and is read at every startup.\n");
-    console.log("  ✅ docs/MEMORY.md created");
+    console.log("  ✅ memory/MEMORY.md created");
   }
 
-  // Initialize docs/custom-models.json if not exists
-  const customModelsPath = resolve(docsDir, "custom-models.json");
+  // Initialize custom-models.json if not exists
+  const customModelsPath = resolve(DATA_DIR, "custom-models.json");
   if (!existsSync(customModelsPath)) {
     writeFileSync(customModelsPath, "[]");
-    console.log("  ✅ docs/custom-models.json initialized");
+    console.log("  ✅ custom-models.json initialized");
   }
 
-  // Copy TOOLS.example.md → TOOLS.md if not exists
-  const toolsMdPath = resolve(docsDir, "..", "TOOLS.md");
-  const toolsMdExample = resolve(docsDir, "..", "TOOLS.example.md");
+  // Copy TOOLS.example.md → tools.md if not exists
+  const toolsMdPath = resolve(DATA_DIR, "tools.md");
+  const toolsMdExample = resolve(process.cwd(), "TOOLS.example.md");
   if (!existsSync(toolsMdPath) && existsSync(toolsMdExample)) {
     copyFileSync(toolsMdExample, toolsMdPath);
-    console.log("  ✅ Custom tools initialized from example (TOOLS.md)");
+    console.log("  ✅ Custom tools initialized from example (tools.md)");
   }
 
-  // Copy SOUL.example.md → SOUL.md if not exists (and no default was created above)
-  const soulExample = resolve(process.cwd(), "SOUL.example.md");
-  if (!existsSync(soulPath) && existsSync(soulExample)) {
-    copyFileSync(soulExample, soulPath);
-    console.log("  ✅ SOUL.md initialized from example");
-  }
-
-  // Copy CLAUDE.example.md → CLAUDE.md if not exists
+  // Copy CLAUDE.example.md → CLAUDE.md in BOT_ROOT if not exists
   const claudePath = resolve(process.cwd(), "CLAUDE.md");
   const claudeExample = resolve(process.cwd(), "CLAUDE.example.md");
   if (!existsSync(claudePath) && existsSync(claudeExample)) {
@@ -471,7 +473,7 @@ async function doctor() {
     console.log(`  ❌ ${t("doctor.buildMissing")}`);
   }
 
-  if (existsSync(resolve(process.cwd(), "SOUL.md"))) {
+  if (existsSync(resolve(DATA_DIR, "soul.md")) || existsSync(resolve(process.cwd(), "SOUL.md"))) {
     console.log(`  ✅ ${t("doctor.soul")}`);
   } else {
     console.log(`  ⚠️  ${t("doctor.soulMissing")}`);

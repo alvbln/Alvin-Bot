@@ -6,12 +6,11 @@
  */
 
 import { readFileSync } from "fs";
-import { resolve, dirname } from "path";
-import { fileURLToPath } from "url";
 import { buildMemoryContext } from "./memory.js";
 import { searchMemory } from "./embeddings.js";
 import { getToolSummary } from "./tool-discovery.js";
 import { buildSkillContext } from "./skills.js";
+import { SOUL_FILE } from "../paths.js";
 
 // Resolve display name for the active provider
 function getActiveProviderLabel(): string {
@@ -32,11 +31,9 @@ function getActiveProviderLabel(): string {
   }
 }
 
-const BOT_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
-
 let soulContent = "";
 try {
-  soulContent = readFileSync(resolve(BOT_ROOT, "SOUL.md"), "utf-8");
+  soulContent = readFileSync(SOUL_FILE, "utf-8");
 } catch {
   console.warn("SOUL.md not found — using default personality");
 }
@@ -145,7 +142,7 @@ Always ask yourself first: "Can I solve this with my own intelligence?" If yes �
 export function buildSystemPrompt(isSDK: boolean, language: "de" | "en" = "de", chatId?: number | string): string {
   const langInstruction = language === "en"
     ? "Respond in English. If the user writes in another language, mirror their language naturally."
-    : "Reply in English. If the user writes in another language, naturally mirror their language.";
+    : "Antworte auf Deutsch. Wenn der User in einer anderen Sprache schreibt, wechsle natürlich in seine Sprache.";
 
   // Current date/time context
   const now = new Date();
@@ -233,7 +230,7 @@ export function getSoulContent(): string {
  */
 export function reloadSoul(): boolean {
   try {
-    soulContent = readFileSync(resolve(BOT_ROOT, "SOUL.md"), "utf-8");
+    soulContent = readFileSync(SOUL_FILE, "utf-8");
     return true;
   } catch {
     return false;

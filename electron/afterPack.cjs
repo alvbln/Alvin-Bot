@@ -14,22 +14,25 @@ exports.default = async function(context) {
     return;
   }
 
-  // Files and directories to remove (personal/runtime data)
+  // Files and directories to remove from the build
+  // Personal/runtime data now lives in ~/.alvin-bot/ (outside the repo),
+  // but we still clean up anything that shouldn't be in the app bundle.
   const toRemove = [
-    // Personal config (user creates these from examples at setup)
+    // Personal config that might have been copied in
     'SOUL.md',
     'TOOLS.md',
     'CLAUDE.md',
-    'docs/tools.json',
-    // Runtime data
+    '.env',
+    // Legacy data locations (in case they still exist)
     'docs/memory',
     'docs/MEMORY.md',
     'docs/users',
     'docs/whatsapp-groups.json',
     'docs/cron-jobs.json',
+    'docs/tools.json',
+    'docs/custom-models.json',
     'data',
     'backups',
-    '.env',
     '.wwebjs_cache',
     // Dev/build files
     'telegram-agent-setup-prompt.md',
@@ -52,14 +55,8 @@ exports.default = async function(context) {
     }
   }
 
-  // Create empty docs/memory directory (bot creates files at runtime)
-  const memoryDir = path.join(baseDir, 'docs', 'memory');
-  fs.mkdirSync(memoryDir, { recursive: true });
-  fs.writeFileSync(path.join(memoryDir, '.gitkeep'), '');
-
-  // Create template MEMORY.md
-  const memoryMd = path.join(baseDir, 'docs', 'MEMORY.md');
-  fs.writeFileSync(memoryMd, '# MEMORY.md — Long-term Memory\n\n> This file is auto-populated by the bot during usage.\n');
+  // Data directory is now created at runtime in ~/.alvin-bot/
+  // No need to create docs/memory in the build.
 
   console.log(`  ✅ afterPack: Cleaned ${removed} personal/runtime items`);
 };

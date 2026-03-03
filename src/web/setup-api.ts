@@ -8,18 +8,14 @@
  */
 
 import fs from "fs";
-import { resolve, dirname } from "path";
-import { fileURLToPath } from "url";
+import { resolve } from "path";
 import { execSync } from "child_process";
 import http from "http";
 import { getRegistry } from "../engine.js";
 import { PROVIDER_PRESETS, type ProviderConfig } from "../providers/types.js";
 import { listJobs, createJob, deleteJob, toggleJob, updateJob, runJobNow, formatNextRun, humanReadableSchedule, type CronJob, type JobType } from "../services/cron.js";
 import { storePassword, revokePassword, getSudoStatus, verifyPassword, sudoExec, requestAdminViaDialog, openSystemSettings } from "../services/sudo.js";
-
-const BOT_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
-const ENV_FILE = resolve(BOT_ROOT, ".env");
-const CUSTOM_MODELS_FILE = resolve(BOT_ROOT, "docs", "custom-models.json");
+import { ENV_FILE, CUSTOM_MODELS as CUSTOM_MODELS_FILE, BOT_ROOT, WHATSAPP_AUTH } from "../paths.js";
 
 // ── Env Helpers ─────────────────────────────────────────
 
@@ -838,7 +834,7 @@ export async function handleSetupAPI(
   // POST /api/whatsapp/disconnect — clear auth and disconnect
   if (urlPath === "/api/whatsapp/disconnect" && req.method === "POST") {
     try {
-      const authDir = resolve(BOT_ROOT, "data", "whatsapp-auth");
+      const authDir = WHATSAPP_AUTH;
       if (fs.existsSync(authDir)) {
         fs.rmSync(authDir, { recursive: true });
       }

@@ -11,14 +11,10 @@
  */
 
 import fs from "fs";
-import { resolve, dirname } from "path";
-import { fileURLToPath } from "url";
+import { resolve } from "path";
 import { config } from "../config.js";
 import { killSession } from "./session.js";
-
-const BOT_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
-const DOCS_DIR = resolve(BOT_ROOT, "docs");
-const USERS_DIR = resolve(DOCS_DIR, "users");
+import { USERS_DIR, MEMORY_DIR } from "../paths.js";
 
 // Ensure users dir exists
 if (!fs.existsSync(USERS_DIR)) fs.mkdirSync(USERS_DIR, { recursive: true });
@@ -170,7 +166,7 @@ export function listProfiles(): UserProfile[] {
 export function getUserMemoryDir(userId: number): string {
   const profile = loadProfile(userId);
   if (profile?.isOwner) {
-    return resolve(DOCS_DIR, "memory");
+    return MEMORY_DIR;
   }
   const dir = userMemoryDir(userId);
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });

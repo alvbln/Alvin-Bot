@@ -13,12 +13,9 @@
 import fs from "fs";
 import { execSync } from "child_process";
 import { resolve, dirname } from "path";
-import { fileURLToPath } from "url";
 import { getRegistry } from "../engine.js";
 import type { QueryOptions } from "../providers/types.js";
-
-const BOT_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
-const CRON_FILE = resolve(BOT_ROOT, "docs", "cron-jobs.json");
+import { CRON_FILE, BOT_ROOT, DATA_DIR } from "../paths.js";
 
 // ── Types ───────────────────────────────────────────────
 
@@ -77,7 +74,7 @@ function loadJobs(): CronJob[] {
 }
 
 function saveJobs(jobs: CronJob[]): void {
-  const dir = resolve(BOT_ROOT, "docs");
+  const dir = dirname(CRON_FILE);
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(CRON_FILE, JSON.stringify(jobs, null, 2));
 }

@@ -12,24 +12,19 @@
 import fs from "fs";
 import http from "http";
 import { resolve, dirname, basename } from "path";
-import { fileURLToPath } from "url";
 import { execSync } from "child_process";
+import { BOT_ROOT, ENV_FILE, BACKUP_DIR, DATA_DIR, MEMORY_DIR, MEMORY_FILE, SOUL_FILE, SOUL_EXAMPLE, TOOLS_MD, TOOLS_JSON, CUSTOM_MODELS, CRON_FILE, MCP_CONFIG } from "../paths.js";
 
-const BOT_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
-const ENV_FILE = resolve(BOT_ROOT, ".env");
-const BACKUP_DIR = resolve(BOT_ROOT, "backups");
-const DOCS_DIR = resolve(BOT_ROOT, "docs");
-
-// Files to include in backups
-const BACKUP_FILES = [
-  ".env",
-  "SOUL.md",
-  "CLAUDE.md",
-  "TOOLS.md",
-  "docs/custom-models.json",
-  "docs/cron-jobs.json",
-  "docs/mcp.json",
-  "docs/MEMORY.md",
+// Files to include in backups (absolute paths)
+const BACKUP_FILES: Array<{ src: string; label: string }> = [
+  { src: ENV_FILE, label: ".env" },
+  { src: SOUL_FILE, label: "soul.md" },
+  { src: resolve(BOT_ROOT, "CLAUDE.md"), label: "CLAUDE.md" },
+  { src: TOOLS_MD, label: "tools.md" },
+  { src: CUSTOM_MODELS, label: "custom-models.json" },
+  { src: CRON_FILE, label: "cron-jobs.json" },
+  { src: MCP_CONFIG, label: "mcp.json" },
+  { src: MEMORY_FILE, label: "MEMORY.md" },
 ];
 
 // ── Health Checks ───────────────────────────────────────
@@ -102,23 +97,21 @@ function runHealthCheck(): HealthIssue[] {
     }
   }
 
-  // 2. Check docs directory
-  if (!fs.existsSync(DOCS_DIR)) {
+  // 2. Check data directory
+  if (!fs.existsSync(DATA_DIR)) {
     issues.push({
       severity: "error",
       category: "Files",
-      message: "docs/ directory missing",
-      fix: "Create docs/ directory",
+      message: "Data directory missing (~/.alvin-bot/)",
+      fix: "Create data directory",
       fixAction: "create-docs",
     });
   }
 
   // 3. Check TOOLS.md validity (legacy tools.json as fallback)
-  const toolsMd = resolve(BOT_ROOT, "TOOLS.md");
-  const toolsJson = resolve(DOCS_DIR, "tools.json");
-  if (fs.existsSync(toolsMd)) {
+  if (fs.existsSync(TOOLS_MD)) {
     // Validate TOOLS.md has at least one ## heading (tool definition)
-    const content = fs.readFileSync(toolsMd, "utf-8");
+    const content = fs.readFileSync(TOOLS_MD, "utf-8");
     if (!content.includes("## ")) {
       issues.push({
         severity: "warning",
@@ -128,14 +121,14 @@ function runHealthCheck(): HealthIssue[] {
         fixAction: "fix-tools-json",
       });
     }
-  } else if (fs.existsSync(toolsJson)) {
+  } else if (fs.existsSync(TOOLS_JSON)) {
     try {
-      JSON.parse(fs.readFileSync(toolsJson, "utf-8"));
+      JSON.parse(fs.readFileSync(TOOLS_JSON, "utf-8"));
     } catch {
       issues.push({
         severity: "error",
         category: "Tools",
-        message: "docs/tools.json is not valid JSON",
+        message: "tools.json is not valid JSON",
         fix: "Auto-repair JSON errors or reset to backup",
         fixAction: "fix-tools-json",
       });
@@ -144,22 +137,21 @@ function runHealthCheck(): HealthIssue[] {
     issues.push({
       severity: "info",
       category: "Tools",
-      message: "No custom tools configured (TOOLS.md missing)",
-      fix: "Create TOOLS.md from example",
+      message: "No custom tools configured (tools.md missing)",
+      fix: "Create tools.md from example",
       fixAction: "fix-tools-json",
     });
   }
 
   // 4. Check custom-models.json validity
-  const modelsFile = resolve(DOCS_DIR, "custom-models.json");
-  if (fs.existsSync(modelsFile)) {
+  if (fs.existsSync(CUSTOM_MODELS)) {
     try {
-      JSON.parse(fs.readFileSync(modelsFile, "utf-8"));
+      JSON.parse(fs.readFileSync(CUSTOM_MODELS, "utf-8"));
     } catch {
       issues.push({
         severity: "error",
         category: "Models",
-        message: "docs/custom-models.json is not valid JSON",
+        message: "custom-models.json is not valid JSON",
         fix: "Reset to empty array",
         fixAction: "fix-custom-models",
       });
@@ -167,28 +159,27 @@ function runHealthCheck(): HealthIssue[] {
   }
 
   // 5. Check cron-jobs.json
-  const cronFile = resolve(DOCS_DIR, "cron-jobs.json");
-  if (fs.existsSync(cronFile)) {
+  if (fs.existsSync(CRON_FILE)) {
     try {
-      JSON.parse(fs.readFileSync(cronFile, "utf-8"));
+      JSON.parse(fs.readFileSync(CRON_FILE, "utf-8"));
     } catch {
       issues.push({
         severity: "error",
         category: "Cron",
-        message: "docs/cron-jobs.json is not valid JSON",
+        message: "cron-jobs.json is not valid JSON",
         fix: "Reset to empty array",
         fixAction: "fix-cron-json",
       });
     }
   }
 
-  // 6. Check SOUL.md exists
-  if (!fs.existsSync(resolve(BOT_ROOT, "SOUL.md"))) {
+  // 6. Check soul.md exists
+  if (!fs.existsSync(SOUL_FILE)) {
     issues.push({
       severity: "warning",
       category: "Personality",
-      message: "SOUL.md missing — bot has no personality",
-      fix: "Create default SOUL.md",
+      message: "soul.md missing — bot has no personality",
+      fix: "Create default soul.md",
       fixAction: "create-soul",
     });
   }
@@ -259,39 +250,48 @@ function autoRepair(action: string): { ok: boolean; message: string } {
       }
 
       case "create-docs": {
-        fs.mkdirSync(DOCS_DIR, { recursive: true });
-        fs.mkdirSync(resolve(DOCS_DIR, "memory"), { recursive: true });
-        return { ok: true, message: "docs/ directory created" };
+        fs.mkdirSync(DATA_DIR, { recursive: true });
+        fs.mkdirSync(MEMORY_DIR, { recursive: true });
+        return { ok: true, message: "Data directory created" };
       }
 
       case "fix-tools-json": {
-        // Reset to empty — prefer creating TOOLS.md
-        const toolsMdPath = resolve(BOT_ROOT, "TOOLS.md");
-        if (!fs.existsSync(toolsMdPath)) {
-          fs.writeFileSync(toolsMdPath, "# Custom Tools\n\n> Define your own tools here. Each `##` heading creates a new tool.\n");
-          return { ok: true, message: "TOOLS.md created with empty toolset" };
+        // Reset to empty — prefer creating tools.md
+        if (!fs.existsSync(TOOLS_MD)) {
+          fs.mkdirSync(dirname(TOOLS_MD), { recursive: true });
+          fs.writeFileSync(TOOLS_MD, "# Custom Tools\n\n> Define your own tools here. Each `##` heading creates a new tool.\n");
+          return { ok: true, message: "tools.md created with empty toolset" };
         }
-        fs.writeFileSync(resolve(DOCS_DIR, "tools.json"), JSON.stringify({ tools: [] }, null, 2));
+        fs.mkdirSync(dirname(TOOLS_JSON), { recursive: true });
+        fs.writeFileSync(TOOLS_JSON, JSON.stringify({ tools: [] }, null, 2));
         return { ok: true, message: "tools.json reset to empty toolset" };
       }
 
       case "fix-custom-models": {
-        fs.writeFileSync(resolve(DOCS_DIR, "custom-models.json"), "[]");
+        fs.mkdirSync(dirname(CUSTOM_MODELS), { recursive: true });
+        fs.writeFileSync(CUSTOM_MODELS, "[]");
         return { ok: true, message: "custom-models.json reset" };
       }
 
       case "fix-cron-json": {
-        fs.writeFileSync(resolve(DOCS_DIR, "cron-jobs.json"), "[]");
+        fs.mkdirSync(dirname(CRON_FILE), { recursive: true });
+        fs.writeFileSync(CRON_FILE, "[]");
         return { ok: true, message: "cron-jobs.json reset" };
       }
 
       case "create-soul": {
-        fs.writeFileSync(resolve(BOT_ROOT, "SOUL.md"),
-          "# Alvin Bot — Personality\n\n" +
-          "You are a helpful, direct, and competent AI assistant.\n" +
-          "Reply clearly and precisely. Have opinions. Be genuinely helpful.\n"
-        );
-        return { ok: true, message: "Default SOUL.md created" };
+        fs.mkdirSync(dirname(SOUL_FILE), { recursive: true });
+        // Try to copy from example, otherwise create default
+        if (fs.existsSync(SOUL_EXAMPLE)) {
+          fs.copyFileSync(SOUL_EXAMPLE, SOUL_FILE);
+        } else {
+          fs.writeFileSync(SOUL_FILE,
+            "# Alvin Bot — Personality\n\n" +
+            "You are a helpful, direct, and competent AI assistant.\n" +
+            "Reply clearly and precisely. Have opinions. Be genuinely helpful.\n"
+          );
+        }
+        return { ok: true, message: "Default soul.md created" };
       }
 
       default: {
@@ -322,25 +322,23 @@ function createBackup(name?: string): { ok: boolean; id: string; files: string[]
 
   const backedUp: string[] = [];
 
-  for (const relPath of BACKUP_FILES) {
-    const src = resolve(BOT_ROOT, relPath);
+  for (const { src, label } of BACKUP_FILES) {
     if (fs.existsSync(src)) {
-      const destDir = resolve(backupPath, dirname(relPath));
-      fs.mkdirSync(destDir, { recursive: true });
-      fs.copyFileSync(src, resolve(backupPath, relPath));
-      backedUp.push(relPath);
+      const dest = resolve(backupPath, label);
+      fs.mkdirSync(dirname(dest), { recursive: true });
+      fs.copyFileSync(src, dest);
+      backedUp.push(label);
     }
   }
 
   // Also backup the memory directory
-  const memDir = resolve(DOCS_DIR, "memory");
-  if (fs.existsSync(memDir)) {
-    const memBackup = resolve(backupPath, "docs", "memory");
+  if (fs.existsSync(MEMORY_DIR)) {
+    const memBackup = resolve(backupPath, "memory");
     fs.mkdirSync(memBackup, { recursive: true });
-    for (const f of fs.readdirSync(memDir)) {
+    for (const f of fs.readdirSync(MEMORY_DIR)) {
       if (f.endsWith(".md")) {
-        fs.copyFileSync(resolve(memDir, f), resolve(memBackup, f));
-        backedUp.push(`docs/memory/${f}`);
+        fs.copyFileSync(resolve(MEMORY_DIR, f), resolve(memBackup, f));
+        backedUp.push(`memory/${f}`);
       }
     }
   }
@@ -387,19 +385,21 @@ function restoreBackup(id: string, files?: string[]): { ok: boolean; restored: s
   const restored: string[] = [];
   const errors: string[] = [];
 
-  const filesToRestore = files || BACKUP_FILES;
+  // Build label→dest mapping from BACKUP_FILES
+  const labelToSrc = new Map(BACKUP_FILES.map(bf => [bf.label, bf.src]));
 
-  for (const relPath of filesToRestore) {
-    const src = resolve(backupPath, relPath);
-    const dest = resolve(BOT_ROOT, relPath);
+  const filesToRestore = files || BACKUP_FILES.map(bf => bf.label);
+
+  for (const label of filesToRestore) {
+    const src = resolve(backupPath, label);
+    const dest = labelToSrc.get(label) || resolve(DATA_DIR, label);
     if (fs.existsSync(src)) {
       try {
-        const destDir = dirname(dest);
-        fs.mkdirSync(destDir, { recursive: true });
+        fs.mkdirSync(dirname(dest), { recursive: true });
         fs.copyFileSync(src, dest);
-        restored.push(relPath);
+        restored.push(label);
       } catch (err) {
-        errors.push(`${relPath}: ${err instanceof Error ? err.message : String(err)}`);
+        errors.push(`${label}: ${err instanceof Error ? err.message : String(err)}`);
       }
     }
   }

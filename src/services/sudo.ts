@@ -16,15 +16,12 @@ import { execSync, spawn } from "child_process";
 import os from "os";
 import fs from "fs";
 import crypto from "crypto";
-import { resolve, dirname } from "path";
-import { fileURLToPath } from "url";
+import { resolve } from "path";
+import { SUDO_ENC_FILE as ENCRYPTED_PASS_FILE, SUDO_KEY_FILE as ENCRYPTION_KEY_FILE, RUNTIME_DIR } from "../paths.js";
 
-const BOT_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const PLATFORM = os.platform();
 const KEYCHAIN_SERVICE = "alvin-bot-sudo";
 const KEYCHAIN_ACCOUNT = "alvin-bot";
-const ENCRYPTED_PASS_FILE = resolve(BOT_ROOT, "data", ".sudo-enc");
-const ENCRYPTION_KEY_FILE = resolve(BOT_ROOT, "data", ".sudo-key");
 
 // ── Password Storage ────────────────────────────────────
 
@@ -55,8 +52,7 @@ export function storePassword(password: string): { ok: boolean; method: string; 
       encrypted += cipher.final("hex");
       const authTag = cipher.getAuthTag();
 
-      const dataDir = resolve(BOT_ROOT, "data");
-      if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
+      if (!fs.existsSync(RUNTIME_DIR)) fs.mkdirSync(RUNTIME_DIR, { recursive: true });
 
       // Store key separately (basic separation of concerns)
       fs.writeFileSync(ENCRYPTION_KEY_FILE, Buffer.concat([key, iv]).toString("hex"), { mode: 0o600 });

@@ -6,14 +6,10 @@
  */
 
 import fs from "fs";
-import { resolve, dirname } from "path";
-import { fileURLToPath } from "url";
 import { config } from "./config.js";
 import { createRegistry, type ProviderRegistry, type StreamChunk, type QueryOptions } from "./providers/index.js";
 import type { ProviderConfig } from "./providers/types.js";
-
-const BOT_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const CUSTOM_MODELS_FILE = resolve(BOT_ROOT, "docs", "custom-models.json");
+import { CUSTOM_MODELS as CUSTOM_MODELS_FILE } from "./paths.js";
 
 let registry: ProviderRegistry | null = null;
 

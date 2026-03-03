@@ -1,3 +1,24 @@
+// ── Bootstrap: ensure ~/.alvin-bot/ exists + migrate legacy data ────
+import { ensureDataDirs, seedDefaults } from "./init-data-dir.js";
+import { hasLegacyData, migrateFromLegacy } from "./migrate.js";
+
+// 1. Create directory structure (no files yet)
+ensureDataDirs();
+
+// 2. Migrate legacy data BEFORE seeding defaults (so real data wins over templates)
+if (hasLegacyData()) {
+  console.log("📦 Legacy data detected in repo — migrating to ~/.alvin-bot/ ...");
+  const result = migrateFromLegacy();
+  if (result.copied.length > 0) {
+    console.log(`   Copied: ${result.copied.join(", ")}`);
+  }
+  console.log("   Migration done. Old files left in place (clean up manually).");
+}
+
+// 3. Seed defaults for any files that don't exist yet (fresh install)
+seedDefaults();
+
+// ── Normal imports (safe now — DATA_DIR is ready) ──────────────────
 import { Bot, InlineKeyboard } from "grammy";
 import { config } from "./config.js";
 import { authMiddleware } from "./middleware/auth.js";
