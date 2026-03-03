@@ -115,7 +115,7 @@ export default {
           try {
             await ctx.api.sendChatAction(ctx.chat.id, "typing");
             const output = runHimalaya(`read ${id}`);
-            const truncated = output.length > 3500 ? output.slice(0, 3500) + "\n\n_[...gekürzt]_" : output;
+            const truncated = output.length > 3500 ? output.slice(0, 3500) + "\n\n_[...truncated]_" : output;
             await ctx.reply(`📧 *E-Mail #${id}:*\n\n${truncated}`, { parse_mode: "Markdown" });
           } catch (err) {
             await ctx.reply(`❌ ${err.message}`);

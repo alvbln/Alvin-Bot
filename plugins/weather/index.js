@@ -7,14 +7,14 @@
 
 export default {
   name: "weather",
-  description: "Wetter-Abfragen über wttr.in (kein API Key nötig)",
+  description: "Weather queries via wttr.in (no API key needed)",
   version: "1.0.0",
   author: "Alvin Bot",
 
   commands: [
     {
       command: "weather",
-      description: "Wetter abfragen (z.B. /weather Berlin)",
+      description: "Get weather (e.g. /weather Berlin)",
       handler: async (ctx, args) => {
         const location = args || "Berlin";
 
@@ -27,7 +27,7 @@ export default {
           );
 
           if (!response.ok) {
-            await ctx.reply(`❌ Wetter für "${location}" nicht gefunden.`);
+            await ctx.reply(`❌ Weather for "${location}" not found.`);
             return;
           }
 
@@ -36,7 +36,7 @@ export default {
           const area = data.nearest_area?.[0];
 
           if (!current) {
-            await ctx.reply(`❌ Keine Wetterdaten für "${location}".`);
+            await ctx.reply(`❌ No weather data for "${location}".`);
             return;
           }
 
@@ -69,16 +69,16 @@ export default {
           }).join("\n") || "";
 
           await ctx.reply(
-            `${emoji} *Wetter in ${areaName}*${country ? ` (${country})` : ""}\n\n` +
-            `🌡️ ${temp}°C (gefühlt ${feelsLike}°C)\n` +
+            `${emoji} *Weather in ${areaName}*${country ? ` (${country})` : ""}\n\n` +
+            `🌡️ ${temp}°C (feels like ${feelsLike}°C)\n` +
             `${desc}\n` +
-            `💧 Luftfeuchtigkeit: ${humidity}%\n` +
+            `💧 Humidity: ${humidity}%\n` +
             `💨 Wind: ${wind} km/h ${windDir}\n` +
-            (forecast ? `\n*3-Tage-Vorschau:*\n${forecast}` : ""),
+            (forecast ? `\n*3-Day Forecast:*\n${forecast}` : ""),
             { parse_mode: "Markdown" }
           );
         } catch (err) {
-          await ctx.reply(`❌ Fehler: ${err.message || err}`);
+          await ctx.reply(`❌ Error: ${err.message || err}`);
         }
       },
     },

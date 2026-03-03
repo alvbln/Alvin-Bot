@@ -181,9 +181,9 @@ export function discoverTools(forceRescan = false): ToolReport {
   const plugins = discoverPlugins();
 
   // Build human-readable summary for the system prompt
-  const lines: string[] = ["## Verfügbare Tools & Fähigkeiten\n"];
-  lines.push("Die folgenden Tools sind auf diesem System installiert und einsatzbereit.\n");
-  lines.push("**WICHTIG:** Nutze diese Tools DIREKT. Sage NICHT 'dafür bräuchte ich X' wenn X hier gelistet ist.\n");
+  const lines: string[] = ["## Available Tools & Capabilities\n"];
+  lines.push("The following tools are installed and ready to use on this system.\n");
+  lines.push("**IMPORTANT:** Use these tools DIRECTLY. Do NOT say 'I would need X' when X is listed here.\n");
 
   // Group CLI tools by category
   const byCategory = new Map<string, DiscoveredTool[]>();
@@ -203,26 +203,26 @@ export function discoverTools(forceRescan = false): ToolReport {
 
   // Plugins
   if (plugins.length > 0) {
-    lines.push("### 🔌 Aktive Plugins");
+    lines.push("### 🔌 Active Plugins");
     for (const p of plugins) {
-      lines.push(`- **${p}** — Nutze \`/${p}\` oder frage direkt nach ${p}-Funktionen`);
+      lines.push(`- **${p}** — Use \`/${p}\` or ask directly about ${p} features`);
     }
     lines.push("");
   }
 
   // Custom tools
   if (customTools.length > 0) {
-    lines.push(`### 🛠️ Custom Tools (${customTools.length} definiert in TOOLS.md)`);
-    lines.push(`Verfügbar über die Web UI oder direkt per Name. Beispiele: ${customTools.slice(0, 10).join(", ")}${customTools.length > 10 ? "..." : ""}`);
+    lines.push(`### 🛠️ Custom Tools (${customTools.length} defined in TOOLS.md)`);
+    lines.push(`Available via Web UI or by name. Examples: ${customTools.slice(0, 10).join(", ")}${customTools.length > 10 ? "..." : ""}`);
     lines.push("");
   }
 
   // Usage guidelines
-  lines.push("### 💡 Nutzungsrichtlinien");
-  lines.push("- **Erst machen, dann fragen.** Wenn ein Tool da ist → benutze es direkt.");
-  lines.push("- **`which <tool>`** wenn unsicher ob etwas installiert ist.");
-  lines.push("- **Kombiniere Tools:** z.B. `curl` + `jq` für APIs, `ffmpeg` + `ffprobe` für Media.");
-  lines.push("- **Bei fehlenden Tools:** Installationsvorschlag machen, NICHT aufgeben.");
+  lines.push("### 💡 Usage Guidelines");
+  lines.push("- **Act first, ask later.** If a tool is available → use it directly.");
+  lines.push("- **`which <tool>`** if unsure whether something is installed.");
+  lines.push("- **Combine tools:** e.g. `curl` + `jq` for APIs, `ffmpeg` + `ffprobe` for media.");
+  lines.push("- **Missing tools:** Suggest installation, do NOT give up.");
   lines.push("");
 
   const summary = lines.join("\n");

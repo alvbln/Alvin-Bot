@@ -65,7 +65,7 @@ export async function authMiddleware(
             `🔔 *Neue Gruppenanfrage*\n\n` +
             `*Gruppe:* ${chatTitle}\n` +
             `*Chat-ID:* \`${chatId}\`\n` +
-            `*Hinzugefügt von:* ${userId}\n\n` +
+            `*Added by:* ${userId}\n\n` +
             `Soll Alvin Bot in dieser Gruppe antworten?`,
             { parse_mode: "Markdown", reply_markup: keyboard }
           );

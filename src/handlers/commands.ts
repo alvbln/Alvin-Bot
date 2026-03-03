@@ -22,6 +22,7 @@ import { screenshotUrl, extractText, generatePdf, hasPlaywright } from "../servi
 import { listJobs, createJob, deleteJob, toggleJob, runJobNow, formatNextRun, humanReadableSchedule, type JobType } from "../services/cron.js";
 import { storePassword, revokePassword, getSudoStatus, verifyPassword, sudoExec } from "../services/sudo.js";
 import { config } from "../config.js";
+import { getWebPort } from "../web/server.js";
 
 /** Bot start time for uptime tracking */
 const botStartTime = Date.now();
@@ -35,10 +36,10 @@ function formatBytes(bytes: number): string {
 }
 
 const EFFORT_LABELS: Record<EffortLevel, string> = {
-  low: "Low — Schnelle, knappe Antworten",
-  medium: "Medium — Moderate Denktiefe",
-  high: "High — Tiefes Reasoning (Standard)",
-  max: "Max — Maximaler Aufwand (nur Opus)",
+  low: "Low — Quick, concise answers",
+  medium: "Medium — Moderate reasoning depth",
+  high: "High — Deep reasoning (default)",
+  max: "Max — Maximum effort (Opus only)",
 };
 
 export function registerCommands(bot: Bot): void {
@@ -53,60 +54,63 @@ export function registerCommands(bot: Bot): void {
 
   bot.command("help", async (ctx) => {
     await ctx.reply(
-      `🤖 *Alvin Bot — Befehle*\n\n` +
+      `🤖 *Alvin Bot — Commands*\n\n` +
       `💬 *Chat*\n` +
-      `Einfach schreiben — ich antworte.\n` +
-      `Sprachnachrichten & Fotos verstehe ich auch.\n\n` +
-      `⚙️ *Steuerung*\n` +
-      `/model — KI-Modell wechseln\n` +
-      `/fallback — Provider-Reihenfolge\n` +
-      `/effort — Denktiefe einstellen\n` +
-      `/voice — Sprachantworten an/aus\n` +
-      `/dir <pfad> — Arbeitsverzeichnis\n\n` +
+      `Just write — I'll respond.\n` +
+      `I also understand voice messages & photos.\n\n` +
+      `⚙️ *Controls*\n` +
+      `/model — Switch AI model\n` +
+      `/fallback — Provider order\n` +
+      `/effort — Set reasoning depth\n` +
+      `/voice — Voice replies on/off\n` +
+      `/dir <path> — Working directory\n\n` +
       `🎨 *Extras*\n` +
-      `/imagine <prompt> — Bild generieren\n` +
-      `/remind <zeit> <text> — Erinnerung setzen\n` +
-      `/export — Gesprächsverlauf exportieren\n\n` +
-      `🧠 *Gedächtnis*\n` +
-      `/recall <query> — Semantische Suche\n` +
-      `/remember <text> — Etwas merken\n` +
-      `/reindex — Gedächtnis neu indexieren\n\n` +
+      `/imagine <prompt> — Generate image\n` +
+      `/remind <time> <text> — Set reminder\n` +
+      `/export — Export conversation\n\n` +
+      `🧠 *Memory*\n` +
+      `/recall <query> — Semantic search\n` +
+      `/remember <text> — Remember something\n` +
+      `/reindex — Re-index memory\n\n` +
       `🌐 *Browser*\n` +
       `/browse <URL> — Screenshot\n` +
-      `/browse text <URL> — Text extrahieren\n` +
-      `/browse pdf <URL> — Als PDF\n\n` +
-      `🔌 *Erweiterungen*\n` +
-      `/plugins — Geladene Plugins\n` +
-      `/mcp — MCP Server & Tools\n` +
-      `/users — User-Profile\n\n` +
+      `/browse text <URL> — Extract text\n` +
+      `/browse pdf <URL> — Save as PDF\n\n` +
+      `🔌 *Extensions*\n` +
+      `/plugins — Loaded plugins\n` +
+      `/mcp — MCP servers & tools\n` +
+      `/users — User profiles\n\n` +
+      `🖥️ *Web UI*\n` +
+      `/webui — Open Web UI in browser\n\n` +
       `📊 *Session*\n` +
-      `/status — Aktueller Status\n` +
-      `/new — Neue Session starten\n` +
-      `/cancel — Laufende Anfrage abbrechen\n\n` +
-      `_Tipp: Schick mir Dokumente, Fotos oder Sprachnachrichten!_\n` +
-      `_In Gruppen: @mention oder auf meine Nachricht antworten._`,
+      `/status — Current status\n` +
+      `/new — Start new session\n` +
+      `/cancel — Cancel running request\n\n` +
+      `_Tip: Send me documents, photos, or voice messages!_\n` +
+      `_In groups: @mention me or reply to my messages._`,
       { parse_mode: "Markdown" }
     );
   });
 
   // Register bot commands in Telegram's menu
   bot.api.setMyCommands([
-    { command: "help", description: "Alle Befehle anzeigen" },
-    { command: "model", description: "KI-Modell wechseln" },
-    { command: "effort", description: "Denktiefe einstellen" },
-    { command: "voice", description: "Sprachantworten an/aus" },
-    { command: "status", description: "Aktueller Status" },
-    { command: "new", description: "Neue Session starten" },
-    { command: "dir", description: "Arbeitsverzeichnis wechseln" },
-    { command: "web", description: "Schnelle Websuche" },
-    { command: "imagine", description: "Bild generieren (z.B. /imagine Ein Fuchs)" },
-    { command: "remind", description: "Erinnerung setzen (z.B. /remind 30m Text)" },
-    { command: "export", description: "Gesprächsverlauf exportieren" },
-    { command: "recall", description: "Semantische Gedächtnis-Suche" },
-    { command: "remember", description: "Etwas merken" },
-    { command: "cron", description: "Geplante Jobs verwalten" },
-    { command: "setup", description: "API Keys & Plattformen einrichten" },
-    { command: "cancel", description: "Laufende Anfrage abbrechen" },
+    { command: "help", description: "Show all commands" },
+    { command: "model", description: "Switch AI model" },
+    { command: "effort", description: "Set reasoning depth" },
+    { command: "voice", description: "Voice replies on/off" },
+    { command: "status", description: "Current status" },
+    { command: "new", description: "Start new session" },
+    { command: "dir", description: "Change working directory" },
+    { command: "web", description: "Quick web search" },
+    { command: "imagine", description: "Generate image (e.g. /imagine A fox)" },
+    { command: "remind", description: "Set reminder (e.g. /remind 30m Text)" },
+    { command: "export", description: "Export conversation" },
+    { command: "recall", description: "Semantic memory search" },
+    { command: "remember", description: "Remember something" },
+    { command: "cron", description: "Manage scheduled jobs" },
+    { command: "webui", description: "Open Web UI in browser" },
+    { command: "setup", description: "Configure API keys & platforms" },
+    { command: "cancel", description: "Cancel running request" },
   ]).catch(err => console.error("Failed to set bot commands:", err));
 
   bot.command("start", async (ctx) => {
@@ -114,13 +118,24 @@ export function registerCommands(bot: Bot): void {
     const activeInfo = registry.getActive().getInfo();
 
     await ctx.reply(
-      `👋 *Hey! Ich bin Alvin Bot.*\n\n` +
-      `Dein autonomer KI-Assistent auf Telegram. Schreib mir einfach — ` +
-      `ich verstehe Text, Sprachnachrichten, Fotos und Dokumente.\n\n` +
-      `🤖 Modell: *${activeInfo.name}*\n` +
-      `🧠 Denktiefe: High\n\n` +
-      `Tippe /help für alle Befehle.`,
+      `👋 *Hey! I'm Alvin Bot.*\n\n` +
+      `Your autonomous AI assistant on Telegram. Just write me — ` +
+      `I understand text, voice messages, photos, and documents.\n\n` +
+      `🤖 Model: *${activeInfo.name}*\n` +
+      `🧠 Reasoning: High\n\n` +
+      `Type /help for all commands.`,
       { parse_mode: "Markdown" }
+    );
+  });
+
+  bot.command("webui", async (ctx) => {
+    const port = getWebPort();
+    const url = `http://localhost:${port}`;
+    const keyboard = new InlineKeyboard().url("Open Web UI", url);
+    await ctx.reply(
+      `🌐 *Web UI* is running on port ${port}.\n\n` +
+      `Open in your browser:\n\`${url}\``,
+      { parse_mode: "Markdown", reply_markup: keyboard }
     );
   });
 
@@ -147,13 +162,13 @@ export function registerCommands(bot: Bot): void {
 
     if (hadSession) {
       await ctx.reply(
-        `🔄 *Neue Session gestartet.*\n\n` +
-        `Vorherige Session: ${msgCount} Nachrichten, $${cost.toFixed(4)} Kosten.\n` +
-        `Zusammenfassung in Memory gespeichert.`,
+        `🔄 *New session started.*\n\n` +
+        `Previous session: ${msgCount} messages, $${cost.toFixed(4)} cost.\n` +
+        `Summary saved to memory.`,
         { parse_mode: "Markdown" }
       );
     } else {
-      await ctx.reply("🔄 Neue Session gestartet.");
+      await ctx.reply("🔄 New session started.");
     }
   });
 
@@ -163,7 +178,7 @@ export function registerCommands(bot: Bot): void {
     const newDir = ctx.match?.trim();
 
     if (!newDir) {
-      await ctx.reply(`Aktuelles Verzeichnis: ${session.workingDir}`);
+      await ctx.reply(`Current directory: ${session.workingDir}`);
       return;
     }
 
@@ -173,9 +188,9 @@ export function registerCommands(bot: Bot): void {
 
     if (fs.existsSync(resolved) && fs.statSync(resolved).isDirectory()) {
       session.workingDir = resolved;
-      await ctx.reply(`Arbeitsverzeichnis: ${session.workingDir}`);
+      await ctx.reply(`Working directory: ${session.workingDir}`);
     } else {
-      await ctx.reply(`Verzeichnis nicht gefunden: ${resolved}`);
+      await ctx.reply(`Directory not found: ${resolved}`);
     }
   });
 
@@ -207,17 +222,17 @@ export function registerCommands(bot: Bot): void {
 
     await ctx.reply(
       `🤖 *Alvin Bot Status*\n\n` +
-      `*Modell:* ${info.name}\n` +
+      `*Model:* ${info.name}\n` +
       `*Effort:* ${EFFORT_LABELS[session.effort]}\n` +
-      `*Voice:* ${session.voiceReply ? "an" : "aus"}\n` +
-      `*Verzeichnis:* \`${session.workingDir}\`\n\n` +
-      `📊 *Session* (${sessionM} Min)\n` +
-      `*Nachrichten:* ${session.messageCount}\n` +
-      `*Tool-Calls:* ${session.toolUseCount}\n` +
-      `*Kosten:* $${session.totalCost.toFixed(4)}\n` +
-      (costLines ? `\n📈 *Provider-Nutzung:*\n${costLines}\n` : "") +
-      `\n🧠 *Memory:* ${(() => { const m = getMemoryStats(); const idx = getIndexStats(); return `${m.dailyLogs} Tage, ${m.todayEntries} Einträge heute, ${formatBytes(m.longTermSize)} LTM | 🔍 ${idx.entries} Vektoren (${formatBytes(idx.sizeBytes)})`; })()}\n` +
-      `⏱ *Bot-Uptime:* ${uptimeH}h ${uptimeM}m`,
+      `*Voice:* ${session.voiceReply ? "on" : "off"}\n` +
+      `*Directory:* \`${session.workingDir}\`\n\n` +
+      `📊 *Session* (${sessionM} min)\n` +
+      `*Messages:* ${session.messageCount}\n` +
+      `*Tool Calls:* ${session.toolUseCount}\n` +
+      `*Cost:* $${session.totalCost.toFixed(4)}\n` +
+      (costLines ? `\n📈 *Provider Usage:*\n${costLines}\n` : "") +
+      `\n🧠 *Memory:* ${(() => { const m = getMemoryStats(); const idx = getIndexStats(); return `${m.dailyLogs} days, ${m.todayEntries} entries today, ${formatBytes(m.longTermSize)} LTM | 🔍 ${idx.entries} vectors (${formatBytes(idx.sizeBytes)})`; })()}\n` +
+      `⏱ *Bot Uptime:* ${uptimeH}h ${uptimeM}m`,
       { parse_mode: "Markdown" }
     );
   });
@@ -228,8 +243,8 @@ export function registerCommands(bot: Bot): void {
     session.voiceReply = !session.voiceReply;
     await ctx.reply(
       session.voiceReply
-        ? "Voice-Antworten aktiviert. Antworten kommen jetzt auch als Sprachnachricht."
-        : "Voice-Antworten deaktiviert. Nur noch Text-Antworten."
+        ? "Voice replies enabled. Responses will also be sent as voice messages."
+        : "Voice replies disabled. Text-only responses."
     );
   });
 
@@ -245,14 +260,14 @@ export function registerCommands(bot: Bot): void {
         keyboard.text(`${marker}${label}`, `effort:${key}`).row();
       }
       await ctx.reply(
-        `🧠 *Denktiefe wählen:*\n\nAktiv: *${EFFORT_LABELS[session.effort]}*`,
+        `🧠 *Choose reasoning depth:*\n\nActive: *${EFFORT_LABELS[session.effort]}*`,
         { parse_mode: "Markdown", reply_markup: keyboard }
       );
       return;
     }
 
     if (!["low", "medium", "high", "max"].includes(level)) {
-      await ctx.reply("Ungültig. Nutze: /effort low | medium | high | max");
+      await ctx.reply("Invalid. Use: /effort low | medium | high | max");
       return;
     }
 
@@ -264,7 +279,7 @@ export function registerCommands(bot: Bot): void {
   bot.callbackQuery(/^effort:(.+)$/, async (ctx) => {
     const level = ctx.match![1];
     if (!["low", "medium", "high", "max"].includes(level)) {
-      await ctx.answerCallbackQuery("Ungültiges Level");
+      await ctx.answerCallbackQuery("Invalid level");
       return;
     }
 
@@ -279,7 +294,7 @@ export function registerCommands(bot: Bot): void {
     }
 
     await ctx.editMessageText(
-      `🧠 *Denktiefe wählen:*\n\nAktiv: *${EFFORT_LABELS[session.effort]}*`,
+      `🧠 *Choose reasoning depth:*\n\nActive: *${EFFORT_LABELS[session.effort]}*`,
       { parse_mode: "Markdown", reply_markup: keyboard }
     );
     await ctx.answerCallbackQuery(`Effort: ${EFFORT_LABELS[session.effort]}`);
@@ -300,7 +315,7 @@ export function registerCommands(bot: Bot): void {
       }
 
       await ctx.reply(
-        `🤖 *Modell wählen:*\n\nAktiv: *${registry.getActive().getInfo().name}*`,
+        `🤖 *Choose model:*\n\nActive: *${registry.getActive().getInfo().name}*`,
         { parse_mode: "Markdown", reply_markup: keyboard }
       );
       return;
@@ -309,9 +324,9 @@ export function registerCommands(bot: Bot): void {
     if (registry.switchTo(arg)) {
       const provider = registry.get(arg)!;
       const info = provider.getInfo();
-      await ctx.reply(`✅ Modell gewechselt: ${info.name} (${info.model})`);
+      await ctx.reply(`✅ Switched model: ${info.name} (${info.model})`);
     } else {
-      await ctx.reply(`Modell "${arg}" nicht gefunden. /model für alle Optionen.`);
+      await ctx.reply(`Model "${arg}" not found. Use /model to see all options.`);
     }
   });
 
@@ -333,12 +348,12 @@ export function registerCommands(bot: Bot): void {
       }
 
       await ctx.editMessageText(
-        `🤖 *Modell wählen:*\n\nAktiv: *${info.name}*`,
+        `🤖 *Choose model:*\n\nActive: *${info.name}*`,
         { parse_mode: "Markdown", reply_markup: keyboard }
       );
-      await ctx.answerCallbackQuery(`Gewechselt: ${info.name}`);
+      await ctx.answerCallbackQuery(`Switched: ${info.name}`);
     } else {
-      await ctx.answerCallbackQuery(`Modell "${key}" nicht gefunden`);
+      await ctx.answerCallbackQuery(`Model "${key}" not found`);
     }
   });
 
@@ -372,10 +387,10 @@ export function registerCommands(bot: Bot): void {
         keyboard.row();
       }
 
-      const text = `🔄 *Fallback-Reihenfolge*\n\n` +
-        `Provider werden in dieser Reihenfolge versucht.\n` +
-        `Nutze ⬆️/⬇️ zum Umsortieren.\n\n` +
-        `_Zuletzt geändert: ${order.updatedBy} (${new Date(order.updatedAt).toLocaleString("de-DE")})_`;
+      const text = `🔄 *Fallback Order*\n\n` +
+        `Providers are tried in this order.\n` +
+        `Use ⬆️/⬇️ to reorder.\n\n` +
+        `_Last changed: ${order.updatedBy} (${new Date(order.updatedAt).toLocaleString("en-US")})_`;
 
       await ctx.reply(text, { parse_mode: "Markdown", reply_markup: keyboard });
       return;
@@ -390,14 +405,14 @@ export function registerCommands(bot: Bot): void {
       }
       const [primary, ...fallbacks] = parts;
       setFallbackOrder(primary, fallbacks, "telegram");
-      await ctx.reply(`✅ Neue Reihenfolge:\n\n${formatOrder()}`);
+      await ctx.reply(`✅ New order:\n\n${formatOrder()}`);
       return;
     }
 
     await ctx.reply(
-      `🔄 *Fallback-Reihenfolge*\n\n` +
-      `\`/fallback\` — Reihenfolge anzeigen & ändern\n` +
-      `\`/fallback set groq,openai,...\` — Direkt setzen`,
+      `🔄 *Fallback Order*\n\n` +
+      `\`/fallback\` — Show & change order\n` +
+      `\`/fallback set groq,openai,...\` — Set directly`,
       { parse_mode: "Markdown" }
     );
   });
@@ -432,10 +447,10 @@ export function registerCommands(bot: Bot): void {
       `🔄 *Fallback-Reihenfolge*\n\n` +
       `Provider werden in dieser Reihenfolge versucht.\n` +
       `Nutze ⬆️/⬇️ zum Umsortieren.\n\n` +
-      `_Zuletzt geändert: telegram (${new Date().toLocaleString("de-DE")})_`,
+      `_Last changed: telegram (${new Date().toLocaleString("en-US")})_`,
       { parse_mode: "Markdown", reply_markup: keyboard }
     );
-    await ctx.answerCallbackQuery(`${key} nach oben verschoben`);
+    await ctx.answerCallbackQuery(`${key} moved up`);
   });
 
   bot.callbackQuery(/^fb:down:(.+)$/, async (ctx) => {
@@ -467,10 +482,10 @@ export function registerCommands(bot: Bot): void {
       `🔄 *Fallback-Reihenfolge*\n\n` +
       `Provider werden in dieser Reihenfolge versucht.\n` +
       `Nutze ⬆️/⬇️ zum Umsortieren.\n\n` +
-      `_Zuletzt geändert: telegram (${new Date().toLocaleString("de-DE")})_`,
+      `_Last changed: telegram (${new Date().toLocaleString("en-US")})_`,
       { parse_mode: "Markdown", reply_markup: keyboard }
     );
-    await ctx.answerCallbackQuery(`${key} nach unten verschoben`);
+    await ctx.answerCallbackQuery(`${key} moved down`);
   });
 
   bot.callbackQuery(/^fb:info:(.+)$/, async (ctx) => {
@@ -481,18 +496,18 @@ export function registerCommands(bot: Bot): void {
 
     if (h) {
       await ctx.answerCallbackQuery({
-        text: `${key}: ${h.healthy ? "✅ Healthy" : "❌ Unhealthy"} | ${h.latencyMs}ms | Fehler: ${h.failCount}`,
+        text: `${key}: ${h.healthy ? "✅ Healthy" : "❌ Unhealthy"} | ${h.latencyMs}ms | Errors: ${h.failCount}`,
         show_alert: true,
       });
     } else {
-      await ctx.answerCallbackQuery(`${key}: Noch nicht geprüft`);
+      await ctx.answerCallbackQuery(`${key}: Not checked yet`);
     }
   });
 
   bot.command("web", async (ctx) => {
     const query = ctx.match?.trim();
     if (!query) {
-      await ctx.reply("Suche: `/web Deine Suchanfrage`", { parse_mode: "Markdown" });
+      await ctx.reply("Search: `/web your search query`", { parse_mode: "Markdown" });
       return;
     }
 
@@ -522,12 +537,12 @@ export function registerCommands(bot: Bot): void {
           : data.AbstractText;
         lines.push(text);
         if (data.AbstractSource && data.AbstractURL) {
-          lines.push(`\n_Quelle: [${data.AbstractSource}](${data.AbstractURL})_`);
+          lines.push(`\n_Source: [${data.AbstractSource}](${data.AbstractURL})_`);
         }
       }
 
       if (lines.length === 0 && data.RelatedTopics && data.RelatedTopics.length > 0) {
-        lines.push(`🔍 *Ergebnisse für "${query}":*\n`);
+        lines.push(`🔍 *Results for "${query}":*\n`);
         for (const topic of data.RelatedTopics.slice(0, 5)) {
           if (topic.Text) {
             const short = topic.Text.length > 150 ? topic.Text.slice(0, 150) + "..." : topic.Text;
@@ -537,26 +552,26 @@ export function registerCommands(bot: Bot): void {
       }
 
       if (lines.length === 0) {
-        lines.push(`Keine Ergebnisse für "${query}". Probier es als normale Nachricht — ich suche dann mit dem AI-Modell.`);
+        lines.push(`No results for "${query}". Try it as a regular message — I'll search using the AI model.`);
       }
 
       await ctx.reply(lines.join("\n"), { parse_mode: "Markdown" }).catch(() =>
         ctx.reply(lines.join("\n"))
       );
     } catch (err) {
-      await ctx.reply(`Suchfehler: ${err instanceof Error ? err.message : String(err)}`);
+      await ctx.reply(`Search error: ${err instanceof Error ? err.message : String(err)}`);
     }
   });
 
   bot.command("imagine", async (ctx) => {
     const prompt = ctx.match?.trim();
     if (!prompt) {
-      await ctx.reply("Beschreibe was ich generieren soll:\n`/imagine Ein Fuchs der auf dem Mond sitzt`", { parse_mode: "Markdown" });
+      await ctx.reply("Describe what I should generate:\n`/imagine A fox sitting on the moon`", { parse_mode: "Markdown" });
       return;
     }
 
     if (!config.apiKeys.google) {
-      await ctx.reply("⚠️ Bildgenerierung nicht verfügbar (GOOGLE_API_KEY fehlt).");
+      await ctx.reply("⚠️ Image generation unavailable (GOOGLE_API_KEY missing).");
       return;
     }
 
@@ -573,10 +588,10 @@ export function registerCommands(bot: Bot): void {
         });
         fs.unlink(result.filePath, () => {});
       } catch (err) {
-        await ctx.reply(`Fehler beim Senden: ${err instanceof Error ? err.message : String(err)}`);
+        await ctx.reply(`Error sending: ${err instanceof Error ? err.message : String(err)}`);
       }
     } else {
-      await ctx.reply(`❌ ${result.error || "Bildgenerierung fehlgeschlagen."}`);
+      await ctx.reply(`❌ ${result.error || "Image generation failed."}`);
     }
   });
 
@@ -589,11 +604,11 @@ export function registerCommands(bot: Bot): void {
       // List reminders
       const pending = listReminders(userId);
       if (pending.length === 0) {
-        await ctx.reply("Keine aktiven Erinnerungen.\n\nNeu: `/remind 30m Mama anrufen`", { parse_mode: "Markdown" });
+        await ctx.reply("No active reminders.\n\nNew: `/remind 30m Call mom`", { parse_mode: "Markdown" });
       } else {
         const lines = pending.map(r => `• *${r.remaining}* — ${r.text} (ID: ${r.id})`);
         await ctx.reply(
-          `⏰ *Aktive Erinnerungen:*\n\n${lines.join("\n")}\n\nLöschen: \`/remind cancel <ID>\``,
+          `⏰ *Active Reminders:*\n\n${lines.join("\n")}\n\nCancel: \`/remind cancel <ID>\``,
           { parse_mode: "Markdown" }
         );
       }
@@ -604,13 +619,13 @@ export function registerCommands(bot: Bot): void {
     if (input.startsWith("cancel ")) {
       const id = parseInt(input.slice(7).trim());
       if (isNaN(id)) {
-        await ctx.reply("Ungültige ID. Nutze: `/remind cancel <ID>`", { parse_mode: "Markdown" });
+        await ctx.reply("Invalid ID. Use: `/remind cancel <ID>`", { parse_mode: "Markdown" });
         return;
       }
       if (cancelReminder(id, userId)) {
-        await ctx.reply(`✅ Erinnerung #${id} gelöscht.`);
+        await ctx.reply(`✅ Reminder #${id} cancelled.`);
       } else {
-        await ctx.reply(`❌ Erinnerung #${id} nicht gefunden.`);
+        await ctx.reply(`❌ Reminder #${id} not found.`);
       }
       return;
     }
@@ -618,7 +633,7 @@ export function registerCommands(bot: Bot): void {
     // Parse: /remind <duration> <text>
     const spaceIdx = input.indexOf(" ");
     if (spaceIdx === -1) {
-      await ctx.reply("Format: `/remind 30m Text der Erinnerung`", { parse_mode: "Markdown" });
+      await ctx.reply("Format: `/remind 30m Reminder text`", { parse_mode: "Markdown" });
       return;
     }
 
@@ -627,12 +642,12 @@ export function registerCommands(bot: Bot): void {
     const delayMs = parseDuration(durationStr);
 
     if (!delayMs) {
-      await ctx.reply("Ungültige Dauer. Beispiele: `30s`, `5m`, `2h`, `1d`", { parse_mode: "Markdown" });
+      await ctx.reply("Invalid duration. Examples: `30s`, `5m`, `2h`, `1d`", { parse_mode: "Markdown" });
       return;
     }
 
     if (!text) {
-      await ctx.reply("Bitte einen Text angeben: `/remind 30m Mama anrufen`", { parse_mode: "Markdown" });
+      await ctx.reply("Please provide text: `/remind 30m Call mom`", { parse_mode: "Markdown" });
       return;
     }
 
@@ -640,9 +655,9 @@ export function registerCommands(bot: Bot): void {
 
     // Format trigger time
     const triggerDate = new Date(reminder.triggerAt);
-    const timeStr = triggerDate.toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" });
+    const timeStr = triggerDate.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
 
-    await ctx.reply(`✅ Erinnerung gesetzt für *${timeStr}*: ${text}`, { parse_mode: "Markdown" });
+    await ctx.reply(`✅ Reminder set for *${timeStr}*: ${text}`, { parse_mode: "Markdown" });
   });
 
   bot.command("export", async (ctx) => {
@@ -650,16 +665,16 @@ export function registerCommands(bot: Bot): void {
     const session = getSession(userId);
 
     if (session.history.length === 0 && !session.sessionId) {
-      await ctx.reply("Keine Gesprächsdaten zum Exportieren.");
+      await ctx.reply("No conversation data to export.");
       return;
     }
 
     // Build export text
     const lines: string[] = [
-      `# Alvin Bot — Gesprächsexport`,
-      `Datum: ${new Date().toLocaleString("de-DE")}`,
-      `Nachrichten: ${session.messageCount}`,
-      `Kosten: $${session.totalCost.toFixed(4)}`,
+      `# Alvin Bot — Conversation Export`,
+      `Date: ${new Date().toLocaleString("en-US")}`,
+      `Messages: ${session.messageCount}`,
+      `Cost: $${session.totalCost.toFixed(4)}`,
       `---\n`,
     ];
 
@@ -669,7 +684,7 @@ export function registerCommands(bot: Bot): void {
     }
 
     if (session.history.length === 0) {
-      lines.push("(SDK-Session — Verlauf wird intern verwaltet, kein Export möglich)\n");
+      lines.push("(SDK session — history managed internally, no export available)\n");
     }
 
     const exportText = lines.join("\n");
@@ -677,7 +692,7 @@ export function registerCommands(bot: Bot): void {
     const filename = `chat-export-${new Date().toISOString().slice(0, 10)}.md`;
 
     await ctx.replyWithDocument(new InputFile(buffer, filename), {
-      caption: `📄 Export: ${session.history.length} Nachrichten`,
+      caption: `📄 Export: ${session.history.length} messages`,
     });
   });
 
@@ -750,11 +765,11 @@ export function registerCommands(bot: Bot): void {
     if (!arg) {
       await ctx.reply(
         `🧠 *Memory*\n\n` +
-        `*Langzeitgedächtnis:* ${formatBytes(stats.longTermSize)}\n` +
-        `*Tägliche Logs:* ${stats.dailyLogs} Dateien\n` +
-        `*Heute:* ${stats.todayEntries} Einträge\n\n` +
-        `_Memory wird automatisch geschrieben bei /new._\n` +
-        `_Non-SDK Provider laden Memory als Kontext._`,
+        `*Long-term memory:* ${formatBytes(stats.longTermSize)}\n` +
+        `*Daily logs:* ${stats.dailyLogs} files\n` +
+        `*Today:* ${stats.todayEntries} entries\n\n` +
+        `_Memory is automatically written on /new._\n` +
+        `_Non-SDK providers load memory as context._`,
         { parse_mode: "Markdown" }
       );
       return;
@@ -795,7 +810,7 @@ export function registerCommands(bot: Bot): void {
 
   bot.command("reload", async (ctx) => {
     const success = reloadSoul();
-    await ctx.reply(success ? "✅ SOUL.md neu geladen." : "❌ SOUL.md nicht gefunden.");
+    await ctx.reply(success ? "✅ SOUL.md reloaded." : "❌ SOUL.md not found.");
   });
 
   // ── Access Control ────────────────────────────────
@@ -807,14 +822,14 @@ export function registerCommands(bot: Bot): void {
 
     if (action === "approve") {
       approveGroup(chatId);
-      await ctx.editMessageText(`✅ Gruppe ${chatId} genehmigt. Alvin Bot antwortet jetzt dort.`);
+      await ctx.editMessageText(`✅ Group ${chatId} approved. Alvin Bot will now respond there.`);
       // Notify the group
       try {
-        await ctx.api.sendMessage(chatId, "👋 Alvin Bot ist jetzt aktiv in dieser Gruppe!\n\nMentioned mich mit @-mention oder antwortet auf meine Nachrichten.");
+        await ctx.api.sendMessage(chatId, "👋 Alvin Bot is now active in this group!\n\n@mention me or reply to my messages.");
       } catch { /* group might not allow bot messages yet */ }
     } else {
       blockGroup(chatId);
-      await ctx.editMessageText(`🚫 Gruppe ${chatId} blockiert. Alvin Bot ignoriert diese Gruppe.`);
+      await ctx.editMessageText(`🚫 Group ${chatId} blocked. Alvin Bot will ignore this group.`);
     }
     await ctx.answerCallbackQuery();
   });
@@ -823,7 +838,7 @@ export function registerCommands(bot: Bot): void {
     const groups = listGroups();
 
     if (groups.length === 0) {
-      await ctx.reply("Keine Gruppen registriert.");
+      await ctx.reply("No groups registered.");
       return;
     }
 
@@ -843,11 +858,11 @@ export function registerCommands(bot: Bot): void {
 
     const settings = getSettings();
     await ctx.reply(
-      `🔐 *Gruppen-Verwaltung*\n\n` +
+      `🔐 *Group Management*\n\n` +
       `${lines.join("\n\n")}\n\n` +
       `⚙️ *Settings:*\n` +
       `Forwards: ${settings.allowForwards ? "✅" : "❌"}\n` +
-      `Auto-Approve: ${settings.autoApproveGroups ? "⚠️ AN" : "✅ AUS"}`,
+      `Auto-Approve: ${settings.autoApproveGroups ? "⚠️ ON" : "✅ OFF"}`,
       { parse_mode: "Markdown", reply_markup: keyboard }
     );
   });
@@ -858,11 +873,11 @@ export function registerCommands(bot: Bot): void {
 
     if (!arg) {
       await ctx.reply(
-        `🔐 *Sicherheitseinstellungen*\n\n` +
-        `*Forwards:* ${settings.allowForwards ? "✅ erlaubt" : "❌ blockiert"}\n` +
-        `*Auto-Approve Gruppen:* ${settings.autoApproveGroups ? "⚠️ AN (gefährlich!)" : "✅ AUS"}\n` +
-        `*Gruppen-Rate-Limit:* ${settings.groupRateLimitPerHour}/h\n\n` +
-        `Ändern:\n` +
+        `🔐 *Security Settings*\n\n` +
+        `*Forwards:* ${settings.allowForwards ? "✅ allowed" : "❌ blocked"}\n` +
+        `*Auto-Approve Groups:* ${settings.autoApproveGroups ? "⚠️ ON (dangerous!)" : "✅ OFF"}\n` +
+        `*Group Rate Limit:* ${settings.groupRateLimitPerHour}/h\n\n` +
+        `Change:\n` +
         `\`/security forwards on|off\`\n` +
         `\`/security autoapprove on|off\``,
         { parse_mode: "Markdown" }
@@ -873,13 +888,13 @@ export function registerCommands(bot: Bot): void {
     if (arg.startsWith("forwards ")) {
       const val = arg.slice(9).trim();
       setForwardingAllowed(val === "on" || val === "true");
-      await ctx.reply(`✅ Forwards: ${val === "on" || val === "true" ? "erlaubt" : "blockiert"}`);
+      await ctx.reply(`✅ Forwards: ${val === "on" || val === "true" ? "allowed" : "blocked"}`);
     } else if (arg.startsWith("autoapprove ")) {
       const val = arg.slice(12).trim();
       setAutoApprove(val === "on" || val === "true");
-      await ctx.reply(`${val === "on" || val === "true" ? "⚠️" : "✅"} Auto-Approve: ${val === "on" || val === "true" ? "AN" : "AUS"}`);
+      await ctx.reply(`${val === "on" || val === "true" ? "⚠️" : "✅"} Auto-Approve: ${val === "on" || val === "true" ? "ON" : "OFF"}`);
     } else {
-      await ctx.reply("Unbekannt. Nutze `/security` für Optionen.", { parse_mode: "Markdown" });
+      await ctx.reply("Unknown. Use `/security` for options.", { parse_mode: "Markdown" });
     }
   });
 
@@ -889,10 +904,10 @@ export function registerCommands(bot: Bot): void {
     const arg = ctx.match?.toString().trim();
     if (!arg) {
       await ctx.reply(
-        "🌐 *Browser-Befehle:*\n\n" +
-        "`/browse <URL>` — Screenshot einer Webseite\n" +
-        "`/browse text <URL>` — Text extrahieren\n" +
-        "`/browse pdf <URL>` — Seite als PDF speichern",
+        "🌐 *Browser Commands:*\n\n" +
+        "`/browse <URL>` — Screenshot a webpage\n" +
+        "`/browse text <URL>` — Extract text\n" +
+        "`/browse pdf <URL>` — Save as PDF",
         { parse_mode: "Markdown" }
       );
       return;
@@ -900,7 +915,7 @@ export function registerCommands(bot: Bot): void {
 
     if (!hasPlaywright()) {
       await ctx.reply(
-        "❌ Playwright nicht installiert.\n`npm install playwright && npx playwright install chromium`",
+        "❌ Playwright not installed.\n`npm install playwright && npx playwright install chromium`",
         { parse_mode: "Markdown" }
       );
       return;
@@ -913,8 +928,8 @@ export function registerCommands(bot: Bot): void {
       if (arg.startsWith("text ")) {
         const url = arg.slice(5).trim();
         const text = await extractText(url);
-        const truncated = text.length > 3500 ? text.slice(0, 3500) + "\n\n_[...gekürzt]_" : text;
-        await ctx.reply(`🌐 *Text von ${url}:*\n\n${truncated}`, { parse_mode: "Markdown" });
+        const truncated = text.length > 3500 ? text.slice(0, 3500) + "\n\n_[...truncated]_" : text;
+        await ctx.reply(`🌐 *Text from ${url}:*\n\n${truncated}`, { parse_mode: "Markdown" });
         return;
       }
 
@@ -924,7 +939,7 @@ export function registerCommands(bot: Bot): void {
         await ctx.api.sendChatAction(ctx.chat!.id, "upload_document");
         const pdfPath = await generatePdf(url);
         await ctx.replyWithDocument(new InputFile(fs.readFileSync(pdfPath), "page.pdf"), {
-          caption: `📄 PDF von ${url}`,
+          caption: `📄 PDF from ${url}`,
         });
         fs.unlink(pdfPath, () => {});
         return;
@@ -940,7 +955,7 @@ export function registerCommands(bot: Bot): void {
       fs.unlink(screenshotPath, () => {});
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      await ctx.reply(`❌ Browser-Fehler: ${msg}`);
+      await ctx.reply(`❌ Browser error: ${msg}`);
     }
   });
 
@@ -956,7 +971,7 @@ export function registerCommands(bot: Bot): void {
       let params: Record<string, unknown> = {};
       if (parts.length > 1) {
         try { params = JSON.parse(parts.slice(1).join(" ")); } catch {
-          await ctx.reply("❌ Ungültiges JSON für Parameter.", { parse_mode: "Markdown" });
+          await ctx.reply("❌ Invalid JSON for parameters.", { parse_mode: "Markdown" });
           return;
         }
       }
@@ -968,7 +983,7 @@ export function registerCommands(bot: Bot): void {
         await ctx.reply(`🔧 *${toolName}:*\n\`\`\`\n${truncated}\n\`\`\``, { parse_mode: "Markdown" });
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
-        await ctx.reply(`❌ Tool-Fehler: ${msg}`);
+        await ctx.reply(`❌ Tool error: ${msg}`);
       }
       return;
     }
@@ -978,8 +993,8 @@ export function registerCommands(bot: Bot): void {
     if (tools.length === 0) {
       await ctx.reply(
         "🔧 *Custom Tools*\n\n" +
-        "Keine Tools konfiguriert.\n" +
-        "Erstelle `TOOLS.md` (siehe `TOOLS.example.md`).",
+        "No tools configured.\n" +
+        "Create `TOOLS.md` (see `TOOLS.example.md`).",
         { parse_mode: "Markdown" }
       );
       return;
@@ -992,7 +1007,7 @@ export function registerCommands(bot: Bot): void {
 
     await ctx.reply(
       `🔧 *Custom Tools (${tools.length}):*\n\n${lines.join("\n")}\n\n` +
-      `_Ausführen: \`/tools run <name> {"param":"value"}\`_`,
+      `_Run: \`/tools run <name> {"param":"value"}\`_`,
       { parse_mode: "Markdown" }
     );
   });
@@ -1013,7 +1028,7 @@ export function registerCommands(bot: Bot): void {
       let args: Record<string, unknown> = {};
       if (rest.length > 0) {
         try { args = JSON.parse(rest.join(" ")); } catch {
-          await ctx.reply("❌ Ungültiges JSON für Tool-Argumente.");
+          await ctx.reply("❌ Invalid JSON for tool arguments.");
           return;
         }
       }
@@ -1024,7 +1039,7 @@ export function registerCommands(bot: Bot): void {
         await ctx.reply(`🔧 *${server}/${tool}:*\n\`\`\`\n${truncated}\n\`\`\``, { parse_mode: "Markdown" });
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
-        await ctx.reply(`❌ MCP-Fehler: ${msg}`);
+        await ctx.reply(`❌ MCP error: ${msg}`);
       }
       return;
     }
@@ -1036,8 +1051,8 @@ export function registerCommands(bot: Bot): void {
     if (mcpServers.length === 0) {
       await ctx.reply(
         `🔌 *MCP (Model Context Protocol)*\n\n` +
-        `Keine Server konfiguriert.\n` +
-        `Erstelle \`docs/mcp.json\` (siehe \`docs/mcp.example.json\`).`,
+        `No servers configured.\n` +
+        `Create \`docs/mcp.json\` (see \`docs/mcp.example.json\`).`,
         { parse_mode: "Markdown" }
       );
       return;
@@ -1049,14 +1064,14 @@ export function registerCommands(bot: Bot): void {
     });
 
     const toolLines = tools.length > 0
-      ? "\n\n*Verfügbare Tools:*\n" + tools.map(t => `  🔧 \`${t.server}/${t.name}\` — ${t.description}`).join("\n")
+      ? "\n\n*Available Tools:*\n" + tools.map(t => `  🔧 \`${t.server}/${t.name}\` — ${t.description}`).join("\n")
       : "";
 
     await ctx.reply(
       `🔌 *MCP Server (${mcpServers.length}):*\n\n` +
       serverLines.join("\n") +
       toolLines +
-      `\n\n_Nutze \`/mcp call <server> <tool> {args}\` zum Ausführen._`,
+      `\n\n_Use \`/mcp call <server> <tool> {args}\` to execute._`,
       { parse_mode: "Markdown" }
     );
   });
@@ -1068,9 +1083,9 @@ export function registerCommands(bot: Bot): void {
 
     if (plugins.length === 0) {
       await ctx.reply(
-        `🔌 Keine Plugins geladen.\n\n` +
-        `Plugins in \`${getPluginsDir()}/\` ablegen.\n` +
-        `Jedes Plugin braucht einen Ordner mit \`index.js\`.`,
+        `🔌 No plugins loaded.\n\n` +
+        `Place plugins in \`${getPluginsDir()}/\`.\n` +
+        `Each plugin needs a folder with \`index.js\`.`,
         { parse_mode: "Markdown" }
       );
       return;
@@ -1082,7 +1097,7 @@ export function registerCommands(bot: Bot): void {
       return `🔌 *${p.name}* v${p.version}\n   ${p.description}${cmds}${tools}`;
     });
 
-    await ctx.reply(`🔌 *Geladene Plugins (${plugins.length}):*\n\n${lines.join("\n\n")}`, { parse_mode: "Markdown" });
+    await ctx.reply(`🔌 *Loaded Plugins (${plugins.length}):*\n\n${lines.join("\n\n")}`, { parse_mode: "Markdown" });
   });
 
   // ── Skills ─────────────────────────────────────────────
@@ -1105,14 +1120,14 @@ export function registerCommands(bot: Bot): void {
   bot.command("users", async (ctx) => {
     const profiles = listProfiles();
     if (profiles.length === 0) {
-      await ctx.reply("Noch keine User-Profile gespeichert.");
+      await ctx.reply("No user profiles saved yet.");
       return;
     }
 
     const lines = profiles.map(p => {
-      const lastActive = new Date(p.lastActive).toLocaleDateString("de-DE");
+      const lastActive = new Date(p.lastActive).toLocaleDateString("en-US");
       const badge = p.isOwner ? "👑" : "👤";
-      return `${badge} *${p.name}*${p.username ? ` (@${p.username})` : ""}\n   ${p.totalMessages} Nachrichten, zuletzt: ${lastActive}`;
+      return `${badge} *${p.name}*${p.username ? ` (@${p.username})` : ""}\n   ${p.totalMessages} messages, last active: ${lastActive}`;
     });
 
     await ctx.reply(`👥 *User-Profile (${profiles.length}):*\n\n${lines.join("\n\n")}`, { parse_mode: "Markdown" });
@@ -1121,7 +1136,7 @@ export function registerCommands(bot: Bot): void {
   bot.command("note", async (ctx) => {
     const arg = ctx.match?.toString().trim();
     if (!arg) {
-      await ctx.reply("📝 Nutze: `/note @username Notiz-Text`\nSpeichert eine Notiz über einen User.", { parse_mode: "Markdown" });
+      await ctx.reply("📝 Use: `/note @username Note text`\nSaves a note about a user.", { parse_mode: "Markdown" });
       return;
     }
 
@@ -1139,12 +1154,12 @@ export function registerCommands(bot: Bot): void {
     );
 
     if (!profile) {
-      await ctx.reply(`User "${target}" nicht gefunden.`);
+      await ctx.reply(`User "${target}" not found.`);
       return;
     }
 
     addUserNote(profile.userId, noteText);
-    await ctx.reply(`📝 Notiz für ${profile.name} gespeichert.`);
+    await ctx.reply(`📝 Note saved for ${profile.name}.`);
   });
 
   // ── Memory Search Commands ───────────────────────────
@@ -1152,7 +1167,7 @@ export function registerCommands(bot: Bot): void {
   bot.command("recall", async (ctx) => {
     const query = ctx.match?.toString().trim();
     if (!query) {
-      await ctx.reply("🔍 Nutze: `/recall <Suchbegriff>`\nSucht semantisch in meinem Gedächtnis.", { parse_mode: "Markdown" });
+      await ctx.reply("🔍 Use: `/recall <search term>`\nSemantic search through my memory.", { parse_mode: "Markdown" });
       return;
     }
 
@@ -1161,7 +1176,7 @@ export function registerCommands(bot: Bot): void {
       const results = await searchMemory(query, 5, 0.25);
 
       if (results.length === 0) {
-        await ctx.reply(`🔍 Keine Erinnerungen zu "${query}" gefunden.`);
+        await ctx.reply(`🔍 No memories found for "${query}".`);
         return;
       }
 
@@ -1171,28 +1186,28 @@ export function registerCommands(bot: Bot): void {
         return `**${i + 1}.** (${score}%) _${r.source}_\n${preview}`;
       });
 
-      await ctx.reply(`🧠 Erinnerungen zu "${query}":\n\n${lines.join("\n\n")}`, { parse_mode: "Markdown" });
+      await ctx.reply(`🧠 Memories for "${query}":\n\n${lines.join("\n\n")}`, { parse_mode: "Markdown" });
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      await ctx.reply(`❌ Recall-Fehler: ${msg}`);
+      await ctx.reply(`❌ Recall error: ${msg}`);
     }
   });
 
   bot.command("remember", async (ctx) => {
     const text = ctx.match?.toString().trim();
     if (!text) {
-      await ctx.reply("💾 Nutze: `/remember <Text>`\nSpeichert etwas in meinem Gedächtnis.", { parse_mode: "Markdown" });
+      await ctx.reply("💾 Use: `/remember <text>`\nSaves something to my memory.", { parse_mode: "Markdown" });
       return;
     }
 
     try {
-      appendDailyLog(`**Manuell gemerkt:** ${text}`);
+      appendDailyLog(`**Manually remembered:** ${text}`);
       // Trigger reindex so the new entry is searchable
       const stats = await reindexMemory();
-      await ctx.reply(`💾 Gemerkt! (${stats.total} Einträge im Index)`);
+      await ctx.reply(`💾 Remembered! (${stats.total} entries in index)`);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      await ctx.reply(`❌ Fehler beim Speichern: ${msg}`);
+      await ctx.reply(`❌ Error saving: ${msg}`);
     }
   });
 
@@ -1203,15 +1218,15 @@ export function registerCommands(bot: Bot): void {
       const indexStats = getIndexStats();
       const sizeKB = (indexStats.sizeBytes / 1024).toFixed(1);
       await ctx.reply(
-        `🔄 Gedächtnis neu indexiert!\n\n` +
-        `📊 ${stats.indexed} Chunks verarbeitet\n` +
-        `📁 ${indexStats.files} Dateien indexiert\n` +
-        `🧠 ${stats.total} Einträge gesamt\n` +
-        `💾 Index-Größe: ${sizeKB} KB`
+        `🔄 Memory re-indexed!\n\n` +
+        `📊 ${stats.indexed} chunks processed\n` +
+        `📁 ${indexStats.files} files indexed\n` +
+        `🧠 ${stats.total} total entries\n` +
+        `💾 Index size: ${sizeKB} KB`
       );
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      await ctx.reply(`❌ Reindex-Fehler: ${msg}`);
+      await ctx.reply(`❌ Reindex error: ${msg}`);
     }
   });
 
@@ -1227,12 +1242,12 @@ export function registerCommands(bot: Bot): void {
       const jobs = listJobs();
       if (jobs.length === 0) {
         await ctx.reply(
-          "⏰ <b>Cron Jobs</b>\n\nKeine Jobs konfiguriert.\n\n" +
-          "Erstellen:\n" +
+          "⏰ <b>Cron Jobs</b>\n\nNo jobs configured.\n\n" +
+          "Create:\n" +
           "<code>/cron add 5m reminder Wasser trinken</code>\n" +
           "<code>/cron add \"0 9 * * 1\" shell pm2 status</code>\n" +
           "<code>/cron add 1h http https://api.example.com/health</code>\n\n" +
-          "<i>Verwalte Jobs auch im Web UI unter ⏰ Cron.</i>",
+          "<i>Manage jobs also in the Web UI under ⏰ Cron.</i>",
           { parse_mode: "HTML" }
         );
         return;
@@ -1240,11 +1255,11 @@ export function registerCommands(bot: Bot): void {
 
       const lines = jobs.map(j => {
         const status = j.enabled ? "🟢" : "⏸️";
-        const next = j.enabled ? formatNextRun(j.nextRunAt) : "pausiert";
+        const next = j.enabled ? formatNextRun(j.nextRunAt) : "paused";
         const lastErr = j.lastError ? " ⚠️" : "";
         const readable = humanReadableSchedule(j.schedule);
-        const recur = j.oneShot ? "⚡ Einmalig" : "🔄 " + readable;
-        return `${status} <b>${j.name}</b>\n   📅 ${recur} | Nächst: ${next}\n   Runs: ${j.runCount}${lastErr} | ID: <code>${j.id}</code>`;
+        const recur = j.oneShot ? "⚡ One-shot" : "🔄 " + readable;
+        return `${status} <b>${j.name}</b>\n   📅 ${recur} | Next: ${next}\n   Runs: ${j.runCount}${lastErr} | ID: <code>${j.id}</code>`;
       });
 
       const keyboard = new InlineKeyboard();
@@ -1257,7 +1272,7 @@ export function registerCommands(bot: Bot): void {
 
       await ctx.reply(
         `⏰ <b>Cron Jobs (${jobs.length}):</b>\n\n${lines.join("\n\n")}\n\n` +
-        `Befehle: /cron add · delete · toggle · run · info`,
+        `Commands: /cron add · delete · toggle · run · info`,
         { parse_mode: "HTML", reply_markup: keyboard }
       );
       return;
@@ -1321,12 +1336,12 @@ export function registerCommands(bot: Bot): void {
         remainder = natural.rest;
       } else if (rest.startsWith('"')) {
         const endQuote = rest.indexOf('"', 1);
-        if (endQuote < 0) { await ctx.reply("❌ Fehlende schließende Anführungszeichen für Cron-Ausdruck."); return; }
+        if (endQuote < 0) { await ctx.reply("❌ Missing closing quote for cron expression."); return; }
         schedule = rest.slice(1, endQuote);
         remainder = rest.slice(endQuote + 1).trim();
       } else {
         const sp = rest.indexOf(" ");
-        if (sp < 0) { await ctx.reply("Format: <code>/cron add &lt;schedule&gt; &lt;type&gt; &lt;payload&gt;</code>\n\nSchedule-Optionen:\n• <b>Intervalle:</b> 5m, 1h, 30s, 2d\n• <b>Natürlich:</b> täglich, wöchentlich, monatlich, werktags, morgens, abends\n• <b>Mit Uhrzeit:</b> 8:30 täglich, werktags 9:00\n• <b>Wochentage:</b> montags, dienstags, freitags\n• <b>Cron:</b> \"0 9 * * 1-5\"", { parse_mode: "HTML" }); return; }
+        if (sp < 0) { await ctx.reply("Format: <code>/cron add &lt;schedule&gt; &lt;type&gt; &lt;payload&gt;</code>\n\nSchedule options:\n• <b>Intervals:</b> 5m, 1h, 30s, 2d\n• <b>Natural:</b> daily, weekly, monthly, weekdays, hourly\n• <b>With time:</b> 8:30 daily, weekdays 9:00\n• <b>German:</b> täglich, wöchentlich, morgens, abends\n• <b>Cron:</b> \"0 9 * * 1-5\"", { parse_mode: "HTML" }); return; }
         schedule = rest.slice(0, sp);
         remainder = rest.slice(sp + 1).trim();
       }
@@ -1338,7 +1353,7 @@ export function registerCommands(bot: Bot): void {
 
       const validTypes = ["reminder", "shell", "http", "message", "ai-query"];
       if (!validTypes.includes(typeStr)) {
-        await ctx.reply(`❌ Ungültiger Typ "${typeStr}". Erlaubt: ${validTypes.join(", ")}`);
+        await ctx.reply(`❌ Invalid type "${typeStr}". Allowed: ${validTypes.join(", ")}`);
         return;
       }
 
@@ -1363,11 +1378,11 @@ export function registerCommands(bot: Bot): void {
 
       const readableSched = humanReadableSchedule(job.schedule);
       await ctx.reply(
-        `✅ <b>Cron Job erstellt</b>\n\n` +
+        `✅ <b>Cron Job created</b>\n\n` +
         `<b>Name:</b> ${job.name}\n` +
         `📅 <b>${readableSched}</b>\n` +
-        `<b>Typ:</b> ${job.type}\n` +
-        `<b>Nächster Lauf:</b> ${formatNextRun(job.nextRunAt)}\n` +
+        `<b>Type:</b> ${job.type}\n` +
+        `<b>Next run:</b> ${formatNextRun(job.nextRunAt)}\n` +
         `<b>ID:</b> <code>${job.id}</code>`,
         { parse_mode: "HTML" }
       );
@@ -1378,9 +1393,9 @@ export function registerCommands(bot: Bot): void {
     if (arg.startsWith("delete ")) {
       const id = arg.slice(7).trim();
       if (deleteJob(id)) {
-        await ctx.reply(`✅ Job \`${id}\` gelöscht.`, { parse_mode: "Markdown" });
+        await ctx.reply(`✅ Job \`${id}\` deleted.`, { parse_mode: "Markdown" });
       } else {
-        await ctx.reply(`❌ Job \`${id}\` nicht gefunden.`, { parse_mode: "Markdown" });
+        await ctx.reply(`❌ Job \`${id}\` not found.`, { parse_mode: "Markdown" });
       }
       return;
     }
@@ -1390,9 +1405,9 @@ export function registerCommands(bot: Bot): void {
       const id = arg.slice(7).trim();
       const job = toggleJob(id);
       if (job) {
-        await ctx.reply(`${job.enabled ? "▶️" : "⏸️"} Job "${job.name}" ${job.enabled ? "aktiviert" : "pausiert"}.`);
+        await ctx.reply(`${job.enabled ? "▶️" : "⏸️"} Job "${job.name}" ${job.enabled ? "enabled" : "paused"}.`);
       } else {
-        await ctx.reply(`❌ Job nicht gefunden.`);
+        await ctx.reply(`❌ Job not found.`);
       }
       return;
     }
@@ -1403,15 +1418,15 @@ export function registerCommands(bot: Bot): void {
       await ctx.api.sendChatAction(ctx.chat!.id, "typing");
       const result = await (runJobNow(id) || Promise.resolve(null));
       if (!result) {
-        await ctx.reply(`❌ Job nicht gefunden.`);
+        await ctx.reply(`❌ Job not found.`);
         return;
       }
-      const output = result.output ? `\`\`\`\n${result.output.slice(0, 2000)}\n\`\`\`` : "(kein Output)";
-      await ctx.reply(`🔧 Job ausgeführt:\n${output}${result.error ? `\n\n❌ ${result.error}` : ""}`, { parse_mode: "Markdown" });
+      const output = result.output ? `\`\`\`\n${result.output.slice(0, 2000)}\n\`\`\`` : "(no output)";
+      await ctx.reply(`🔧 Job executed:\n${output}${result.error ? `\n\n❌ ${result.error}` : ""}`, { parse_mode: "Markdown" });
       return;
     }
 
-    await ctx.reply("Unbekannter Cron-Befehl. Nutze /cron für Hilfe.");
+    await ctx.reply("Unknown cron command. Use /cron for help.");
   });
 
   // Inline keyboard callbacks for cron
@@ -1419,17 +1434,17 @@ export function registerCommands(bot: Bot): void {
     const id = ctx.match![1];
     const job = toggleJob(id);
     if (job) {
-      await ctx.answerCallbackQuery(`${job.enabled ? "Aktiviert" : "Pausiert"}: ${job.name}`);
+      await ctx.answerCallbackQuery(`${job.enabled ? "Enabled" : "Paused"}: ${job.name}`);
       // Refresh the cron list
       (ctx as any).match = "";
       // Re-render the list message (HTML to avoid Markdown * conflicts with cron expressions)
       const jobs = listJobs();
       const lines = jobs.map(j => {
         const status = j.enabled ? "🟢" : "⏸️";
-        const next = j.enabled ? formatNextRun(j.nextRunAt) : "pausiert";
+        const next = j.enabled ? formatNextRun(j.nextRunAt) : "paused";
         const readable = humanReadableSchedule(j.schedule);
-        const recur = j.oneShot ? "⚡ Einmalig" : "🔄 " + readable;
-        return `${status} <b>${j.name}</b>\n   📅 ${recur} | Nächst: ${next}\n   Runs: ${j.runCount} | ID: <code>${j.id}</code>`;
+        const recur = j.oneShot ? "⚡ One-shot" : "🔄 " + readable;
+        return `${status} <b>${j.name}</b>\n   📅 ${recur} | Next: ${next}\n   Runs: ${j.runCount} | ID: <code>${j.id}</code>`;
       });
       const keyboard = new InlineKeyboard();
       for (const j of jobs) {
@@ -1444,11 +1459,11 @@ export function registerCommands(bot: Bot): void {
   bot.callbackQuery(/^cron:delete:(.+)$/, async (ctx) => {
     const id = ctx.match![1];
     deleteJob(id);
-    await ctx.answerCallbackQuery("Gelöscht");
+    await ctx.answerCallbackQuery("Deleted");
     // Refresh (HTML parse mode)
     const jobs = listJobs();
     if (jobs.length === 0) {
-      await ctx.editMessageText("⏰ Keine Cron Jobs vorhanden.");
+      await ctx.editMessageText("⏰ No cron jobs configured.");
     } else {
       const lines = jobs.map(j => {
         const status = j.enabled ? "🟢" : "⏸️";
@@ -1476,17 +1491,17 @@ export function registerCommands(bot: Bot): void {
       const activeInfo = registry.getActive().getInfo();
 
       const keyboard = new InlineKeyboard()
-        .text("🔑 API Keys verwalten", "setup:keys").row()
-        .text("📱 Plattformen", "setup:platforms").row()
-        .text("🔐 Sudo / Admin-Rechte", "setup:sudo").row()
-        .text("🔧 Web Dashboard öffnen", "setup:web").row();
+        .text("🔑 Manage API Keys", "setup:keys").row()
+        .text("📱 Platforms", "setup:platforms").row()
+        .text("🔐 Sudo / Admin Access", "setup:sudo").row()
+        .text("🔧 Open Web Dashboard", "setup:web").row();
 
       await ctx.reply(
         `⚙️ *Alvin Bot Setup*\n\n` +
-        `*Aktives Modell:* ${activeInfo.name}\n` +
-        `*Provider:* ${providers.length} konfiguriert\n` +
+        `*Active Model:* ${activeInfo.name}\n` +
+        `*Providers:* ${providers.length} configured\n` +
         `*Web UI:* http://localhost:${process.env.WEB_PORT || 3100}\n\n` +
-        `Was möchtest du einrichten?`,
+        `What would you like to configure?`,
         { parse_mode: "Markdown", reply_markup: keyboard }
       );
       return;
@@ -1503,21 +1518,21 @@ export function registerCommands(bot: Bot): void {
 
         const keyboard = new InlineKeyboard();
         if (status.configured) {
-          keyboard.text("🧪 Verifizieren", "sudo:verify").row();
-          keyboard.text("🔴 Zugriff widerrufen", "sudo:revoke").row();
+          keyboard.text("🧪 Verify", "sudo:verify").row();
+          keyboard.text("🔴 Revoke Access", "sudo:revoke").row();
         }
 
         await ctx.reply(
           `🔐 *Sudo / Admin-Rechte*\n\n` +
-          `*Status:* ${statusIcon} ${status.configured ? (status.verified ? "Konfiguriert & verifiziert" : "Konfiguriert, nicht verifiziert") : "Nicht eingerichtet"}\n` +
-          `*Speicher:* ${status.storageMethod}\n` +
+          `*Status:* ${statusIcon} ${status.configured ? (status.verified ? "Configured & verified" : "Configured, not verified") : "Not set up"}\n` +
+          `*Storage:* ${status.storageMethod}\n` +
           `*System:* ${status.platform} (${status.user})\n` +
           (status.permissions.accessibility !== null ? `*Accessibility:* ${status.permissions.accessibility ? "✅" : "❌"}\n` : "") +
           (status.permissions.fullDiskAccess !== null ? `*Full Disk Access:* ${status.permissions.fullDiskAccess ? "✅" : "❌"}\n` : "") +
-          `\n*Einrichten:*\n\`/setup sudo <dein-system-passwort>\`\n\n` +
-          `_Das Passwort wird sicher im ${status.storageMethod} gespeichert. ` +
-          `Damit kann Alvin Bot Befehle mit Admin-Rechten ausführen (Software installieren, Systemeinstellungen ändern, etc.)._\n\n` +
-          `⚠️ _Lösche diese Nachricht nach dem Einrichten! Das Passwort ist im Chatverlauf sichtbar._`,
+          `\n*Setup:*\n\`/setup sudo <your-system-password>\`\n\n` +
+          `_The password is securely stored in ${status.storageMethod}. ` +
+          `This allows Alvin Bot to run admin commands (install software, change system settings, etc.)._\n\n` +
+          `⚠️ _Delete this message after setup! The password is visible in chat history._`,
           { parse_mode: "Markdown", reply_markup: keyboard }
         );
         return;
@@ -1528,7 +1543,7 @@ export function registerCommands(bot: Bot): void {
       const result = storePassword(pw);
 
       if (!result.ok) {
-        await ctx.reply(`❌ Fehler beim Speichern: ${result.error}`);
+        await ctx.reply(`❌ Error saving: ${result.error}`);
         return;
       }
 
@@ -1536,19 +1551,19 @@ export function registerCommands(bot: Bot): void {
       const verify = await verifyPassword();
       if (verify.ok) {
         await ctx.reply(
-          `✅ *Sudo-Zugriff eingerichtet!*\n\n` +
-          `Passwort gespeichert in: ${result.method}\n` +
-          `Verifizierung: ✅ erfolgreich\n\n` +
-          `Alvin Bot kann jetzt Admin-Befehle ausführen.\n\n` +
-          `⚠️ _Bitte lösche die Nachricht mit dem Passwort aus dem Chat!_`,
+          `✅ *Sudo access configured!*\n\n` +
+          `Password stored in: ${result.method}\n` +
+          `Verification: ✅ successful\n\n` +
+          `Alvin Bot can now run admin commands.\n\n` +
+          `⚠️ _Please delete the message with the password from the chat!_`,
           { parse_mode: "Markdown" }
         );
       } else {
         revokePassword(); // Wrong password — clean up
         await ctx.reply(
-          `❌ *Passwort falsch!*\n\n` +
-          `Das eingegebene Passwort funktioniert nicht für sudo.\n` +
-          `Bitte versuche es erneut: \`/setup sudo <richtiges-passwort>\``,
+          `❌ *Wrong password!*\n\n` +
+          `The entered password does not work for sudo.\n` +
+          `Please try again: \`/setup sudo <correct-password>\``,
           { parse_mode: "Markdown" }
         );
       }
@@ -1567,12 +1582,12 @@ export function registerCommands(bot: Bot): void {
       const parts = arg.slice(4).trim().split(/\s+/);
       if (parts.length < 2) {
         await ctx.reply(
-          "🔑 *API Key setzen:*\n\n" +
+          "🔑 *Set API Key:*\n\n" +
           "`/setup key openai sk-...`\n" +
           "`/setup key google AIza...`\n" +
           "`/setup key nvidia nvapi-...`\n" +
           "`/setup key openrouter sk-or-...`\n\n" +
-          "_Der Key wird in .env gespeichert. Neustart nötig._",
+          "_The key will be saved to .env. Restart required._",
           { parse_mode: "Markdown" }
         );
         return;
@@ -1591,7 +1606,7 @@ export function registerCommands(bot: Bot): void {
       const envKey = envMap[provider];
 
       if (!envKey) {
-        await ctx.reply(`❌ Unbekannter Provider "${provider}". Nutze: ${Object.keys(envMap).join(", ")}`);
+        await ctx.reply(`❌ Unknown provider "${provider}". Use: ${Object.keys(envMap).join(", ")}`);
         return;
       }
 
@@ -1603,7 +1618,7 @@ export function registerCommands(bot: Bot): void {
       else content = content.trimEnd() + `\n${envKey}=${key}\n`;
       fs.writeFileSync(envFile, content);
 
-      await ctx.reply(`✅ ${envKey} gespeichert! Bitte Bot neustarten (/system restart oder Web UI).`);
+      await ctx.reply(`✅ ${envKey} saved! Please restart the bot (/system restart or Web UI).`);
       return;
     }
   });
@@ -1615,8 +1630,8 @@ export function registerCommands(bot: Bot): void {
       await ctx.answerCallbackQuery(result.ok ? "✅ Sudo funktioniert!" : `❌ ${result.error}`);
     } else if (action === "revoke") {
       revokePassword();
-      await ctx.editMessageText("🔴 Sudo-Zugriff widerrufen. Passwort gelöscht.");
-      await ctx.answerCallbackQuery("Zugriff widerrufen");
+      await ctx.editMessageText("🔴 Sudo access revoked. Password deleted.");
+      await ctx.answerCallbackQuery("Access revoked");
     }
   });
 
@@ -1637,9 +1652,9 @@ export function registerCommands(bot: Bot): void {
 
         await ctx.editMessageText(
           `🔑 *API Keys*\n\n${lines.join("\n")}\n\n` +
-          `Key setzen: \`/setup key <provider> <key>\`\n` +
-          `Beispiel: \`/setup key nvidia nvapi-...\`\n\n` +
-          `_Neustart nötig nach Änderungen._`,
+          `Set key: \`/setup key <provider> <key>\`\n` +
+          `Example: \`/setup key nvidia nvapi-...\`\n\n` +
+          `_Restart required after changes._`,
           { parse_mode: "Markdown" }
         );
         break;
@@ -1656,9 +1671,9 @@ export function registerCommands(bot: Bot): void {
         const lines = platforms.map(p => `${p.has ? "✅" : "❌"} ${p.icon} *${p.name}* — \`${p.env}\``);
 
         await ctx.editMessageText(
-          `📱 *Plattformen*\n\n${lines.join("\n")}\n\n` +
-          `_Plattformen im Web UI einrichten: Models → Platforms_\n` +
-          `_Dort kannst du Token eingeben und Dependencies installieren._`,
+          `📱 *Platforms*\n\n${lines.join("\n")}\n\n` +
+          `_Set up platforms in Web UI: Models → Platforms_\n` +
+          `_There you can enter tokens and install dependencies._`,
           { parse_mode: "Markdown" }
         );
         break;
@@ -1669,11 +1684,11 @@ export function registerCommands(bot: Bot): void {
         const statusIcon = status.configured ? (status.verified ? "✅" : "⚠️") : "❌";
         await ctx.editMessageText(
           `🔐 *Sudo / Admin-Rechte*\n\n` +
-          `*Status:* ${statusIcon} ${status.configured ? (status.verified ? "Aktiv & verifiziert" : "Konfiguriert") : "Nicht eingerichtet"}\n` +
-          `*Speicher:* ${status.storageMethod}\n\n` +
-          `Einrichten: \`/setup sudo <system-passwort>\`\n` +
-          `Widerrufen: \`/setup sudo\` → Button "Widerrufen"\n\n` +
-          `_Das Passwort wird sicher im ${status.storageMethod} gespeichert._`,
+          `*Status:* ${statusIcon} ${status.configured ? (status.verified ? "Active & verified" : "Configured") : "Not set up"}\n` +
+          `*Storage:* ${status.storageMethod}\n\n` +
+          `Setup: \`/setup sudo <system-password>\`\n` +
+          `Revoke: \`/setup sudo\` → "Revoke" button\n\n` +
+          `_The password is securely stored in ${status.storageMethod}._`,
           { parse_mode: "Markdown" }
         );
         break;
@@ -1683,13 +1698,13 @@ export function registerCommands(bot: Bot): void {
         await ctx.editMessageText(
           `🌐 *Web Dashboard*\n\n` +
           `URL: \`http://localhost:${process.env.WEB_PORT || 3100}\`\n\n` +
-          `Im Dashboard kannst du:\n` +
-          `• 🤖 Modelle & API Keys verwalten\n` +
-          `• 📱 Plattformen einrichten\n` +
-          `• ⏰ Cron Jobs verwalten\n` +
-          `• 🧠 Memory editieren\n` +
-          `• 💻 Terminal nutzen\n` +
-          `• 🛠️ Tools ausführen`,
+          `In the dashboard you can:\n` +
+          `• 🤖 Manage models & API keys\n` +
+          `• 📱 Set up platforms\n` +
+          `• ⏰ Manage cron jobs\n` +
+          `• 🧠 Edit memory\n` +
+          `• 💻 Use terminal\n` +
+          `• 🛠️ Run tools`,
           { parse_mode: "Markdown" }
         );
         break;
@@ -1703,9 +1718,9 @@ export function registerCommands(bot: Bot): void {
     const session = getSession(userId);
     if (session.isProcessing && session.abortController) {
       session.abortController.abort();
-      await ctx.reply("Anfrage wird abgebrochen...");
+      await ctx.reply("Cancelling request...");
     } else {
-      await ctx.reply("Keine laufende Anfrage.");
+      await ctx.reply("No running request.");
     }
   });
 }

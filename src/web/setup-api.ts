@@ -98,71 +98,71 @@ const PLATFORMS: PlatformDef[] = [
     id: "telegram",
     name: "Telegram",
     icon: "📱",
-    description: "Telegram Bot via BotFather. Der Standard-Messaging-Kanal.",
+    description: "Telegram Bot via BotFather. The default messaging channel.",
     envVars: [
       { key: "BOT_TOKEN", label: "Bot Token", placeholder: "123456:ABC-DEF...", secret: true },
-      { key: "ALLOWED_USERS", label: "Erlaubte User IDs", placeholder: "123456789,987654321" },
+      { key: "ALLOWED_USERS", label: "Allowed User IDs", placeholder: "123456789,987654321" },
     ],
     setupUrl: "https://t.me/BotFather",
     setupSteps: [
-      "Öffne @BotFather auf Telegram",
-      "Sende /newbot und folge den Anweisungen",
-      "Kopiere den Bot Token hierher",
-      "Für deine User-ID: Sende eine Nachricht an @userinfobot",
+      "Open @BotFather on Telegram",
+      "Send /newbot and follow the instructions",
+      "Copy the bot token here",
+      "For your User ID: Send a message to @userinfobot",
     ],
   },
   {
     id: "discord",
     name: "Discord",
     icon: "🎮",
-    description: "Discord Bot für Server und DMs. Braucht discord.js.",
+    description: "Discord bot for servers and DMs. Requires discord.js.",
     envVars: [
       { key: "DISCORD_TOKEN", label: "Bot Token", placeholder: "MTIz...abc", secret: true },
     ],
     npmPackages: ["discord.js"],
     setupUrl: "https://discord.com/developers/applications",
     setupSteps: [
-      "Erstelle eine Application auf discord.com/developers",
-      "Gehe zu Bot → Reset Token → Token kopieren",
-      "Aktiviere Message Content Intent unter Bot → Privileged Intents",
-      "Lade den Bot auf deinen Server: OAuth2 → URL Generator → bot + messages.read + messages.write",
+      "Create an Application on discord.com/developers",
+      "Go to Bot → Reset Token → Copy token",
+      "Enable Message Content Intent under Bot → Privileged Intents",
+      "Invite the bot to your server: OAuth2 → URL Generator → bot + messages.read + messages.write",
     ],
   },
   {
     id: "whatsapp",
     name: "WhatsApp",
     icon: "💬",
-    description: "WhatsApp Web Verbindung via whatsapp-web.js. QR-Code Scan beim ersten Start.",
+    description: "WhatsApp Web connection via whatsapp-web.js. QR code scan on first start.",
     envVars: [
-      { key: "WHATSAPP_ENABLED", label: "Aktivieren", placeholder: "true", type: "toggle" },
-      { key: "WHATSAPP_SELF_CHAT_ONLY", label: "Nur Self-Chat (empfohlen)", placeholder: "true", type: "toggle" },
-      { key: "WHATSAPP_ALLOW_GROUPS", label: "In Gruppen antworten (bei @Mention)", placeholder: "", type: "toggle" },
-      { key: "WHATSAPP_ALLOW_DMS", label: "Auf private Nachrichten antworten", placeholder: "", type: "toggle" },
+      { key: "WHATSAPP_ENABLED", label: "Enable", placeholder: "true", type: "toggle" },
+      { key: "WHATSAPP_SELF_CHAT_ONLY", label: "Self-chat only (recommended)", placeholder: "true", type: "toggle" },
+      { key: "WHATSAPP_ALLOW_GROUPS", label: "Reply in groups (on @mention)", placeholder: "", type: "toggle" },
+      { key: "WHATSAPP_ALLOW_DMS", label: "Reply to private messages", placeholder: "", type: "toggle" },
     ],
     npmPackages: ["whatsapp-web.js"],
     setupSteps: [
-      "Klicke 'Dependencies installieren' (falls nötig)",
-      "Aktiviere WhatsApp (Toggle oben) und klicke 'Speichern'",
-      "Starte den Bot neu (Maintenance → Bot neustarten)",
-      "Der QR-Code erscheint hier unten — scanne ihn mit WhatsApp → Verknüpfte Geräte → Gerät hinzufügen",
-      "Die Verbindung bleibt gespeichert (data/whatsapp-auth/)",
+      "Click 'Install Dependencies' (if needed)",
+      "Enable WhatsApp (toggle above) and click 'Save'",
+      "Restart the bot (Maintenance → Restart bot)",
+      "The QR code will appear below — scan it with WhatsApp → Linked Devices → Link a Device",
+      "The connection is persisted (data/whatsapp-auth/)",
     ],
   },
   {
     id: "signal",
     name: "Signal",
     icon: "🔒",
-    description: "Signal Messenger via signal-cli REST API. Braucht einen separaten signal-cli Container.",
+    description: "Signal Messenger via signal-cli REST API. Requires a separate signal-cli container.",
     envVars: [
       { key: "SIGNAL_API_URL", label: "signal-cli REST API URL", placeholder: "http://localhost:8080" },
-      { key: "SIGNAL_NUMBER", label: "Signal Nummer", placeholder: "+491234567890" },
+      { key: "SIGNAL_NUMBER", label: "Signal Number", placeholder: "+491234567890" },
     ],
     setupUrl: "https://github.com/bbernhard/signal-cli-rest-api",
     setupSteps: [
-      "Starte signal-cli REST API (Docker empfohlen):",
+      "Start signal-cli REST API (Docker recommended):",
       "docker run -p 8080:8080 bbernhard/signal-cli-rest-api",
-      "Registriere deine Nummer über die API",
-      "Trage URL und Nummer oben ein",
+      "Register your number via the API",
+      "Enter URL and number above",
     ],
   },
 ];
@@ -187,7 +187,7 @@ const PROVIDERS: ProviderDef[] = [
     id: "claude-sdk",
     name: "Claude Agent SDK",
     icon: "🟣",
-    description: "Voller Tool-Use via Agent SDK. Braucht Claude CLI Login (Max Abo oder API Key).",
+    description: "Full tool use via Agent SDK. Requires Claude CLI login (Max plan or API key).",
     envKey: "",
     models: [
       { key: "claude-sdk", name: "Claude (Agent SDK)", model: "claude-opus-4-6" },
@@ -196,15 +196,15 @@ const PROVIDERS: ProviderDef[] = [
     docsUrl: "https://docs.anthropic.com/en/docs/claude-code",
     setupSteps: [
       "npm install -g @anthropic-ai/claude-code",
-      "claude login (Browser-Auth oder API Key)",
-      "Voller Tool-Use: Dateien lesen/schreiben, Shell-Befehle, Browser",
+      "claude login (browser auth or API key)",
+      "Full tool use: read/write files, shell commands, browser",
     ],
   },
   {
     id: "anthropic",
     name: "Anthropic API",
     icon: "🟣",
-    description: "Claude Opus, Sonnet, Haiku direkt via API Key. OpenAI-kompatibel.",
+    description: "Claude Opus, Sonnet, Haiku directly via API key. OpenAI-compatible.",
     envKey: "ANTHROPIC_API_KEY",
     models: [
       { key: "claude-opus", name: "Claude Opus 4", model: "claude-opus-4-6" },
@@ -214,16 +214,16 @@ const PROVIDERS: ProviderDef[] = [
     signupUrl: "https://console.anthropic.com/settings/keys",
     docsUrl: "https://docs.anthropic.com/en/api",
     setupSteps: [
-      "Account auf console.anthropic.com erstellen",
-      "API Key unter Settings → API Keys generieren",
-      "Credits aufladen (Pay-as-you-go) oder Abo nutzen",
+      "Create account on console.anthropic.com",
+      "Generate API key under Settings → API Keys",
+      "Add credits (pay-as-you-go) or use subscription",
     ],
   },
   {
     id: "openai",
     name: "OpenAI",
     icon: "🟢",
-    description: "GPT-4o, GPT-4.1, o3/o4 und andere OpenAI Modelle.",
+    description: "GPT-4o, GPT-4.1, o3/o4 and other OpenAI models.",
     envKey: "OPENAI_API_KEY",
     models: [
       { key: "gpt-4o", name: "GPT-4o", model: "gpt-4o" },
@@ -235,16 +235,16 @@ const PROVIDERS: ProviderDef[] = [
     signupUrl: "https://platform.openai.com/api-keys",
     docsUrl: "https://platform.openai.com/docs",
     setupSteps: [
-      "Account auf platform.openai.com erstellen",
-      "API Key generieren unter API Keys",
-      "Credits aufladen (Pay-as-you-go)",
+      "Create account on platform.openai.com",
+      "Generate API key under API Keys",
+      "Add credits (pay-as-you-go)",
     ],
   },
   {
     id: "google",
     name: "Google Gemini",
     icon: "🔵",
-    description: "Gemini 2.5/3 Pro/Flash via Google AI Studio. Kostenloser Tier verfügbar.",
+    description: "Gemini 2.5/3 Pro/Flash via Google AI Studio. Free tier available.",
     envKey: "GOOGLE_API_KEY",
     models: [
       { key: "gemini-2.5-pro", name: "Gemini 2.5 Pro", model: "gemini-2.5-pro" },
@@ -255,9 +255,9 @@ const PROVIDERS: ProviderDef[] = [
     signupUrl: "https://aistudio.google.com/apikey",
     docsUrl: "https://ai.google.dev/docs",
     setupSteps: [
-      "Google AI Studio öffnen (aistudio.google.com)",
-      "API Key erstellen → sofort nutzbar",
-      "Kostenloser Tier: 15 RPM, 1M TPM",
+      "Open Google AI Studio (aistudio.google.com)",
+      "Create API key → ready to use immediately",
+      "Free tier: 15 RPM, 1M TPM",
     ],
     free: true,
   },
@@ -265,7 +265,7 @@ const PROVIDERS: ProviderDef[] = [
     id: "nvidia",
     name: "NVIDIA NIM",
     icon: "🟩",
-    description: "150+ Modelle gratis (Llama, Kimi, Mistral, etc.) via NVIDIA API.",
+    description: "150+ models free (Llama, Kimi, Mistral, etc.) via NVIDIA API.",
     envKey: "NVIDIA_API_KEY",
     models: [
       { key: "nvidia-llama-3.3-70b", name: "Llama 3.3 70B", model: "meta/llama-3.3-70b-instruct" },
@@ -274,9 +274,9 @@ const PROVIDERS: ProviderDef[] = [
     signupUrl: "https://build.nvidia.com",
     docsUrl: "https://docs.api.nvidia.com",
     setupSteps: [
-      "Account auf build.nvidia.com erstellen",
-      "Kostenlose API Key generieren",
-      "150+ Modelle gratis verfügbar (1000 Credits/Monat)",
+      "Create account on build.nvidia.com",
+      "Generate free API key",
+      "150+ models available for free (1000 credits/month)",
     ],
     free: true,
   },
@@ -284,7 +284,7 @@ const PROVIDERS: ProviderDef[] = [
     id: "groq",
     name: "Groq",
     icon: "⚡",
-    description: "Ultraschnelle Inferenz. Llama, Mixtral, Gemma — kostenlos und blitzschnell.",
+    description: "Ultra-fast inference. Llama, Mixtral, Gemma — free and lightning fast.",
     envKey: "GROQ_API_KEY",
     models: [
       { key: "groq", name: "Llama 3.3 70B (Groq)", model: "llama-3.3-70b-versatile" },
@@ -294,9 +294,9 @@ const PROVIDERS: ProviderDef[] = [
     signupUrl: "https://console.groq.com",
     docsUrl: "https://console.groq.com/docs",
     setupSteps: [
-      "Account auf console.groq.com erstellen (keine Kreditkarte nötig)",
-      "API Key generieren",
-      "Sofort nutzbar — kostenloser Tier mit Rate Limits",
+      "Create account on console.groq.com (no credit card needed)",
+      "Generate API key",
+      "Ready to use immediately — free tier with rate limits",
     ],
     free: true,
   },
@@ -304,7 +304,7 @@ const PROVIDERS: ProviderDef[] = [
     id: "openrouter",
     name: "OpenRouter",
     icon: "🌐",
-    description: "Ein API Key, 200+ Modelle. Claude, GPT, Gemini, Llama — alles über eine API.",
+    description: "One API key, 200+ models. Claude, GPT, Gemini, Llama — all via one API.",
     envKey: "OPENROUTER_API_KEY",
     models: [
       { key: "openrouter", name: "OpenRouter (Standard)", model: "anthropic/claude-sonnet-4" },
@@ -312,16 +312,16 @@ const PROVIDERS: ProviderDef[] = [
     signupUrl: "https://openrouter.ai/keys",
     docsUrl: "https://openrouter.ai/docs",
     setupSteps: [
-      "Account auf openrouter.ai erstellen",
-      "API Key generieren",
-      "Credits aufladen oder Free-Modelle nutzen",
+      "Create account on openrouter.ai",
+      "Generate API key",
+      "Add credits or use free models",
     ],
   },
   {
     id: "ollama",
-    name: "Ollama (Lokal)",
+    name: "Ollama (Local)",
     icon: "🦙",
-    description: "Lokale Modelle auf deinem Rechner. Kein API Key nötig, läuft offline.",
+    description: "Local models on your machine. No API key needed, runs offline.",
     envKey: "",
     models: [
       { key: "ollama", name: "Ollama (Local)", model: "llama3.2" },
@@ -329,9 +329,9 @@ const PROVIDERS: ProviderDef[] = [
     signupUrl: "https://ollama.com/download",
     docsUrl: "https://ollama.com/library",
     setupSteps: [
-      "Ollama installieren: brew install ollama (macOS) oder ollama.com/download",
-      "Model laden: ollama pull llama3.2",
-      "Läuft automatisch auf localhost:11434",
+      "Install Ollama: brew install ollama (macOS) or ollama.com/download",
+      "Pull a model: ollama pull llama3.2",
+      "Runs automatically on localhost:11434",
     ],
     free: true,
   },
@@ -396,7 +396,7 @@ export async function handleSetupAPI(
       const onlyToggles = platform.envVars.every(v => v.type === "toggle") ||
         (platformId === "whatsapp" && platform.envVars.filter(v => v.type !== "toggle").every(v => !values[v.key]));
       const restartNeeded = !onlyToggles;
-      res.end(JSON.stringify({ ok: true, restartNeeded, note: restartNeeded ? "Neustart nötig um Änderungen zu aktivieren." : "Gespeichert." }));
+      res.end(JSON.stringify({ ok: true, restartNeeded, note: restartNeeded ? "Restart required to apply changes." : "Saved." }));
     } catch {
       res.statusCode = 400;
       res.end(JSON.stringify({ error: "Invalid request" }));
@@ -410,7 +410,7 @@ export async function handleSetupAPI(
       const { platformId } = JSON.parse(body);
       const platform = PLATFORMS.find(p => p.id === platformId);
       if (!platform?.npmPackages?.length) {
-        res.end(JSON.stringify({ ok: true, note: "Keine Dependencies nötig." }));
+        res.end(JSON.stringify({ ok: true, note: "No dependencies needed." }));
         return true;
       }
       const pkgs = platform.npmPackages.join(" ");
@@ -460,11 +460,11 @@ export async function handleSetupAPI(
       const provider = PROVIDERS.find(p => p.id === providerId);
       if (!provider?.envKey) {
         res.statusCode = 400;
-        res.end(JSON.stringify({ error: "Provider braucht keinen API Key" }));
+        res.end(JSON.stringify({ error: "Provider does not need an API key" }));
         return true;
       }
       writeEnvVar(provider.envKey, apiKey);
-      res.end(JSON.stringify({ ok: true, note: "Neustart nötig um den neuen Key zu aktivieren." }));
+      res.end(JSON.stringify({ ok: true, note: "Restart required to activate the new key." }));
     } catch {
       res.statusCode = 400;
       res.end(JSON.stringify({ error: "Invalid request" }));
@@ -493,7 +493,7 @@ export async function handleSetupAPI(
     try {
       const { keys } = JSON.parse(body);
       writeEnvVar("FALLBACK_PROVIDERS", keys.join(","));
-      res.end(JSON.stringify({ ok: true, note: "Neustart nötig." }));
+      res.end(JSON.stringify({ ok: true, note: "Restart required." }));
     } catch {
       res.statusCode = 400;
       res.end(JSON.stringify({ error: "Invalid request" }));
@@ -520,7 +520,7 @@ export async function handleSetupAPI(
       const model: CustomModelDef = JSON.parse(body);
       if (!model.key || !model.name || !model.baseUrl || !model.model) {
         res.statusCode = 400;
-        res.end(JSON.stringify({ error: "key, name, baseUrl und model sind Pflichtfelder" }));
+        res.end(JSON.stringify({ error: "key, name, baseUrl and model are required fields" }));
         return true;
       }
       model.type = "openai-compatible";
@@ -536,7 +536,7 @@ export async function handleSetupAPI(
         writeEnvVar(model.apiKeyEnv, (model as any).apiKey);
       }
 
-      res.end(JSON.stringify({ ok: true, note: "Neustart nötig um das Modell zu aktivieren." }));
+      res.end(JSON.stringify({ ok: true, note: "Restart required to activate the model." }));
     } catch {
       res.statusCode = 400;
       res.end(JSON.stringify({ error: "Invalid request" }));
@@ -586,7 +586,7 @@ export async function handleSetupAPI(
       const { password } = JSON.parse(body);
       if (!password) {
         res.statusCode = 400;
-        res.end(JSON.stringify({ error: "Passwort erforderlich" }));
+        res.end(JSON.stringify({ error: "Password required" }));
         return true;
       }
       const result = storePassword(password);
@@ -597,7 +597,7 @@ export async function handleSetupAPI(
           res.end(JSON.stringify({ ok: true, method: result.method, verified: true }));
         } else {
           revokePassword(); // Clean up if wrong password
-          res.end(JSON.stringify({ ok: false, error: "Passwort gespeichert aber Verifikation fehlgeschlagen: " + verify.error }));
+          res.end(JSON.stringify({ ok: false, error: "Password stored but verification failed: " + verify.error }));
         }
       } else {
         res.end(JSON.stringify({ ok: false, error: result.error }));
@@ -629,7 +629,7 @@ export async function handleSetupAPI(
       const { command } = JSON.parse(body);
       if (!command) {
         res.statusCode = 400;
-        res.end(JSON.stringify({ error: "Kein Command angegeben" }));
+        res.end(JSON.stringify({ error: "No command specified" }));
         return true;
       }
       const result = await sudoExec(command);
@@ -645,7 +645,7 @@ export async function handleSetupAPI(
   if (urlPath === "/api/sudo/admin-dialog" && req.method === "POST") {
     try {
       const { reason } = JSON.parse(body);
-      const result = await requestAdminViaDialog(reason || "Alvin Bot benötigt Administrator-Rechte");
+      const result = await requestAdminViaDialog(reason || "Alvin Bot requires administrator privileges");
       res.end(JSON.stringify(result));
     } catch {
       res.statusCode = 400;
@@ -842,7 +842,7 @@ export async function handleSetupAPI(
       if (fs.existsSync(authDir)) {
         fs.rmSync(authDir, { recursive: true });
       }
-      res.end(JSON.stringify({ ok: true, note: "Auth-Daten gelöscht. Neustart nötig für neue Verbindung." }));
+      res.end(JSON.stringify({ ok: true, note: "Auth data cleared. Restart required for new connection." }));
     } catch (err: unknown) {
       const error = err instanceof Error ? err.message : String(err);
       res.end(JSON.stringify({ ok: false, error }));
@@ -857,20 +857,20 @@ export async function handleSetupAPI(
 
       if (platformId === "telegram") {
         const token = process.env.BOT_TOKEN;
-        if (!token) { res.end(JSON.stringify({ ok: false, error: "BOT_TOKEN nicht gesetzt" })); return true; }
+        if (!token) { res.end(JSON.stringify({ ok: false, error: "BOT_TOKEN not set" })); return true; }
         const apiRes = await fetch(`https://api.telegram.org/bot${token}/getMe`);
         const data = await apiRes.json() as any;
         if (data.ok) {
           res.end(JSON.stringify({ ok: true, info: `@${data.result.username} (${data.result.first_name})` }));
         } else {
-          res.end(JSON.stringify({ ok: false, error: data.description || "Token ungültig" }));
+          res.end(JSON.stringify({ ok: false, error: data.description || "Invalid token" }));
         }
         return true;
       }
 
       if (platformId === "discord") {
         const token = process.env.DISCORD_TOKEN;
-        if (!token) { res.end(JSON.stringify({ ok: false, error: "DISCORD_TOKEN nicht gesetzt" })); return true; }
+        if (!token) { res.end(JSON.stringify({ ok: false, error: "DISCORD_TOKEN not set" })); return true; }
         const apiRes = await fetch("https://discord.com/api/v10/users/@me", {
           headers: { Authorization: `Bot ${token}` },
         });
@@ -878,20 +878,20 @@ export async function handleSetupAPI(
         if (data.id) {
           res.end(JSON.stringify({ ok: true, info: `${data.username}#${data.discriminator || '0'} (ID: ${data.id})` }));
         } else {
-          res.end(JSON.stringify({ ok: false, error: data.message || "Token ungültig" }));
+          res.end(JSON.stringify({ ok: false, error: data.message || "Invalid token" }));
         }
         return true;
       }
 
       if (platformId === "signal") {
         const apiUrl = process.env.SIGNAL_API_URL;
-        if (!apiUrl) { res.end(JSON.stringify({ ok: false, error: "SIGNAL_API_URL nicht gesetzt" })); return true; }
+        if (!apiUrl) { res.end(JSON.stringify({ ok: false, error: "SIGNAL_API_URL not set" })); return true; }
         const apiRes = await fetch(`${apiUrl.replace(/\/$/, '')}/v1/about`);
         if (apiRes.ok) {
           const data = await apiRes.json() as any;
-          res.end(JSON.stringify({ ok: true, info: `signal-cli API v${data.version || '?'} erreichbar` }));
+          res.end(JSON.stringify({ ok: true, info: `signal-cli API v${data.version || '?'} reachable` }));
         } else {
-          res.end(JSON.stringify({ ok: false, error: `API antwortet mit ${apiRes.status}` }));
+          res.end(JSON.stringify({ ok: false, error: `API responded with ${apiRes.status}` }));
         }
         return true;
       }
@@ -902,12 +902,12 @@ export async function handleSetupAPI(
           const state = getWhatsAppState();
           res.end(JSON.stringify({ ok: state.status === "connected", info: `Status: ${state.status}` }));
         } catch {
-          res.end(JSON.stringify({ ok: false, error: "WhatsApp adapter nicht geladen" }));
+          res.end(JSON.stringify({ ok: false, error: "WhatsApp adapter not loaded" }));
         }
         return true;
       }
 
-      res.end(JSON.stringify({ ok: false, error: "Unbekannte Plattform" }));
+      res.end(JSON.stringify({ ok: false, error: "Unknown platform" }));
     } catch (err: unknown) {
       const error = err instanceof Error ? err.message : String(err);
       res.end(JSON.stringify({ ok: false, error }));
@@ -949,7 +949,7 @@ async function testApiKey(providerId: string, apiKey: string): Promise<{ ok: boo
       } else {
         const envKey = provider.envKey;
         const storedKey = envKey ? process.env[envKey] : undefined;
-        if (!storedKey) return { ok: false, error: "Kein gespeicherter Key vorhanden" };
+        if (!storedKey) return { ok: false, error: "No stored key available" };
         apiKey = storedKey;
       }
     }
@@ -987,7 +987,7 @@ async function testApiKey(providerId: string, apiKey: string): Promise<{ ok: boo
           execSync("claude --version", { timeout: 5000, stdio: "pipe" });
           return { ok: true, model: "claude-opus-4-6" };
         } catch {
-          return { ok: false, error: "Claude CLI nicht installiert oder nicht eingeloggt" };
+          return { ok: false, error: "Claude CLI not installed or not logged in" };
         }
       }
       case "anthropic": {
@@ -999,7 +999,7 @@ async function testApiKey(providerId: string, apiKey: string): Promise<{ ok: boo
         return { ok: true, model: "claude-sonnet-4" };
       }
       default:
-        return { ok: false, error: "Key-Test für diesen Provider nicht verfügbar" };
+        return { ok: false, error: "Key test not available for this provider" };
     }
   } catch (err: unknown) {
     return { ok: false, error: err instanceof Error ? err.message : String(err) };

@@ -36,7 +36,7 @@ async function fetchJSON(url, headers = {}) {
 async function getStockPrice(symbol) {
   const data = await fetchJSON(`${YAHOO_BASE}/${encodeURIComponent(symbol)}?interval=1d&range=5d`);
   const result = data?.chart?.result?.[0];
-  if (!result) throw new Error(`Symbol "${symbol}" nicht gefunden`);
+  if (!result) throw new Error(`Symbol "${symbol}" not found`);
 
   const meta = result.meta;
   const price = meta.regularMarketPrice;
@@ -62,7 +62,7 @@ async function getCryptoPrice(id) {
     `${COINGECKO_BASE}/simple/price?ids=${id}&vs_currencies=usd,eur&include_24hr_change=true&include_market_cap=true`
   );
   const coin = data[id];
-  if (!coin) throw new Error(`Crypto "${id}" nicht gefunden`);
+  if (!coin) throw new Error(`Crypto "${id}" not found`);
 
   return {
     id,
@@ -95,17 +95,17 @@ function formatNumber(n, decimals = 2) {
 
 export default {
   name: "finance",
-  description: "Aktienkurse, Krypto-Preise und Währungsumrechnung",
+  description: "Stock prices, crypto prices and currency conversion",
   version: "1.0.0",
   author: "Alvin Bot",
 
   commands: [
     {
       command: "stock",
-      description: "Aktienkurs abfragen (z.B. /stock AAPL)",
+      description: "Get stock price (e.g. /stock AAPL)",
       handler: async (ctx, args) => {
         if (!args) {
-          await ctx.reply("📈 Nutze: `/stock AAPL` oder `/stock MSFT GOOGL TSLA`", { parse_mode: "Markdown" });
+          await ctx.reply("📈 Use: `/stock AAPL` or `/stock MSFT GOOGL TSLA`", { parse_mode: "Markdown" });
           return;
         }
 
@@ -133,10 +133,10 @@ export default {
     },
     {
       command: "crypto",
-      description: "Krypto-Preis abfragen (z.B. /crypto btc)",
+      description: "Get crypto price (e.g. /crypto btc)",
       handler: async (ctx, args) => {
         if (!args) {
-          await ctx.reply("🪙 Nutze: `/crypto btc` oder `/crypto eth sol doge`", { parse_mode: "Markdown" });
+          await ctx.reply("🪙 Use: `/crypto btc` or `/crypto eth sol doge`", { parse_mode: "Markdown" });
           return;
         }
 
@@ -165,22 +165,22 @@ export default {
     },
     {
       command: "fx",
-      description: "Währung umrechnen (z.B. /fx 100 USD EUR)",
+      description: "Convert currency (e.g. /fx 100 USD EUR)",
       handler: async (ctx, args) => {
         if (!args) {
-          await ctx.reply("💱 Nutze: `/fx 100 USD EUR`", { parse_mode: "Markdown" });
+          await ctx.reply("💱 Use: `/fx 100 USD EUR`", { parse_mode: "Markdown" });
           return;
         }
 
         const parts = args.split(/\s+/);
         if (parts.length < 3) {
-          await ctx.reply("Format: `/fx <Betrag> <VON> <NACH>`\nBeispiel: `/fx 100 USD EUR`", { parse_mode: "Markdown" });
+          await ctx.reply("Format: `/fx <amount> <FROM> <TO>`\nExample: `/fx 100 USD EUR`", { parse_mode: "Markdown" });
           return;
         }
 
         const amount = parseFloat(parts[0]);
         if (isNaN(amount)) {
-          await ctx.reply("❌ Ungültiger Betrag.");
+          await ctx.reply("❌ Invalid amount.");
           return;
         }
 
@@ -188,10 +188,10 @@ export default {
 
         try {
           const data = await convertCurrency(amount, parts[1], parts[2]);
-          if (!data.result) throw new Error("Währungspaar nicht unterstützt");
+          if (!data.result) throw new Error("Currency pair not supported");
           await ctx.reply(
             `💱 *${formatNumber(data.amount)} ${data.from}* = *${formatNumber(data.result)} ${data.to}*\n` +
-            `_Kurs vom ${data.date}_`,
+            `_Rate from ${data.date}_`,
             { parse_mode: "Markdown" }
           );
         } catch (err) {

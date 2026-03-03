@@ -33,7 +33,7 @@ function loadConfig() {
 async function hueRequest(method, endpoint, body = null) {
   const config = loadConfig();
   if (!config.hue?.bridge || !config.hue?.username) {
-    throw new Error("Hue Bridge nicht konfiguriert. Erstelle docs/smarthome.json");
+    throw new Error("Hue Bridge not configured. Create docs/smarthome.json");
   }
   const url = `http://${config.hue.bridge}/api/${config.hue.username}${endpoint}`;
   const options = { method, headers: { "Content-Type": "application/json" } };
@@ -44,14 +44,14 @@ async function hueRequest(method, endpoint, body = null) {
 
 export default {
   name: "smarthome",
-  description: "Smart Home Steuerung (Hue, Webhooks, Home Assistant)",
+  description: "Smart home control (Hue, Webhooks, Home Assistant)",
   version: "1.0.0",
   author: "Alvin Bot",
 
   commands: [
     {
       command: "home",
-      description: "Smart Home steuern",
+      description: "Control smart home",
       handler: async (ctx, args) => {
         const config = loadConfig();
 
@@ -59,7 +59,7 @@ export default {
           if (config.devices.length === 0 && !config.hue) {
             await ctx.reply(
               "🏠 *Smart Home*\n\n" +
-              "Nicht konfiguriert.\nErstelle `docs/smarthome.json` mit:\n" +
+              "Not configured.\nCreate `docs/smarthome.json` with:\n" +
               "```json\n" +
               '{\n  "hue": { "bridge": "IP", "username": "KEY" },\n  "devices": []\n}\n' +
               "```",
@@ -81,13 +81,13 @@ export default {
                 lines.push(`💡 ${state} *${light.name}*${brightness} [Hue #${id}]`);
               }
             } catch (err) {
-              lines.push(`⚠️ Hue Bridge nicht erreichbar: ${err.message}`);
+              lines.push(`⚠️ Hue Bridge unreachable: ${err.message}`);
             }
           }
 
           await ctx.reply(
             `🏠 *Smart Home:*\n\n${lines.join("\n")}\n\n` +
-            "_Befehle: `/home on <name>`, `/home off <name>`, `/home brightness <name> 50`_",
+            "_Commands: `/home on <name>`, `/home off <name>`, `/home brightness <name> 50`_",
             { parse_mode: "Markdown" }
           );
           return;
@@ -103,14 +103,14 @@ export default {
           if (device) {
             if (device.type === "webhook") {
               const url = on ? device.on : device.off;
-              if (!url) { await ctx.reply("❌ Kein Webhook für diesen Zustand."); return; }
+              if (!url) { await ctx.reply("❌ No webhook for this state."); return; }
               await fetch(url, { method: "POST" });
-              await ctx.reply(`${on ? "🟢" : "⚫"} *${device.name}* ${on ? "eingeschaltet" : "ausgeschaltet"}.`, { parse_mode: "Markdown" });
+              await ctx.reply(`${on ? "🟢" : "⚫"} *${device.name}* turned ${on ? "on" : "off"}.`, { parse_mode: "Markdown" });
               return;
             }
             if (device.type === "hue" && device.id) {
               await hueRequest("PUT", `/lights/${device.id}/state`, { on });
-              await ctx.reply(`💡 *${device.name}* ${on ? "ein" : "aus"}.`, { parse_mode: "Markdown" });
+              await ctx.reply(`💡 *${device.name}* ${on ? "on" : "off"}.`, { parse_mode: "Markdown" });
               return;
             }
           }
@@ -122,14 +122,14 @@ export default {
               for (const [id, light] of Object.entries(lights)) {
                 if (light.name.toLowerCase().includes(deviceName)) {
                   await hueRequest("PUT", `/lights/${id}/state`, { on });
-                  await ctx.reply(`💡 *${light.name}* ${on ? "ein" : "aus"}.`, { parse_mode: "Markdown" });
+                  await ctx.reply(`💡 *${light.name}* ${on ? "on" : "off"}.`, { parse_mode: "Markdown" });
                   return;
                 }
               }
             } catch { /* bridge not reachable */ }
           }
 
-          await ctx.reply(`❌ Gerät "${deviceName}" nicht gefunden.`);
+          await ctx.reply(`❌ Device "${deviceName}" not found.`);
           return;
         }
 
@@ -140,7 +140,7 @@ export default {
           const deviceName = parts.slice(0, -1).join(" ").toLowerCase();
 
           if (isNaN(level) || level < 0 || level > 100) {
-            await ctx.reply("Helligkeit: 0-100. Beispiel: `/home brightness Lampe 50`", { parse_mode: "Markdown" });
+            await ctx.reply("Brightness: 0-100. Example: `/home brightness Lamp 50`", { parse_mode: "Markdown" });
             return;
           }
 
@@ -152,45 +152,45 @@ export default {
               for (const [id, light] of Object.entries(lights)) {
                 if (light.name.toLowerCase().includes(deviceName)) {
                   await hueRequest("PUT", `/lights/${id}/state`, { on: true, bri });
-                  await ctx.reply(`💡 *${light.name}* Helligkeit: ${level}%`, { parse_mode: "Markdown" });
+                  await ctx.reply(`💡 *${light.name}* brightness: ${level}%`, { parse_mode: "Markdown" });
                   return;
                 }
               }
             } catch { /* bridge not reachable */ }
           }
 
-          await ctx.reply(`❌ Gerät "${deviceName}" nicht gefunden.`);
+          await ctx.reply(`❌ Device "${deviceName}" not found.`);
           return;
         }
 
         // /home scene <scene-name>
         if (args.startsWith("scene ")) {
           const sceneName = args.slice(6).trim().toLowerCase();
-          if (!config.hue) { await ctx.reply("❌ Hue nicht konfiguriert."); return; }
+          if (!config.hue) { await ctx.reply("❌ Hue not configured."); return; }
 
           try {
             const scenes = await hueRequest("GET", "/scenes");
             for (const [id, scene] of Object.entries(scenes)) {
               if (scene.name.toLowerCase().includes(sceneName)) {
                 await hueRequest("PUT", "/groups/0/action", { scene: id });
-                await ctx.reply(`🎨 Szene aktiviert: *${scene.name}*`, { parse_mode: "Markdown" });
+                await ctx.reply(`🎨 Scene activated: *${scene.name}*`, { parse_mode: "Markdown" });
                 return;
               }
             }
-            await ctx.reply(`❌ Szene "${sceneName}" nicht gefunden.`);
+            await ctx.reply(`❌ Scene "${sceneName}" not found.`);
           } catch (err) {
-            await ctx.reply(`❌ Hue-Fehler: ${err.message}`);
+            await ctx.reply(`❌ Hue error: ${err.message}`);
           }
           return;
         }
 
         await ctx.reply(
-          "🏠 *Smart Home Befehle:*\n\n" +
-          "`/home` — Geräte auflisten\n" +
-          "`/home on Lampe` — Einschalten\n" +
-          "`/home off Lampe` — Ausschalten\n" +
-          "`/home brightness Lampe 50` — Helligkeit\n" +
-          "`/home scene Entspannt` — Hue-Szene aktivieren",
+          "🏠 *Smart Home commands:*\n\n" +
+          "`/home` — List devices\n" +
+          "`/home on Lamp` — Turn on\n" +
+          "`/home off Lamp` — Turn off\n" +
+          "`/home brightness Lamp 50` — Brightness\n" +
+          "`/home scene Relax` — Activate Hue scene",
           { parse_mode: "Markdown" }
         );
       },

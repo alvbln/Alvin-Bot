@@ -12,7 +12,7 @@
  * - Color-coded messages
  * - Input history (↑/↓)
  * - Multi-line input (Shift+Enter)
- * - i18n: English (default) / German (--lang de)
+ * - i18n: English (default) / German (--lang de or ALVIN_LANG=de)
  *
  * Usage: alvin-bot tui [--port 3100] [--host localhost] [--lang en|de]
  */

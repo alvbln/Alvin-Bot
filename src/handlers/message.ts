@@ -159,7 +159,7 @@ export async function handleMessage(ctx: Context): Promise<void> {
 
         case "fallback":
           await ctx.reply(
-            `⚡ _${chunk.failedProvider} nicht verfügbar — wechsle zu ${chunk.providerName}_`,
+            `⚡ _${chunk.failedProvider} unavailable — switching to ${chunk.providerName}_`,
             { parse_mode: "Markdown" }
           );
           break;

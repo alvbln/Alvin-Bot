@@ -67,7 +67,7 @@ export async function handlePlatformMessage(
   // ── Photo with caption: describe as context ──────────────────────────
   if (msg.media?.type === "photo" && msg.media.path) {
     const caption = text || "Beschreibe dieses Bild.";
-    text = `[Bild angehängt: ${msg.media.path}]\n\n${caption}`;
+    text = `[Image attached: ${msg.media.path}]\n\n${caption}`;
   }
 
   // ── Document: provide path + filename + instructions ──────────────────
@@ -88,7 +88,7 @@ export async function handlePlatformMessage(
     } else if (isPdf) {
       fileHint += `\n\nLies den Inhalt mit: pdftotext "${fpath}" - oder python3 mit PyPDF2/pdfplumber.`;
     } else if (isOffice) {
-      fileHint += `\n\nÖffne mit python3 (openpyxl für xlsx, python-docx für docx, csv-Modul für csv).`;
+      fileHint += `\n\nOpen with python3 (openpyxl for xlsx, python-docx for docx, csv module for csv).`;
     }
 
     text = `${fileHint}\n\n${caption}`;
@@ -269,7 +269,7 @@ async function handlePlatformCommand(
         "/status — Session-Info\n" +
         "/effort <low|medium|high|max> — Denktiefe\n" +
         "/help — Diese Hilfe\n\n" +
-        "Für alle Features nutze das Web Dashboard oder Telegram."
+        "For all features use the Web Dashboard or Telegram."
       );
       return true;
     }

@@ -118,7 +118,7 @@ export async function handleVideo(ctx: Context): Promise<void> {
   }
 
   if (!hasFFmpeg()) {
-    await ctx.reply("❌ Video-Verarbeitung benötigt ffmpeg. Installiere mit: `brew install ffmpeg`", { parse_mode: "Markdown" });
+    await ctx.reply("❌ Video processing requires ffmpeg. Install with: `brew install ffmpeg`", { parse_mode: "Markdown" });
     return;
   }
 
@@ -178,7 +178,7 @@ export async function handleVideo(ctx: Context): Promise<void> {
       prompt += `\n\n[Bildunterschrift]: "${caption}"`;
     }
     if (frames.length > 0) {
-      prompt += `\n\n[${frames.length} Schlüsselbilder aus dem Video extrahiert]`;
+      prompt += `\n\n[${frames.length} key frames extracted from the video]`;
       prompt += "\n\nBitte beschreibe was im Video zu sehen ist und beantworte eventuelle Fragen.";
     } else {
       prompt += "\n\nIch konnte keine Frames extrahieren. Basiere deine Antwort auf der Audio-Transkription.";

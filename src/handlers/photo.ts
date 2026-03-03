@@ -42,7 +42,7 @@ export async function handlePhoto(ctx: Context): Promise<void> {
   const session = getSession(userId);
 
   if (session.isProcessing) {
-    await ctx.reply("Bitte warten, vorherige Anfrage läuft noch... (/cancel zum Abbrechen)");
+    await ctx.reply("Please wait, previous request still running... (/cancel to abort)");
     return;
   }
 
@@ -105,7 +105,7 @@ export async function handlePhoto(ctx: Context): Promise<void> {
       }
 
       if (!activeProvider.config.supportsVision) {
-        await ctx.reply(`⚠️ Das aktuelle Modell (${activeProvider.config.name}) unterstützt keine Bildanalyse. Wechsle mit /model zu einem Vision-Modell.`);
+        await ctx.reply(`⚠️ The current model (${activeProvider.config.name}) does not support image analysis. Switch to a vision model with /model.`);
         return;
       }
 

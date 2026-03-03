@@ -66,11 +66,11 @@ export async function runClaudeAgent(opts: ClaudeQueryOptions): Promise<void> {
         "Read", "Write", "Edit", "Bash", "Glob", "Grep",
         "WebSearch", "WebFetch", "Task",
       ],
-      systemPrompt: `Du bist ein autonomer AI-Agent, gesteuert über Telegram.
-Halte Antworten kurz und prägnant, aber gründlich.
-Nutze Markdown-Formatierung kompatibel mit Telegram (fett, kursiv, Code-Blöcke).
-Wenn du Commands ausführst oder Dateien bearbeitest, erkläre kurz was du getan hast.
-Antworte auf Deutsch, es sei denn der User schreibt auf Englisch.
+      systemPrompt: `You are an autonomous AI agent, controlled via Telegram.
+Keep answers short and concise, but thorough.
+Use Markdown formatting compatible with Telegram (bold, italic, code blocks).
+When you execute commands or edit files, briefly explain what you did.
+Reply in the language the user writes in.
 
 ${botClaudeMd}`,
       effort: opts.effort,

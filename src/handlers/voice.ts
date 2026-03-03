@@ -44,7 +44,7 @@ export async function handleVoice(ctx: Context): Promise<void> {
   const session = getSession(userId);
 
   if (session.isProcessing) {
-    await ctx.reply("Bitte warten, vorherige Anfrage läuft noch... (/cancel zum Abbrechen)");
+    await ctx.reply("Please wait, previous request still running... (/cancel to abort)");
     return;
   }
 

@@ -50,8 +50,8 @@ function runHealthCheck(): HealthIssue[] {
     issues.push({
       severity: "error",
       category: "Config",
-      message: ".env Datei fehlt",
-      fix: "Erstelle eine Standard-.env aus .env.example",
+      message: ".env file missing",
+      fix: "Create a default .env from .env.example",
       fixAction: "create-env",
     });
   } else {
@@ -63,7 +63,7 @@ function runHealthCheck(): HealthIssue[] {
       issues.push({
         severity: "error",
         category: "Telegram",
-        message: "BOT_TOKEN nicht gesetzt — Telegram Bot kann nicht starten",
+        message: "BOT_TOKEN not set — Telegram bot cannot start",
       });
     }
 
@@ -72,7 +72,7 @@ function runHealthCheck(): HealthIssue[] {
       issues.push({
         severity: "warning",
         category: "Security",
-        message: "ALLOWED_USERS nicht gesetzt — jeder kann den Bot nutzen",
+        message: "ALLOWED_USERS not set — anyone can use the bot",
       });
     }
 
@@ -85,8 +85,8 @@ function runHealthCheck(): HealthIssue[] {
         issues.push({
           severity: "error",
           category: "Config",
-          message: `.env Zeile ${i + 1}: Ungültiges Format "${line.slice(0, 40)}..."`,
-          fix: `Zeile entfernen oder korrigieren`,
+          message: `.env line ${i + 1}: Invalid format "${line.slice(0, 40)}..."`,
+          fix: `Remove or fix the line`,
           fixAction: `fix-env-line:${i}`,
         });
       }
@@ -97,7 +97,7 @@ function runHealthCheck(): HealthIssue[] {
       issues.push({
         severity: "warning",
         category: "Config",
-        message: "Leere Werte in .env gefunden — einige Features könnten nicht funktionieren",
+        message: "Empty values found in .env — some features may not work",
       });
     }
   }
@@ -106,9 +106,9 @@ function runHealthCheck(): HealthIssue[] {
   if (!fs.existsSync(DOCS_DIR)) {
     issues.push({
       severity: "error",
-      category: "Dateien",
-      message: "docs/ Verzeichnis fehlt",
-      fix: "Erstelle docs/ Verzeichnis",
+      category: "Files",
+      message: "docs/ directory missing",
+      fix: "Create docs/ directory",
       fixAction: "create-docs",
     });
   }
@@ -123,8 +123,8 @@ function runHealthCheck(): HealthIssue[] {
       issues.push({
         severity: "warning",
         category: "Tools",
-        message: "TOOLS.md enthält keine Tool-Definitionen (## Überschriften fehlen)",
-        fix: "TOOLS.md aus TOOLS.example.md neu erstellen",
+        message: "TOOLS.md contains no tool definitions (## headings missing)",
+        fix: "Recreate TOOLS.md from TOOLS.example.md",
         fixAction: "fix-tools-json",
       });
     }
@@ -135,8 +135,8 @@ function runHealthCheck(): HealthIssue[] {
       issues.push({
         severity: "error",
         category: "Tools",
-        message: "docs/tools.json ist kein gültiges JSON",
-        fix: "JSON-Fehler automatisch reparieren oder auf Backup zurücksetzen",
+        message: "docs/tools.json is not valid JSON",
+        fix: "Auto-repair JSON errors or reset to backup",
         fixAction: "fix-tools-json",
       });
     }
@@ -144,8 +144,8 @@ function runHealthCheck(): HealthIssue[] {
     issues.push({
       severity: "info",
       category: "Tools",
-      message: "Keine Custom Tools konfiguriert (TOOLS.md fehlt)",
-      fix: "TOOLS.md aus Beispiel erstellen",
+      message: "No custom tools configured (TOOLS.md missing)",
+      fix: "Create TOOLS.md from example",
       fixAction: "fix-tools-json",
     });
   }
@@ -159,8 +159,8 @@ function runHealthCheck(): HealthIssue[] {
       issues.push({
         severity: "error",
         category: "Models",
-        message: "docs/custom-models.json ist kein gültiges JSON",
-        fix: "Auf leeres Array zurücksetzen",
+        message: "docs/custom-models.json is not valid JSON",
+        fix: "Reset to empty array",
         fixAction: "fix-custom-models",
       });
     }
@@ -175,8 +175,8 @@ function runHealthCheck(): HealthIssue[] {
       issues.push({
         severity: "error",
         category: "Cron",
-        message: "docs/cron-jobs.json ist kein gültiges JSON",
-        fix: "Auf leeres Array zurücksetzen",
+        message: "docs/cron-jobs.json is not valid JSON",
+        fix: "Reset to empty array",
         fixAction: "fix-cron-json",
       });
     }
@@ -187,8 +187,8 @@ function runHealthCheck(): HealthIssue[] {
     issues.push({
       severity: "warning",
       category: "Personality",
-      message: "SOUL.md fehlt — Bot hat keine Persönlichkeit",
-      fix: "Standard-SOUL.md erstellen",
+      message: "SOUL.md missing — bot has no personality",
+      fix: "Create default SOUL.md",
       fixAction: "create-soul",
     });
   }
@@ -201,7 +201,7 @@ function runHealthCheck(): HealthIssue[] {
       issues.push({
         severity: "warning",
         category: "System",
-        message: `Node.js ${nodeVersion} — empfohlen ist v20+`,
+        message: `Node.js ${nodeVersion} — v20+ recommended`,
       });
     }
   } catch { /* ignore */ }
@@ -215,7 +215,7 @@ function runHealthCheck(): HealthIssue[] {
       issues.push({
         severity: "warning",
         category: "System",
-        message: `Festplatte ${usagePercent}% voll`,
+        message: `Disk ${usagePercent}% full`,
       });
     }
   } catch { /* ignore */ }
@@ -227,7 +227,7 @@ function runHealthCheck(): HealthIssue[] {
     issues.push({
       severity: "info",
       category: "System",
-      message: "PM2 nicht gefunden — empfohlen für Prozess-Management",
+      message: "PM2 not found — recommended for process management",
     });
   }
 
@@ -236,7 +236,7 @@ function runHealthCheck(): HealthIssue[] {
     issues.push({
       severity: "info",
       category: "Status",
-      message: "✅ Alles in Ordnung! Keine Probleme gefunden.",
+      message: "All good! No issues found.",
     });
   }
 
@@ -252,16 +252,16 @@ function autoRepair(action: string): { ok: boolean; message: string } {
         const exampleFile = resolve(BOT_ROOT, ".env.example");
         if (fs.existsSync(exampleFile)) {
           fs.copyFileSync(exampleFile, ENV_FILE);
-          return { ok: true, message: ".env aus .env.example erstellt" };
+          return { ok: true, message: ".env created from .env.example" };
         }
         fs.writeFileSync(ENV_FILE, "BOT_TOKEN=\nALLOWED_USERS=\nPRIMARY_PROVIDER=claude-sdk\n");
-        return { ok: true, message: "Standard-.env erstellt (BOT_TOKEN muss noch gesetzt werden)" };
+        return { ok: true, message: "Default .env created (BOT_TOKEN still needs to be set)" };
       }
 
       case "create-docs": {
         fs.mkdirSync(DOCS_DIR, { recursive: true });
         fs.mkdirSync(resolve(DOCS_DIR, "memory"), { recursive: true });
-        return { ok: true, message: "docs/ Verzeichnis erstellt" };
+        return { ok: true, message: "docs/ directory created" };
       }
 
       case "fix-tools-json": {
@@ -269,29 +269,29 @@ function autoRepair(action: string): { ok: boolean; message: string } {
         const toolsMdPath = resolve(BOT_ROOT, "TOOLS.md");
         if (!fs.existsSync(toolsMdPath)) {
           fs.writeFileSync(toolsMdPath, "# Custom Tools\n\n> Define your own tools here. Each `##` heading creates a new tool.\n");
-          return { ok: true, message: "TOOLS.md mit leerem Toolset erstellt" };
+          return { ok: true, message: "TOOLS.md created with empty toolset" };
         }
         fs.writeFileSync(resolve(DOCS_DIR, "tools.json"), JSON.stringify({ tools: [] }, null, 2));
-        return { ok: true, message: "tools.json auf leeres Toolset zurückgesetzt" };
+        return { ok: true, message: "tools.json reset to empty toolset" };
       }
 
       case "fix-custom-models": {
         fs.writeFileSync(resolve(DOCS_DIR, "custom-models.json"), "[]");
-        return { ok: true, message: "custom-models.json zurückgesetzt" };
+        return { ok: true, message: "custom-models.json reset" };
       }
 
       case "fix-cron-json": {
         fs.writeFileSync(resolve(DOCS_DIR, "cron-jobs.json"), "[]");
-        return { ok: true, message: "cron-jobs.json zurückgesetzt" };
+        return { ok: true, message: "cron-jobs.json reset" };
       }
 
       case "create-soul": {
         fs.writeFileSync(resolve(BOT_ROOT, "SOUL.md"),
-          "# Alvin Bot — Persönlichkeit\n\n" +
-          "Du bist ein hilfreicher, direkter und kompetenter AI-Assistent.\n" +
-          "Antworte klar und präzise. Hab Meinungen. Sei echt hilfreich.\n"
+          "# Alvin Bot — Personality\n\n" +
+          "You are a helpful, direct, and competent AI assistant.\n" +
+          "Reply clearly and precisely. Have opinions. Be genuinely helpful.\n"
         );
-        return { ok: true, message: "Standard-SOUL.md erstellt" };
+        return { ok: true, message: "Default SOUL.md created" };
       }
 
       default: {
@@ -301,10 +301,10 @@ function autoRepair(action: string): { ok: boolean; message: string } {
           if (lineIdx >= 0 && lineIdx < lines.length) {
             lines[lineIdx] = "# " + lines[lineIdx]; // Comment out broken line
             fs.writeFileSync(ENV_FILE, lines.join("\n"));
-            return { ok: true, message: `Zeile ${lineIdx + 1} auskommentiert` };
+            return { ok: true, message: `Line ${lineIdx + 1} commented out` };
           }
         }
-        return { ok: false, message: `Unbekannte Aktion: ${action}` };
+        return { ok: false, message: `Unknown action: ${action}` };
       }
     }
   } catch (err) {
@@ -381,7 +381,7 @@ function listBackups(): Array<{ id: string; createdAt: number; fileCount: number
 function restoreBackup(id: string, files?: string[]): { ok: boolean; restored: string[]; errors: string[] } {
   const backupPath = resolve(BACKUP_DIR, id);
   if (!backupPath.startsWith(BACKUP_DIR) || !fs.existsSync(backupPath)) {
-    return { ok: false, restored: [], errors: ["Backup nicht gefunden"] };
+    return { ok: false, restored: [], errors: ["Backup not found"] };
   }
 
   const restored: string[] = [];
@@ -533,7 +533,7 @@ export async function handleDoctorAPI(
   // POST /api/restart — restart the bot (legacy)
   if (urlPath === "/api/bot/restart" && req.method === "POST") {
     const { scheduleGracefulRestart } = await import("../services/restart.js");
-    res.end(JSON.stringify({ ok: true, note: "Bot wird neugestartet..." }));
+    res.end(JSON.stringify({ ok: true, note: "Bot is restarting..." }));
     scheduleGracefulRestart(500);
     return true;
   }
@@ -553,7 +553,7 @@ export async function handleDoctorAPI(
       ) || processes[0]; // fallback to first process
 
       if (!botProcess) {
-        res.end(JSON.stringify({ error: "Kein PM2-Prozess gefunden" }));
+        res.end(JSON.stringify({ error: "No PM2 process found" }));
         return true;
       }
 
@@ -574,7 +574,7 @@ export async function handleDoctorAPI(
         },
       }));
     } catch (err) {
-      res.end(JSON.stringify({ error: "PM2 nicht verfügbar" }));
+      res.end(JSON.stringify({ error: "PM2 not available" }));
     }
     return true;
   }
@@ -586,7 +586,7 @@ export async function handleDoctorAPI(
       const allowed = ["restart", "stop", "start", "reload", "flush"];
       if (!allowed.includes(action)) {
         res.statusCode = 400;
-        res.end(JSON.stringify({ ok: false, error: `Ungültige Aktion: ${action}` }));
+        res.end(JSON.stringify({ ok: false, error: `Invalid action: ${action}` }));
         return true;
       }
 
@@ -603,13 +603,13 @@ export async function handleDoctorAPI(
 
       if (action === "flush") {
         execSync(`pm2 flush ${processName}`, { encoding: "utf-8", timeout: 10000, stdio: "pipe" });
-        res.end(JSON.stringify({ ok: true, message: "Logs geleert" }));
+        res.end(JSON.stringify({ ok: true, message: "Logs flushed" }));
         return true;
       }
 
       if (action === "stop") {
         // Stop is special — we can't respond after stopping ourselves
-        res.end(JSON.stringify({ ok: true, message: "Bot wird gestoppt..." }));
+        res.end(JSON.stringify({ ok: true, message: "Bot is stopping..." }));
         setTimeout(() => {
           try {
             execSync(`pm2 stop ${processName}`, { timeout: 10000, stdio: "pipe" });
@@ -621,13 +621,13 @@ export async function handleDoctorAPI(
       if (action === "start") {
         // Start the process if stopped
         execSync(`pm2 start ${processName}`, { encoding: "utf-8", timeout: 10000, stdio: "pipe" });
-        res.end(JSON.stringify({ ok: true, message: "Bot gestartet" }));
+        res.end(JSON.stringify({ ok: true, message: "Bot started" }));
         return true;
       }
 
       if (action === "restart" || action === "reload") {
         const { scheduleGracefulRestart } = await import("../services/restart.js");
-        res.end(JSON.stringify({ ok: true, message: `Bot wird ${action === "restart" ? "neugestartet" : "neu geladen"}...` }));
+        res.end(JSON.stringify({ ok: true, message: `Bot is ${action === "restart" ? "restarting" : "reloading"}...` }));
         scheduleGracefulRestart(500);
         return true;
       }
@@ -661,7 +661,7 @@ export async function handleDoctorAPI(
       logs = logs.replace(/\x1b\[[0-9;]*m/g, "");
       res.end(JSON.stringify({ logs }));
     } catch (err) {
-      res.end(JSON.stringify({ error: "Logs nicht verfügbar", logs: "" }));
+      res.end(JSON.stringify({ error: "Logs not available", logs: "" }));
     }
     return true;
   }

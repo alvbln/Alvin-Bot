@@ -225,7 +225,7 @@ async function executeJob(job: CronJob): Promise<{ output: string; error?: strin
           const registry = getRegistry();
           const queryOpts: QueryOptions = {
             prompt,
-            systemPrompt: `Du bist Alvin Bot, ein autonomer KI-Assistent. Du führst gerade einen geplanten Cron-Job aus ("${job.name}"). Antworte auf Deutsch, kurz und prägnant. Nutze Telegram-kompatibles Markdown. Du hast Zugriff auf Tools (Bash, Dateien, etc.) — nutze sie wenn nötig.`,
+            systemPrompt: `You are Alvin Bot, an autonomous AI assistant. You are currently executing a scheduled cron job ("${job.name}"). Reply concisely. Use Telegram-compatible Markdown. You have access to tools (Bash, files, etc.) — use them if needed.`,
             effort: "high",
             workingDir: BOT_ROOT,
           };
@@ -264,7 +264,7 @@ async function executeJob(job: CronJob): Promise<{ output: string; error?: strin
         } catch (err) {
           const error = err instanceof Error ? err.message : String(err);
           if (notifyCallback) {
-            await notifyCallback(job.target, `❌ AI-Query Fehler (${job.name}): ${error}`);
+            await notifyCallback(job.target, `❌ AI-Query Error (${job.name}): ${error}`);
           }
           throw err;
         }
@@ -276,7 +276,7 @@ async function executeJob(job: CronJob): Promise<{ output: string; error?: strin
   } catch (err: unknown) {
     const error = err instanceof Error ? err.message : String(err);
     if (notifyCallback) {
-      await notifyCallback(job.target, `❌ Cron-Fehler (${job.name}): ${error}`);
+      await notifyCallback(job.target, `❌ Cron Error (${job.name}): ${error}`);
     }
     return { output: "", error };
   }
@@ -443,13 +443,13 @@ export function humanReadableSchedule(schedule: string): string {
     const value = parseFloat(intervalMatch[1]);
     const unit = intervalMatch[2].toLowerCase();
     const labels: Record<string, [string, string]> = {
-      s: ["Sekunde", "Sekunden"], sec: ["Sekunde", "Sekunden"],
-      m: ["Minute", "Minuten"], min: ["Minute", "Minuten"],
-      h: ["Stunde", "Stunden"], hr: ["Stunde", "Stunden"],
-      d: ["Tag", "Tage"], day: ["Tag", "Tage"],
+      s: ["second", "seconds"], sec: ["second", "seconds"],
+      m: ["minute", "minutes"], min: ["minute", "minutes"],
+      h: ["hour", "hours"], hr: ["hour", "hours"],
+      d: ["day", "days"], day: ["day", "days"],
     };
     const [sing, plur] = labels[unit] || ["?", "?"];
-    return `Alle ${value} ${value === 1 ? sing : plur}`;
+    return `Every ${value} ${value === 1 ? sing : plur}`;
   }
 
   // Cron expression: MIN HOUR DAY MONTH WEEKDAY
@@ -457,15 +457,15 @@ export function humanReadableSchedule(schedule: string): string {
   if (parts.length !== 5) return schedule;
   const [minExpr, hourExpr, dayExpr, monthExpr, weekdayExpr] = parts;
 
-  const weekdayNames = ["So", "Mo", "Di", "Mi", "Do", "Fr", "Sa"];
-  const monthNames = ["", "Jan", "Feb", "Mär", "Apr", "Mai", "Jun", "Jul", "Aug", "Sep", "Okt", "Nov", "Dez"];
+  const weekdayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  const monthNames = ["", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
   // Helper: format time from hour + minute expressions
   function formatTime(h: string, m: string): string {
     if (h === "*" && m === "*") return "";
     const hh = h === "*" ? "*" : h.padStart(2, "0");
     const mm = m === "*" ? "00" : m.padStart(2, "0");
-    return `${hh}:${mm} Uhr`;
+    return `${hh}:${mm}`;
   }
 
   // Helper: expand comma/range fields to readable list
@@ -488,11 +488,11 @@ export function humanReadableSchedule(schedule: string): string {
   // Every X minutes/hours
   if (minExpr.includes("/") && hourExpr === "*" && dayExpr === "*" && monthExpr === "*" && weekdayExpr === "*") {
     const step = minExpr.split("/")[1];
-    return `Alle ${step} Min`;
+    return `Every ${step} min`;
   }
   if (hourExpr.includes("/") && dayExpr === "*" && monthExpr === "*" && weekdayExpr === "*") {
     const step = hourExpr.split("/")[1];
-    return `Alle ${step}h`;
+    return `Every ${step}h`;
   }
 
   // Build description
@@ -501,28 +501,28 @@ export function humanReadableSchedule(schedule: string): string {
   // Weekday specific
   if (weekdayExpr !== "*") {
     const days = expandField(weekdayExpr, weekdayNames);
-    if (weekdayExpr === "1-5") descParts.push("Werktags");
-    else if (weekdayExpr === "0,6" || weekdayExpr === "6,0") descParts.push("Am Wochenende");
-    else descParts.push(`Jeden ${days}`);
+    if (weekdayExpr === "1-5") descParts.push("Weekdays");
+    else if (weekdayExpr === "0,6" || weekdayExpr === "6,0") descParts.push("Weekends");
+    else descParts.push(`Every ${days}`);
   }
   // Day of month specific
   else if (dayExpr !== "*") {
     const dayList = expandField(dayExpr);
     if (monthExpr !== "*") {
       const monthList = expandField(monthExpr, monthNames);
-      descParts.push(`Am ${dayList}. ${monthList}`);
+      descParts.push(`On the ${dayList}. of ${monthList}`);
     } else {
-      descParts.push(`Am ${dayList}. jeden Monats`);
+      descParts.push(`On the ${dayList}. of every month`);
     }
   }
   // Month specific only
   else if (monthExpr !== "*") {
     const monthList = expandField(monthExpr, monthNames);
-    descParts.push(`Im ${monthList}`);
+    descParts.push(`In ${monthList}`);
   }
   // Daily (all wildcards except time)
   else if (!hasStep) {
-    descParts.push("Täglich");
+    descParts.push("Daily");
   }
 
   if (time && !hasStep) descParts.push(time);
@@ -536,9 +536,9 @@ export function humanReadableSchedule(schedule: string): string {
 export function formatNextRun(nextRunAt: number | null): string {
   if (!nextRunAt) return "—";
   const diff = nextRunAt - Date.now();
-  if (diff < 0) return "überfällig";
+  if (diff < 0) return "overdue";
   if (diff < 60_000) return `in ${Math.round(diff / 1000)}s`;
   if (diff < 3_600_000) return `in ${Math.round(diff / 60_000)} Min`;
   if (diff < 86_400_000) return `in ${(diff / 3_600_000).toFixed(1)}h`;
-  return `in ${(diff / 86_400_000).toFixed(1)} Tagen`;
+  return `in ${(diff / 86_400_000).toFixed(1)} days`;
 }

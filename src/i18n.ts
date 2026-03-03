@@ -226,7 +226,12 @@ Ich bin ein autonomer KI-Assistent. Direkt, hilfreich, mit eigenem Charakter.
 
 let currentLocale: Locale = "en";
 
-/** Detect locale from CLI flags and environment. */
+/**
+ * Detect locale from CLI flags and environment.
+ * Only explicit opt-in switches to German:
+ *   --lang de | ALVIN_LANG=de
+ * System LANG is NOT used (too many false positives on multilingual systems).
+ */
 export function detectLocale(): Locale {
   const langIdx = process.argv.indexOf("--lang");
   if (langIdx !== -1) {
@@ -235,8 +240,6 @@ export function detectLocale(): Locale {
   }
   const envLang = process.env.ALVIN_LANG?.toLowerCase();
   if (envLang === "de" || envLang === "en") return envLang;
-  const sysLang = process.env.LANG?.toLowerCase() || "";
-  if (sysLang.startsWith("de")) return "de";
   return "en";
 }
 

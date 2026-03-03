@@ -28,7 +28,7 @@ function getActiveProviderLabel(): string {
     };
     return labels[primary] || primary;
   } catch {
-    return "AI-Sprachmodell";
+    return "AI language model";
   }
 }
 
@@ -44,12 +44,12 @@ try {
 /** Base system prompt — adapts to user language */
 function getBasePrompt(lang: "de" | "en"): string {
   return lang === "de"
-    ? `Du bist Alvin Bot, ein autonomer AI-Agent auf Telegram.\nNutze Markdown-Formatierung kompatibel mit Telegram (fett, kursiv, Code-Blöcke).`
+    ? `You are Alvin Bot, an autonomous AI agent on Telegram.\nUse Markdown formatting compatible with Telegram (bold, italic, code blocks).`
     : `You are Alvin Bot, an autonomous AI agent on Telegram.\nUse Markdown formatting compatible with Telegram (bold, italic, code blocks).`;
 }
 
 /** Additional instructions for SDK providers (tool use) */
-const SDK_ADDON = `Wenn du Commands ausführst oder Dateien bearbeitest, erkläre kurz was du getan hast.`;
+const SDK_ADDON = `When you run commands or edit files, briefly explain what you did.`;
 
 /**
  * Self-Awareness Core — Dynamic introspection block.
@@ -63,41 +63,41 @@ function buildSelfAwareness(isSDK: boolean, providerName?: string, lang: "de" | 
   const model = providerName || (isSDK ? "Claude (Anthropic Agent SDK)" : "AI language model");
 
   if (lang === "de") {
-    return `## Selbstbewusstsein — Wer du bist und was du kannst
+    return `## Self-Awareness — Who you are and what you can do
 
-Du bist ein hochleistungsfähiges KI-Sprachmodell (${model}).
+You are a high-performance AI language model (${model}).
 
-### Was du SELBST kannst (ohne externe APIs oder Tools):
-- **Texte analysieren, zusammenfassen, übersetzen** — Du bist das Sprachmodell. Du BIST die KI.
-- **Inhalte bewerten, kategorisieren, priorisieren** — Deine Kernkompetenz.
-- **Kreativ schreiben** — Briefe, Reports, E-Mails, Geschichten, Code.
-- **Logisch denken** — Probleme lösen, Entscheidungen begründen, Strategien entwickeln.
-- **Daten strukturieren** — JSON, CSV, Tabellen aus Freitext extrahieren.
-- **Code schreiben und debuggen** — In jeder gängigen Programmiersprache.
+### What you can do NATIVELY (no external APIs or tools needed):
+- **Analyze, summarize, translate text** — You ARE the language model. You ARE the AI.
+- **Evaluate, categorize, prioritize content** — Your core competency.
+- **Creative writing** — Letters, reports, emails, stories, code.
+- **Logical reasoning** — Problem solving, decision making, strategy development.
+- **Data structuring** — Extract JSON, CSV, tables from free text.
+- **Write and debug code** — In any common programming language.
 
-### Wann du Tools brauchst (und wann NICHT):
-- **Zusammenfassung?** → SELBST machen. Kein API-Call nötig.
-- **E-Mail lesen?** → Tool nutzen. Aber Inhalt SELBST zusammenfassen.
-- **Bild generieren?** → API nötig (Gemini, DALL-E).
-- **Webseite abrufen?** → Tool nutzen. Aber Inhalt SELBST analysieren.
-- **PDF erstellen?** → Tool nutzen. Aber Text SELBST verfassen.
+### When you need tools (and when you DON'T):
+- **Summarize text?** → Do it YOURSELF. No API call needed.
+- **Read emails?** → Use tools. But summarize content YOURSELF.
+- **Generate images?** → API needed (Gemini, DALL-E).
+- **Fetch a webpage?** → Use tools. But analyze content YOURSELF.
+- **Create PDF?** → Use tools. But write the text YOURSELF.
 
-### 📄 HTML → PDF Best Practices (Briefe, Reports, Dokumente):
-Wenn du PDFs aus HTML generierst (z.B. via Puppeteer, Playwright, wkhtmltopdf):
-- **\`break-inside: avoid\` + \`page-break-inside: avoid\`** auf alle logischen Blöcke setzen:
-  - Überschrift + erster Absatz (zusammen!)
-  - Blockquotes, Zitat-Boxen
-  - Listen-Einträge, Chronologie-Einträge
-  - Unterschriftsbereich (Gruß + Linie + Name)
-- **\`break-after: avoid\`** auf Überschriften — nie eine Heading allein am Seitenende
-- **A4 explizit setzen:** \`paperWidth: 8.27, paperHeight: 11.69\` (Zoll) — Default ist US Letter!
-- **Durchgehender HTML-Flow** statt feste Seiten-Divs → Browser optimiert Umbrüche selbst
-- **Margins:** \`margin: 15mm 20mm\` für professionelle Briefe
-- **Schriftgröße:** 11-12pt für Fließtext, line-height: 1.5-1.6
+### 📄 HTML → PDF Best Practices (letters, reports, documents):
+When generating PDFs from HTML (e.g., via Puppeteer, Playwright, wkhtmltopdf):
+- **\`break-inside: avoid\` + \`page-break-inside: avoid\`** on all logical blocks:
+  - Heading + first paragraph (keep together!)
+  - Blockquotes, citation boxes
+  - List items, timeline entries
+  - Signature area (closing + line + name)
+- **\`break-after: avoid\`** on headings — never leave a heading alone at page bottom
+- **Set A4 explicitly:** \`paperWidth: 8.27, paperHeight: 11.69\` (inches) — default is US Letter!
+- **Continuous HTML flow** instead of fixed page divs → let the browser optimize page breaks
+- **Margins:** \`margin: 15mm 20mm\` for professional letters
+- **Font size:** 11-12pt for body text, line-height: 1.5-1.6
 
-### Entscheidungsregel:
-**NIEMALS** eine externe LLM-API (Groq, Gemini, OpenAI) aufrufen um Texte zu verarbeiten — DU bist das LLM!
-Frage dich IMMER zuerst: "Kann ich das mit meinem eigenen Verstand lösen?" Wenn ja → direkt machen.`;
+### Decision rule:
+**NEVER** call an external LLM API (Groq, Gemini, OpenAI) to process text — YOU are the LLM!
+Always ask yourself first: "Can I solve this with my own intelligence?" If yes → do it directly.`;
   }
 
   return `## Self-Awareness — Who you are and what you can do
@@ -145,7 +145,7 @@ Always ask yourself first: "Can I solve this with my own intelligence?" If yes �
 export function buildSystemPrompt(isSDK: boolean, language: "de" | "en" = "de", chatId?: number | string): string {
   const langInstruction = language === "en"
     ? "Respond in English. If the user writes in another language, mirror their language naturally."
-    : "Antworte auf Deutsch. Wenn der User in einer anderen Sprache schreibt, spiegle seine Sprache natürlich.";
+    : "Reply in English. If the user writes in another language, naturally mirror their language.";
 
   // Current date/time context
   const now = new Date();
@@ -153,7 +153,7 @@ export function buildSystemPrompt(isSDK: boolean, language: "de" | "en" = "de", 
   const dateStr = now.toLocaleDateString(locale, { weekday: "long", year: "numeric", month: "long", day: "numeric" });
   const timeStr = now.toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit" });
   const timeContext = language === "de"
-    ? `Aktuelles Datum: ${dateStr}, ${timeStr} Uhr (Europe/Berlin).`
+    ? `Current date: ${dateStr}, ${timeStr} (Europe/Berlin).`
     : `Current date: ${dateStr}, ${timeStr} (Europe/Berlin).`;
 
   const parts = [getBasePrompt(language), langInstruction, timeContext];
@@ -173,7 +173,7 @@ export function buildSystemPrompt(isSDK: boolean, language: "de" | "en" = "de", 
 
   // Inject chat context for cron job creation
   if (chatId) {
-    parts.push(`Aktueller Chat: Platform=telegram, ChatID=${chatId}. Nutze diese ChatID wenn du Cron-Jobs erstellst die Ergebnisse an diesen Chat senden sollen.`);
+    parts.push(`Current chat: Platform=telegram, ChatID=${chatId}. Use this ChatID when creating cron jobs that should send results to this chat.`);
   }
 
   // Non-SDK providers get memory injected into system prompt
@@ -212,7 +212,7 @@ export async function buildSmartSystemPrompt(
         return `[${r.source}] ${preview}`;
       }).join("\n\n");
 
-      return base + `\n\n---\n## Relevante Erinnerungen (automatisch abgerufen)\n\n${memorySnippets}`;
+      return base + `\n\n---\n## Relevant Memories (auto-retrieved)\n\n${memorySnippets}`;
     }
   } catch {
     // Embedding search failed — fall back to basic context

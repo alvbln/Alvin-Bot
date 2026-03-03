@@ -48,20 +48,20 @@ function searchNotes(query) {
 
 export default {
   name: "notes",
-  description: "Markdown-Notizen erstellen, lesen und durchsuchen",
+  description: "Create, read and search markdown notes",
   version: "1.0.0",
   author: "Alvin Bot",
 
   commands: [
     {
       command: "notes",
-      description: "Notizen verwalten",
+      description: "Manage notes",
       handler: async (ctx, args) => {
         // /notes — list all
         if (!args) {
           const notes = listNotes();
           if (notes.length === 0) {
-            await ctx.reply("📝 Noch keine Notizen.\nErstelle eine mit `/notes add <Titel> | <Inhalt>`", { parse_mode: "Markdown" });
+            await ctx.reply("📝 No notes yet.\nCreate one with `/notes add <Title> | <Content>`", { parse_mode: "Markdown" });
             return;
           }
 
@@ -70,7 +70,7 @@ export default {
             return `${i + 1}. *${n.title}* (${date})`;
           });
 
-          await ctx.reply(`📝 *Notizen (${notes.length}):*\n\n${lines.join("\n")}`, { parse_mode: "Markdown" });
+          await ctx.reply(`📝 *Notes (${notes.length}):*\n\n${lines.join("\n")}`, { parse_mode: "Markdown" });
           return;
         }
 
@@ -92,10 +92,10 @@ export default {
           const filename = `${slug}.md`;
           const filePath = path.resolve(NOTES_DIR, filename);
 
-          const md = `# ${title}\n\n${content}\n\n---\n_Erstellt: ${new Date().toLocaleString("de-DE")}_\n`;
+          const md = `# ${title}\n\n${content}\n\n---\n_Created: ${new Date().toLocaleString("de-DE")}_\n`;
           fs.writeFileSync(filePath, md);
 
-          await ctx.reply(`✅ Notiz gespeichert: *${title}*`, { parse_mode: "Markdown" });
+          await ctx.reply(`✅ Note saved: *${title}*`, { parse_mode: "Markdown" });
           return;
         }
 
@@ -103,18 +103,18 @@ export default {
         if (args.startsWith("search ")) {
           const query = args.slice(7).trim();
           if (!query) {
-            await ctx.reply("Format: `/notes search <Suchbegriff>`", { parse_mode: "Markdown" });
+            await ctx.reply("Format: `/notes search <query>`", { parse_mode: "Markdown" });
             return;
           }
 
           const results = searchNotes(query);
           if (results.length === 0) {
-            await ctx.reply(`🔍 Keine Notizen zu "${query}" gefunden.`);
+            await ctx.reply(`🔍 No notes found for "${query}".`);
             return;
           }
 
           const lines = results.slice(0, 10).map((n, i) => `${i + 1}. *${n.title}*`);
-          await ctx.reply(`🔍 *${results.length} Treffer für "${query}":*\n\n${lines.join("\n")}`, { parse_mode: "Markdown" });
+          await ctx.reply(`🔍 *${results.length} results for "${query}":*\n\n${lines.join("\n")}`, { parse_mode: "Markdown" });
           return;
         }
 
@@ -132,12 +132,12 @@ export default {
           }
 
           if (!note) {
-            await ctx.reply(`❌ Notiz "${query}" nicht gefunden.`);
+            await ctx.reply(`❌ Note "${query}" not found.`);
             return;
           }
 
           const content = fs.readFileSync(path.resolve(NOTES_DIR, note.filename), "utf-8");
-          const truncated = content.length > 3000 ? content.slice(0, 3000) + "\n\n_[...gekürzt]_" : content;
+          const truncated = content.length > 3000 ? content.slice(0, 3000) + "\n\n_[...truncated]_" : content;
           await ctx.reply(truncated, { parse_mode: "Markdown" });
           return;
         }
@@ -156,22 +156,22 @@ export default {
           }
 
           if (!note) {
-            await ctx.reply(`❌ Notiz "${query}" nicht gefunden.`);
+            await ctx.reply(`❌ Note "${query}" not found.`);
             return;
           }
 
           fs.unlinkSync(path.resolve(NOTES_DIR, note.filename));
-          await ctx.reply(`🗑️ Notiz gelöscht: *${note.title}*`, { parse_mode: "Markdown" });
+          await ctx.reply(`🗑️ Note deleted: *${note.title}*`, { parse_mode: "Markdown" });
           return;
         }
 
         await ctx.reply(
-          "📝 *Notizen-Befehle:*\n\n" +
-          "`/notes` — Alle anzeigen\n" +
-          "`/notes add Titel | Inhalt` — Erstellen\n" +
-          "`/notes view 1` — Lesen (Nr. oder Titel)\n" +
-          "`/notes search Begriff` — Suchen\n" +
-          "`/notes delete 1` — Löschen",
+          "📝 *Notes commands:*\n\n" +
+          "`/notes` — List all\n" +
+          "`/notes add Title | Content` — Create\n" +
+          "`/notes view 1` — Read (number or title)\n" +
+          "`/notes search query` — Search\n" +
+          "`/notes delete 1` — Delete",
           { parse_mode: "Markdown" }
         );
       },
@@ -194,7 +194,7 @@ export default {
         const slug = slugify(params.title);
         const filename = `${slug}.md`;
         const filePath = path.resolve(NOTES_DIR, filename);
-        const md = `# ${params.title}\n\n${params.content}\n\n---\n_Erstellt: ${new Date().toLocaleString("de-DE")}_\n`;
+        const md = `# ${params.title}\n\n${params.content}\n\n---\n_Created: ${new Date().toLocaleString("de-DE")}_\n`;
         fs.writeFileSync(filePath, md);
         return `Note saved: ${filename}`;
       },

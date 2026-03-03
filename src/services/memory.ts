@@ -84,14 +84,14 @@ export function buildMemoryContext(): string {
   const ltm = loadLongTermMemory();
   if (ltm) {
     const truncated = ltm.length > 2000 ? ltm.slice(0, 2000) + "\n[...truncated]" : ltm;
-    parts.push(`## Langzeitgedächtnis\n${truncated}`);
+    parts.push(`## Long-term Memory\n${truncated}`);
   }
 
   // Today's log
   const todayLog = loadDailyLog();
   if (todayLog) {
     const truncated = todayLog.length > 1500 ? todayLog.slice(-1500) : todayLog;
-    parts.push(`## Heutiges Log\n${truncated}`);
+    parts.push(`## Today's Log\n${truncated}`);
   }
 
   // Yesterday's log (for continuity)
@@ -99,12 +99,12 @@ export function buildMemoryContext(): string {
   const yesterdayLog = loadDailyLog(yesterday);
   if (yesterdayLog) {
     const truncated = yesterdayLog.length > 500 ? yesterdayLog.slice(-500) : yesterdayLog;
-    parts.push(`## Gestriges Log (Kurzfassung)\n${truncated}`);
+    parts.push(`## Yesterday's Log (summary)\n${truncated}`);
   }
 
   if (parts.length === 0) return "";
 
-  return `\n\n---\n## Dein Gedächtnis (automatisch geladen)\n\n${parts.join("\n\n")}`;
+  return `\n\n---\n## Your Memory (auto-loaded)\n\n${parts.join("\n\n")}`;
 }
 
 /**
@@ -119,15 +119,15 @@ export function writeSessionSummary(summary: {
   topics?: string[];
 }): void {
   const lines = [
-    `**Session-Zusammenfassung:**`,
-    `- Nachrichten: ${summary.messageCount}`,
-    `- Tool-Calls: ${summary.toolUseCount}`,
-    `- Kosten: $${summary.costUsd.toFixed(4)}`,
+    `**Session Summary:**`,
+    `- Messages: ${summary.messageCount}`,
+    `- Tool Calls: ${summary.toolUseCount}`,
+    `- Cost: $${summary.costUsd.toFixed(4)}`,
     `- Provider: ${summary.provider}`,
   ];
 
   if (summary.topics && summary.topics.length > 0) {
-    lines.push(`- Themen: ${summary.topics.join(", ")}`);
+    lines.push(`- Topics: ${summary.topics.join(", ")}`);
   }
 
   appendDailyLog(lines.join("\n"));

@@ -123,7 +123,7 @@ export function revokePassword(): boolean {
 export async function sudoExec(command: string, timeoutMs = 30000): Promise<{ ok: boolean; output: string; error?: string }> {
   const password = retrievePassword();
   if (!password) {
-    return { ok: false, output: "", error: "Kein Sudo-Passwort hinterlegt. Bitte zuerst einrichten (/setup sudo oder Settings → Sudo)." };
+    return { ok: false, output: "", error: "No sudo password stored. Please set it up first (/setup sudo or Settings → Sudo)." };
   }
 
   return new Promise((resolve) => {
@@ -155,7 +155,7 @@ export async function sudoExec(command: string, timeoutMs = 30000): Promise<{ ok
       } else {
         // Check for wrong password
         if (stderr.includes("incorrect password") || stderr.includes("Sorry, try again")) {
-          resolve({ ok: false, output: "", error: "Falsches Sudo-Passwort! Bitte neu einrichten." });
+          resolve({ ok: false, output: "", error: "Wrong sudo password! Please reconfigure." });
         } else {
           resolve({ ok: false, output: stdout.trim(), error: stderr.trim() || `Exit code: ${code}` });
         }
@@ -176,7 +176,7 @@ export async function sudoExec(command: string, timeoutMs = 30000): Promise<{ ok
  */
 export async function requestAdminViaDialog(reason: string): Promise<{ ok: boolean; error?: string }> {
   if (PLATFORM !== "darwin") {
-    return { ok: false, error: "Nur auf macOS verfügbar" };
+    return { ok: false, error: "Only available on macOS" };
   }
 
   try {

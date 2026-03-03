@@ -88,14 +88,14 @@ function parseDateTime(input) {
 
 export default {
   name: "calendar",
-  description: "Kalender-Events erstellen, anzeigen und verwalten",
+  description: "Create, view and manage calendar events",
   version: "1.0.0",
   author: "Alvin Bot",
 
   commands: [
     {
       command: "cal",
-      description: "Kalender anzeigen/verwalten",
+      description: "View/manage calendar",
       handler: async (ctx, args) => {
         // /cal — show upcoming events
         if (!args) {
@@ -105,7 +105,7 @@ export default {
             .slice(0, 10);
 
           if (events.length === 0) {
-            await ctx.reply("📅 Keine kommenden Termine.\nNeu: `/cal add morgen 14:00 | Meeting`", { parse_mode: "Markdown" });
+            await ctx.reply("📅 No upcoming events.\nNew: `/cal add morgen 14:00 | Meeting`", { parse_mode: "Markdown" });
             return;
           }
 
@@ -115,7 +115,7 @@ export default {
             return `${i + 1}. 📅 *${e.title}*\n   ${date}${loc}`;
           });
 
-          await ctx.reply(`📅 *Kommende Termine:*\n\n${lines.join("\n\n")}`, { parse_mode: "Markdown" });
+          await ctx.reply(`📅 *Upcoming events:*\n\n${lines.join("\n\n")}`, { parse_mode: "Markdown" });
           return;
         }
 
@@ -125,7 +125,7 @@ export default {
           const parts = text.split("|").map(s => s.trim());
 
           if (parts.length < 2) {
-            await ctx.reply("Format: `/cal add morgen 14:00 | Meeting-Titel | Ort (optional)`", { parse_mode: "Markdown" });
+            await ctx.reply("Format: `/cal add morgen 14:00 | Event title | Location (optional)`", { parse_mode: "Markdown" });
             return;
           }
 
@@ -135,7 +135,7 @@ export default {
 
           const date = parseDateTime(dateStr);
           if (!date) {
-            await ctx.reply(`❌ Datum nicht erkannt: "${dateStr}"\nVersuche: \`morgen 14:00\`, \`heute 18:00\`, \`in 2h\`, \`2026-03-01 09:00\``, { parse_mode: "Markdown" });
+            await ctx.reply(`❌ Date not recognized: "${dateStr}"\nTry: \`morgen 14:00\`, \`heute 18:00\`, \`in 2h\`, \`2026-03-01 09:00\``, { parse_mode: "Markdown" });
             return;
           }
 
@@ -152,7 +152,7 @@ export default {
           saveEvents(events);
 
           await ctx.reply(
-            `✅ *Termin erstellt:*\n\n📅 ${title}\n🕐 ${formatDate(date)}${location ? `\n📍 ${location}` : ""}`,
+            `✅ *Event created:*\n\n📅 ${title}\n🕐 ${formatDate(date)}${location ? `\n📍 ${location}` : ""}`,
             { parse_mode: "Markdown" }
           );
           return;
@@ -166,7 +166,7 @@ export default {
             .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
           if (isNaN(idx) || idx < 0 || idx >= events.length) {
-            await ctx.reply("❌ Ungültige Nummer. Nutze `/cal` für die Liste.", { parse_mode: "Markdown" });
+            await ctx.reply("❌ Invalid number. Use `/cal` for the list.", { parse_mode: "Markdown" });
             return;
           }
 
@@ -174,7 +174,7 @@ export default {
           const allEvents = loadEvents().filter(e => e.id !== toDelete.id);
           saveEvents(allEvents);
 
-          await ctx.reply(`🗑️ Gelöscht: *${toDelete.title}*`, { parse_mode: "Markdown" });
+          await ctx.reply(`🗑️ Deleted: *${toDelete.title}*`, { parse_mode: "Markdown" });
           return;
         }
 
@@ -192,7 +192,7 @@ export default {
             .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
           if (events.length === 0) {
-            await ctx.reply("📅 Heute keine Termine.");
+            await ctx.reply("📅 No events today.");
             return;
           }
 
@@ -201,16 +201,16 @@ export default {
             return `🕐 ${time} — *${e.title}*`;
           });
 
-          await ctx.reply(`📅 *Heute:*\n\n${lines.join("\n")}`, { parse_mode: "Markdown" });
+          await ctx.reply(`📅 *Today:*\n\n${lines.join("\n")}`, { parse_mode: "Markdown" });
           return;
         }
 
         await ctx.reply(
-          "📅 *Kalender-Befehle:*\n\n" +
-          "`/cal` — Kommende Termine\n" +
-          "`/cal heute` — Heutige Termine\n" +
-          "`/cal add morgen 14:00 | Titel | Ort` — Termin erstellen\n" +
-          "`/cal delete 1` — Termin löschen",
+          "📅 *Calendar commands:*\n\n" +
+          "`/cal` — Upcoming events\n" +
+          "`/cal heute` — Today's events\n" +
+          "`/cal add morgen 14:00 | Title | Location` — Create event\n" +
+          "`/cal delete 1` — Delete event",
           { parse_mode: "Markdown" }
         );
       },

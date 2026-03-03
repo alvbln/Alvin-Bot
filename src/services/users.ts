@@ -210,7 +210,7 @@ export function deleteUser(userId: number): { deleted: string[]; errors: string[
   try {
     if (fs.existsSync(memDir) && fs.statSync(memDir).isDirectory()) {
       fs.rmSync(memDir, { recursive: true, force: true });
-      deleted.push("Memory-Verzeichnis");
+      deleted.push("Memory directory");
     }
   } catch (e) { errors.push(`Memory: ${e}`); }
 
@@ -218,9 +218,9 @@ export function deleteUser(userId: number): { deleted: string[]; errors: string[
   try {
     const result = killSession(userId);
     if (result.hadSession) {
-      deleted.push("Session gelöscht");
+      deleted.push("Session deleted");
       if (result.aborted) {
-        deleted.push("Laufende Anfrage abgebrochen");
+        deleted.push("Running request aborted");
       }
     }
   } catch (e) { errors.push(`Session: ${e}`); }
@@ -237,11 +237,11 @@ export function buildUserContext(userId: number): string {
 
   const parts: string[] = [];
   parts.push(`User: ${profile.name}${profile.username ? ` (@${profile.username})` : ""}`);
-  parts.push(`Sprache: ${profile.language === "de" ? "Deutsch" : "English"}`);
-  parts.push(`Nachrichten: ${profile.totalMessages}`);
+  parts.push(`Language: ${profile.language === "de" ? "Deutsch" : "English"}`);
+  parts.push(`Messages: ${profile.totalMessages}`);
 
   if (profile.notes) {
-    parts.push(`\nNotizen über diesen User:\n${profile.notes}`);
+    parts.push(`\nNotes about this user:\n${profile.notes}`);
   }
 
   return parts.join("\n");

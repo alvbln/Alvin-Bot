@@ -74,7 +74,7 @@ export async function transcribeAudio(audioPath: string): Promise<string> {
 export async function textToSpeech(text: string): Promise<string> {
   // Strip markdown formatting for cleaner TTS
   let cleanText = text
-    .replace(/```[\s\S]*?```/g, " Code-Block übersprungen. ")
+    .replace(/```[\s\S]*?```/g, " Code block skipped. ")
     .replace(/`([^`]+)`/g, "$1")
     .replace(/\*\*([^*]+)\*\*/g, "$1")
     .replace(/\*([^*]+)\*/g, "$1")
@@ -85,11 +85,11 @@ export async function textToSpeech(text: string): Promise<string> {
     .trim();
 
   if (!cleanText) {
-    throw new Error("Kein Text für TTS vorhanden");
+    throw new Error("No text available for TTS");
   }
 
   if (cleanText.length > 3000) {
-    cleanText = cleanText.slice(0, 3000) + "... Text gekürzt.";
+    cleanText = cleanText.slice(0, 3000) + "... Text truncated.";
   }
 
   const outputPath = path.join(TEMP_DIR, `tts_${Date.now()}.mp3`);

@@ -56,7 +56,7 @@ export async function handleDocument(ctx: Context): Promise<void> {
   const session = getSession(userId);
 
   if (session.isProcessing) {
-    await ctx.reply("Bitte warten, vorherige Anfrage läuft noch... (/cancel zum Abbrechen)");
+    await ctx.reply("Please wait, previous request still running... (/cancel to abort)");
     return;
   }
 
@@ -65,7 +65,7 @@ export async function handleDocument(ctx: Context): Promise<void> {
 
   // Check file size (Telegram max is 20MB for bots)
   if (doc.file_size && doc.file_size > 20 * 1024 * 1024) {
-    await ctx.reply("⚠️ Datei zu groß (max 20 MB).");
+    await ctx.reply("⚠️ File too large (max 20 MB).");
     return;
   }
 
@@ -127,10 +127,10 @@ export async function handleDocument(ctx: Context): Promise<void> {
         fileContent = fs.readFileSync(localPath, "utf-8");
         // Truncate very large files
         if (fileContent.length > 50000) {
-          fileContent = fileContent.slice(0, 50000) + "\n\n[... Datei gekürzt, insgesamt " + fileContent.length + " Zeichen]";
+          fileContent = fileContent.slice(0, 50000) + "\n\n[... File truncated, total " + fileContent.length + " characters]";
         }
       } else {
-        fileContent = `[Binärdatei: ${filename}, ${doc.file_size ? Math.round(doc.file_size / 1024) + " KB" : "unbekannte Größe"}. Kann nur mit dem SDK-Provider (Claude) analysiert werden.]`;
+        fileContent = `[Binary file: ${filename}, ${doc.file_size ? Math.round(doc.file_size / 1024) + " KB" : "unknown size"}. Can only be analyzed with the SDK provider (Claude).]`;
       }
 
       const fullPrompt = `Datei: ${filename}\n\n\`\`\`\n${fileContent}\n\`\`\`\n\n${userInstruction}`;

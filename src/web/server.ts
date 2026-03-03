@@ -38,6 +38,9 @@ const MEMORY_DIR = resolve(DOCS_DIR, "memory");
 const WEB_PORT = parseInt(process.env.WEB_PORT || "3100");
 const WEB_PASSWORD = process.env.WEB_PASSWORD || "";
 
+/** The actual port the Web UI is running on (may differ from WEB_PORT if busy). */
+let actualWebPort = WEB_PORT;
+
 // ── MIME Types ──────────────────────────────────────────
 
 const MIME: Record<string, string> = {
@@ -848,7 +851,7 @@ async function handleAPI(req: http.IncomingMessage, res: http.ServerResponse, ur
       const baseName = path.basename(absPath);
       if (critical.includes(baseName)) {
         res.statusCode = 403;
-        res.end(JSON.stringify({ error: `${baseName} kann nicht gelöscht werden (geschützt)` }));
+        res.end(JSON.stringify({ error: `${baseName} cannot be deleted (protected)` }));
         return;
       }
       if (!fs.existsSync(absPath)) {
@@ -859,7 +862,7 @@ async function handleAPI(req: http.IncomingMessage, res: http.ServerResponse, ur
       const stat = fs.statSync(absPath);
       if (stat.isDirectory()) {
         res.statusCode = 400;
-        res.end(JSON.stringify({ error: "Verzeichnisse können nicht gelöscht werden" }));
+        res.end(JSON.stringify({ error: "Directories cannot be deleted" }));
         return;
       }
       fs.unlinkSync(absPath);
@@ -1123,7 +1126,7 @@ function handleWebSocket(wss: WebSocketServer): void {
               const base64Data = file.dataUrl.split(",")[1] || file.dataUrl;
               fs.writeFileSync(filePath, Buffer.from(base64Data, "base64"));
               // Replace placeholder with actual file path
-              text = text.replace(/\[Datei angehängt:.*?\]/, `[Datei gespeichert: ${filePath}]`);
+              text = text.replace(/\[File attached:.*?\]/, `[File saved: ${filePath}]`);
             } catch (err) {
               console.error("WebUI file upload error:", err);
             }
@@ -1259,9 +1262,31 @@ export function startWebServer(): http.Server {
   const wss = new WebSocketServer({ server });
   handleWebSocket(wss);
 
-  server.listen(WEB_PORT, () => {
-    console.log(`🌐 Web UI: http://localhost:${WEB_PORT}`);
-  });
+  // Smart port: try WEB_PORT, increment if busy (up to +20)
+  const MAX_TRIES = 20;
 
+  function tryListen(port: number, attempt = 0): void {
+    server.once("error", (err: NodeJS.ErrnoException) => {
+      if (err.code === "EADDRINUSE" && attempt < MAX_TRIES) {
+        tryListen(port + 1, attempt + 1);
+      } else {
+        console.error(`❌ Web UI failed to start: ${err.message}`);
+      }
+    });
+    server.listen(port, () => {
+      actualWebPort = port;
+      console.log(`🌐 Web UI: http://localhost:${actualWebPort}`);
+      if (actualWebPort !== WEB_PORT) {
+        console.log(`   (Port ${WEB_PORT} was busy, using ${actualWebPort} instead)`);
+      }
+    });
+  }
+
+  tryListen(WEB_PORT);
   return server;
+}
+
+/** Get the actual port the Web UI is running on. */
+export function getWebPort(): number {
+  return actualWebPort;
 }
