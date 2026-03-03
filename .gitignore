@@ -38,3 +38,4 @@ release/
 .prod-node-modules/
 .electron-prod/
 CLAUDE.md
+BACKLOG.md
