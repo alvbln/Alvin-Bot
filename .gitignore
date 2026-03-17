@@ -21,7 +21,8 @@ docs/custom-models.json
 docs/mcp.json
 data/
 backups/
-scripts/
+scripts/*
+!scripts/browse-server.cjs
 
 # WhatsApp / Electron
 .wwebjs_cache/
