@@ -172,7 +172,9 @@ import {
 import { processQueue, cleanupQueue, setSenders, enqueue } from "./services/delivery-queue.js";
 
 import { discoverTools } from "./services/tool-discovery.js";
-import { startHeartbeat } from "./services/heartbeat.js";
+import { startHeartbeat, stopHeartbeat } from "./services/heartbeat.js";
+import { stopAutoUpdateLoop } from "./services/updater.js";
+import { startCleanupLoop, stopCleanupLoop } from "./services/disk-cleanup.js";
 import { initEmbeddings } from "./services/embeddings.js";
 import { loadSkills } from "./services/skills.js";
 import { loadHooks } from "./services/hooks.js";
@@ -407,6 +409,9 @@ const shutdown = async () => {
   stopAsyncAgentWatcher();
   stopSessionCleanup();
   stopWorkspaceWatcher();
+  stopHeartbeat();
+  stopAutoUpdateLoop();
+  stopCleanupLoop();
   // v4.11.0 — Final immediate flush of in-memory sessions to disk before exit.
   // The debounced timer might be pending; flushSessions() cancels it and writes
   // synchronously so the next boot can rehydrate the latest state.
@@ -700,5 +705,6 @@ if (bot) {
   // Start heartbeat monitor even without Telegram
   startHeartbeat();
   startWatchdog();
+  startCleanupLoop();
   initEmbeddings().catch(() => {});
 }

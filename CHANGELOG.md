@@ -2,6 +2,35 @@
 
 All notable changes to Alvin Bot are documented here.
 
+## [4.17.0] — 2026-04-20
+
+### 🛡️ Hardening: long-running stability audit + leak fixes
+
+Ran a full audit of leak/stability hazards for 24/7 operation. Fixed the critical findings and added a disk-cleanup service so the bot stays lean over months of uptime.
+
+**Fixes:**
+- **WhatsApp event-listener leak on reconnect** (`src/platforms/whatsapp.ts`): Before every new socket, the previous socket's listeners are now removed and the old socket is ended. Without this, every reconnect stacked new listeners on top of old ones — causing memory growth and duplicate message processing after long sessions.
+- **CDP file-descriptor leak** (`src/services/cdp-bootstrap.ts`): The log-file fd passed to the detached Chromium spawn is now closed in the parent after the child inherits it. Previously leaked one fd per browser bootstrap.
+- **Heartbeat + auto-update timers now `.unref()`'d** and explicitly stopped in the shutdown handler. Prevents timers from keeping the process alive during graceful exit.
+
+### 🧹 Feature: disk-cleanup service
+
+New service (`src/services/disk-cleanup.ts`) that runs automatically once a day. Deletes transient files that grow without bound on long-running installs:
+- Bot log rotation (>100 MB by default)
+- Browser screenshots (>30 days)
+- Subagent output streams (>30 days)
+- `/tmp/alvin-bot/` media (>7 days)
+- WhatsApp media cache (>30 days)
+- CDP log file
+
+**NEVER touched:** memory, assets, workspaces, cron-jobs, .env, session-store, delivery-queue. Memory is protected.
+
+**Configuration via env:** `CLEANUP_LOG_MAX_MB`, `CLEANUP_SCREENSHOTS_DAYS`, `CLEANUP_SUBAGENTS_DAYS`, `CLEANUP_TMP_DAYS`, `CLEANUP_WA_MEDIA_DAYS`. Set any to `0` to disable that category.
+
+**Telegram command:**
+- `/cleanup` — show current policy + protected paths
+- `/cleanup run` — trigger manual pass, get stats back
+
 ## [4.16.1] — 2026-04-20
 
 ### 🆕 Feature: /update shows release highlights

@@ -344,6 +344,19 @@ export class WhatsAppAdapter implements PlatformAdapter {
     const { state, saveCreds } = await useMultiFileAuthState(authDir);
     const { version } = await fetchLatestBaileysVersion();
 
+    // Cleanup previous socket (reconnect path) — without this, every reconnect
+    // stacks a new set of listeners on baileys' EventEmitter, so messages get
+    // processed N times after N reconnects and closures leak.
+    if (this.sock) {
+      try {
+        this.sock.ev?.removeAllListeners?.();
+        this.sock.end?.(new Error("reconnect"));
+      } catch {
+        // best-effort cleanup — ignore failures from already-dead socket
+      }
+      this.sock = null;
+    }
+
     const sock = makeWASocket({
       version,
       auth: {

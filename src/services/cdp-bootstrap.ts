@@ -223,6 +223,9 @@ export async function ensureRunning(opts: { mode?: "headless" | "headful" } = {}
       detached: true,
     });
     child.unref();
+    // The child inherits its own copy of the fd. Close our copy so the parent
+    // process doesn't leak a file descriptor per Chromium bootstrap.
+    try { fs.closeSync(logStream); } catch { /* already closed — fine */ }
 
     if (!child.pid) {
       throw new Error("Failed to spawn Chromium (no PID)");

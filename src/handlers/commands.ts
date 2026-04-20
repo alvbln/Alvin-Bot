@@ -32,6 +32,7 @@ import { getWebPort } from "../web/server.js";
 import { getUsageSummary, getRateLimits, getAllRateLimits, formatTokens } from "../services/usage-tracker.js";
 import { runUpdate, getAutoUpdate, setAutoUpdate, startAutoUpdateLoop } from "../services/updater.js";
 import { getReleaseHighlights } from "../services/release-highlights.js";
+import { runCleanup, getCleanupPolicy } from "../services/disk-cleanup.js";
 import { getHealthStatus, isFailedOver } from "../services/heartbeat.js";
 import { t, LOCALE_NAMES, LOCALE_FLAGS, type Locale } from "../i18n.js";
 
@@ -2269,6 +2270,42 @@ export function registerCommands(bot: Bot): void {
       await ctx.reply(
         `${t("bot.autoupdate.statusLabel", lang)} *${status ? "ON" : "OFF"}*\n\n${t("bot.autoupdate.commandsLabel", lang)}\n\`/autoupdate on\`\n\`/autoupdate off\``,
         { parse_mode: "Markdown" }
+      );
+    }
+  });
+
+  // /cleanup — trigger disk cleanup manually, or show current policy.
+  //   /cleanup          → show policy
+  //   /cleanup run      → run a cleanup pass and report what was deleted
+  bot.command("cleanup", async (ctx) => {
+    const arg = (ctx.match || "").trim().toLowerCase();
+    if (arg === "run" || arg === "now") {
+      await ctx.reply("🧹 Running disk cleanup...");
+      const r = await runCleanup();
+      const bytes = r.bytesReclaimed;
+      const human =
+        bytes < 1024 * 1024
+          ? `${(bytes / 1024).toFixed(1)} KB`
+          : bytes < 1024 * 1024 * 1024
+          ? `${(bytes / 1024 / 1024).toFixed(1)} MB`
+          : `${(bytes / 1024 / 1024 / 1024).toFixed(2)} GB`;
+      const errLine = r.errors.length > 0 ? `\n⚠️ ${r.errors.length} error(s)` : "";
+      await ctx.reply(
+        `✅ Cleanup done\n• Files deleted: ${r.filesDeleted}\n• Logs rotated: ${r.logsRotated}\n• Reclaimed: ${human}${errLine}`,
+      );
+    } else {
+      const p = getCleanupPolicy();
+      await ctx.reply(
+        `🧹 *Cleanup policy*\n` +
+          `• Log rotation: >${p.logMaxSizeMb} MB\n` +
+          `• Screenshots: >${p.screenshotsMaxAgeDays} days\n` +
+          `• Subagent outputs: >${p.subagentsMaxAgeDays} days\n` +
+          `• /tmp/alvin-bot: >${p.tmpMaxAgeDays} days\n` +
+          `• WhatsApp media: >${p.waMediaMaxAgeDays} days\n\n` +
+          `Memory, assets, workspaces, cron jobs are NEVER touched.\n\n` +
+          `Configure via env: \`CLEANUP_LOG_MAX_MB\`, \`CLEANUP_SCREENSHOTS_DAYS\`, \`CLEANUP_SUBAGENTS_DAYS\`, \`CLEANUP_TMP_DAYS\`, \`CLEANUP_WA_MEDIA_DAYS\`\n\n` +
+          `Run manually: \`/cleanup run\``,
+        { parse_mode: "Markdown" },
       );
     }
   });

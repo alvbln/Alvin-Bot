@@ -114,6 +114,10 @@ export function startHeartbeat(): void {
   setTimeout(() => {
     runHeartbeat();
     state.intervalId = setInterval(runHeartbeat, HEARTBEAT_INTERVAL_MS);
+    // .unref() so this interval alone doesn't keep the process alive during
+    // graceful shutdown — the bot's main loop (grammy, platforms) keeps it
+    // running, and once those stop we want the process to exit cleanly.
+    state.intervalId?.unref?.();
   }, 30_000);
 }
 

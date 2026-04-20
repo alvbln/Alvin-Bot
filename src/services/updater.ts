@@ -292,6 +292,7 @@ export function startAutoUpdateLoop(): void {
       console.log(`[auto-update] check failed: ${result.message}`);
     }
   }, AUTO_CHECK_INTERVAL_MS);
+  autoTimer.unref?.();
 
   console.log(`[auto-update] loop started (interval: 6h)`);
 }
