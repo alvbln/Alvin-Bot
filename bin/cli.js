@@ -1828,7 +1828,7 @@ switch (cmd) {
     const searchQuery = process.argv.slice(3).join(" ");
     if (!searchQuery) {
       console.log("Usage: alvin-bot search <query>");
-      console.log('Example: alvin-bot search "cover letter"');
+      console.log('Example: alvin-bot search "tax document 2024"');
       process.exit(1);
     }
     const { searchSelf, formatSearchResults } = await import("../dist/services/self-search.js");

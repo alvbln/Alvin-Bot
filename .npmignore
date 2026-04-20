@@ -53,5 +53,9 @@ scripts/
 *.log
 *.bak
 
+# Test suite — not needed by end users, only shipped dist/ is executable
+test/
+vitest.config.ts
+
 # Install guide templates — rendered to PDFs on GitHub Releases, not shipped via npm
 docs/install/

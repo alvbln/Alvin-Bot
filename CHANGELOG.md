@@ -2,6 +2,26 @@
 
 All notable changes to Alvin Bot are documented here.
 
+## [4.18.1] — 2026-04-20
+
+### 🔒 Privacy-Guard: pre-publish check blocks PII leaks in shipped files
+
+Adds an automated gate that runs on every `npm publish` and prevents personal information from accidentally shipping. After the 4.18.0 privacy sanitization, this ensures it never happens again.
+
+**New:**
+- `scripts/privacy-check.sh` — scans the exact file list that `npm pack` would ship. Case-insensitive regex match against a patterns file. Any hit fails the publish.
+- `scripts/privacy-patterns.default.txt` — bundled, contains only generic patterns (email shape, IP addresses, postal codes, personal task phrasings). No project or person names — so safe to ship.
+- `package.json` `prepublishOnly` hook — runs the check automatically.
+- `npm run privacy-check` — manual run anytime.
+
+**Maintainer-local overrides:** Put `~/.alvin-bot/privacy-patterns.txt` with personal/project-specific patterns. That file is gitignored, never leaves your machine, and takes precedence over the bundled defaults.
+
+**CI override:** Set `$ALVIN_PRIVACY_PATTERNS` to an absolute path; takes top precedence over both files above.
+
+**Hardening: `.npmignore`** — added `test/` and `vitest.config.ts` to the ignore list. Previously the full test suite shipped with every npm tarball, adding ~2 MB and exposing test fixtures that sometimes referenced internal project names.
+
+**CLAUDE.md** — documents the rule and the patterns-file lookup order so future maintenance sessions catch new cases proactively.
+
 ## [4.18.0] — 2026-04-20
 
 ### ⚡ Performance + Hardening: medium-priority cleanups from the stability audit
@@ -169,8 +189,8 @@ The three aliased entries all route through `ClaudeSDKProvider` with different `
 
 ```yaml
 ---
-purpose: Interview prep
-cwd: ~/Documents/Interviews
+purpose: my-project
+cwd: ~/Projects/my-project
 model: sonnet           # opus | sonnet | haiku | claude-opus-4-7 | ...
 ---
 ```

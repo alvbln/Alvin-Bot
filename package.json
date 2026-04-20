@@ -1,6 +1,6 @@
 {
   "name": "alvin-bot",
-  "version": "4.18.0",
+  "version": "4.18.1",
   "description": "Alvin Bot \u2014 Your personal AI agent on Telegram, WhatsApp, Discord, Signal, and Web.",
   "type": "module",
   "main": "dist/index.js",
@@ -15,6 +15,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:ui": "vitest --ui",
+    "privacy-check": "bash scripts/privacy-check.sh",
+    "prepublishOnly": "bash scripts/privacy-check.sh",
     "electron:compile": "tsc -p electron/tsconfig.json",
     "electron:dev": "npm run electron:compile && electron .",
     "electron:build": "npm run build && npm run electron:compile && electron-builder --publish never",
