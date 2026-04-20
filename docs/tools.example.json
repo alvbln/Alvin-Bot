@@ -1,0 +1,33 @@
+{
+  "tools": [
+    {
+      "name": "server_health",
+      "description": "Check server health",
+      "type": "http",
+      "url": "https://api.example.com/health",
+      "method": "GET"
+    },
+    {
+      "name": "deploy",
+      "description": "Deploy the application",
+      "command": "ssh server 'cd /app && git pull && pm2 restart all'",
+      "timeout": 60000
+    },
+    {
+      "name": "quick_note",
+      "description": "Append a note to a file",
+      "command": "echo '{{text}}' >> ~/notes.txt",
+      "parameters": {
+        "text": {
+          "type": "string",
+          "description": "Note text to append"
+        }
+      }
+    },
+    {
+      "name": "disk_usage",
+      "description": "Check disk usage",
+      "command": "df -h / | tail -1"
+    }
+  ]
+}

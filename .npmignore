@@ -1,0 +1,57 @@
+# Source (dist/ is included)
+src/
+tsconfig.json
+electron/
+electron/**/*
+build/**
+release/**
+homebrew/
+scoop/
+
+# Dev/build files
+.env
+.env.*
+!.env.example
+.git*
+.electronignore
+CLAUDE.md
+SOUL.md
+TOOLS.md
+telegram-agent-setup-prompt.md
+# Internal roadmap with open P0/P1 items — NOT for public consumption.
+# A published backlog of known vulnerabilities is a roadmap for attackers.
+BACKLOG.md
+
+# Internal dev docs (contain implementation details, not needed by npm users)
+docs/superpowers/
+
+# Legacy data locations (now in ~/.alvin-bot/)
+docs/tools.json
+docs/memory/*.md
+!docs/memory/.gitkeep
+docs/MEMORY.md
+docs/users/
+docs/whatsapp-groups.json
+docs/cron-jobs.json
+docs/custom-models.json
+docs/mcp.json
+data/
+backups/
+.wwebjs_cache/
+
+# Docker (separate install method)
+Dockerfile
+docker-compose.yml
+docker-compose.example.yml
+.dockerignore
+ecosystem.config.cjs
+
+# Dev tooling
+.prod-node-modules/
+.electron-prod/
+scripts/
+*.log
+*.bak
+
+# Install guide templates — rendered to PDFs on GitHub Releases, not shipped via npm
+docs/install/

@@ -1,0 +1,26 @@
+{
+    "version": "3.0.0",
+    "description": "Alvin Bot — Personal AI agent on Telegram, WhatsApp, Discord, Signal, and Web",
+    "homepage": "https://github.com/alvbln/alvin-bot",
+    "license": "MIT",
+    "depends": "nodejs",
+    "url": "https://github.com/alvbln/alvin-bot/archive/refs/tags/v3.0.0.tar.gz",
+    "hash": "",
+    "extract_dir": "alvin-bot-3.0.0",
+    "installer": {
+        "script": [
+            "npm install --omit=dev",
+            "npm run build"
+        ]
+    },
+    "bin": [
+        ["bin\\cli.js", "alvin-bot"]
+    ],
+    "post_install": "Write-Host 'Run `alvin-bot setup` to configure your bot.' -ForegroundColor Green",
+    "checkver": {
+        "github": "https://github.com/alvbln/alvin-bot"
+    },
+    "autoupdate": {
+        "url": "https://github.com/alvbln/alvin-bot/archive/refs/tags/v$version.tar.gz"
+    }
+}

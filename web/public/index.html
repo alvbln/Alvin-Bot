@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Alvin Bot — Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+
+<div class="drop-overlay" id="drop-overlay"></div>
+
+<div class="sidebar">
+  <div class="sidebar-header">
+    <h1 id="sidebar-title"></h1>
+    <div class="status" id="bot-status"></div>
+  </div>
+  <div class="nav" id="nav-container"></div>
+  <div class="sidebar-footer" id="sidebar-footer"></div>
+</div>
+
+<div class="main">
+  <div class="topbar">
+    <h2 id="page-title"></h2>
+    <div class="topbar-right">
+      <span class="topbar-kbd" id="cmd-k-hint" onclick="openCommandPalette()"></span>
+      <span class="badge badge-accent" id="model-badge">loading...</span>
+    </div>
+  </div>
+
+  <!-- Chat Page -->
+  <div class="page chat-container active" id="page-chat">
+    <div class="chat-header" id="chat-header"></div>
+    <div class="messages" id="messages">
+      <div class="msg system" id="chat-welcome"></div>
+      <div class="typing-indicator" id="typing-indicator">
+        <div class="typing-dot"></div>
+        <div class="typing-dot"></div>
+        <div class="typing-dot"></div>
+      </div>
+    </div>
+    <div id="reply-preview" style="display:none;padding:6px 12px;background:var(--bg3);border-left:3px solid var(--accent2);margin:0 12px;border-radius:0 6px 6px 0;font-size:0.82em;color:var(--fg2);align-items:center;gap:8px">
+      <span id="reply-preview-text" style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span>
+      <button onclick="clearReply()" style="background:none;border:none;color:var(--fg2);cursor:pointer;font-size:1.1em;padding:0 4px" id="reply-close-btn"></button>
+    </div>
+    <div id="file-preview" style="display:none;padding:6px 12px;background:var(--bg3);border-radius:6px;margin:0 12px;font-size:0.82em;color:var(--fg2);align-items:center;gap:8px">
+      <span id="file-preview-text" style="flex:1"></span>
+      <button onclick="clearFileUpload()" style="background:none;border:none;color:var(--fg2);cursor:pointer;font-size:1.1em;padding:0 4px" id="file-close-btn"></button>
+    </div>
+    <div class="input-area" id="chat-input-area"></div>
+  </div>
+
+  <!-- Dashboard -->
+  <div class="page content" id="page-dashboard">
+    <div class="cards" id="dashboard-cards"></div>
+  </div>
+
+  <!-- Models -->
+  <div class="page content" id="page-models">
+    <div id="models-setup"></div>
+  </div>
+
+  <!-- Personality -->
+  <div class="page content" id="page-personality">
+    <div class="card" style="max-width:700px" id="personality-card"></div>
+  </div>
+
+  <!-- Memory -->
+  <div class="page content" id="page-memory">
+    <div class="editor-toolbar">
+      <select id="memory-file" onchange="loadMemoryFile()"></select>
+      <button class="btn btn-sm" onclick="saveMemoryFile()" id="memory-save-btn"></button>
+    </div>
+    <textarea class="editor" id="memory-editor"></textarea>
+  </div>
+
+  <!-- Sessions -->
+  <div class="page content" id="page-sessions">
+    <div id="sessions-list"></div>
+  </div>
+
+  <!-- Workspaces (v4.12.0) -->
+  <div class="page content" id="page-workspaces">
+    <div class="card" style="max-width:900px">
+      <h2 style="margin-top:0">🧭 Workspaces</h2>
+      <p class="hint" style="color:var(--fg2);font-size:0.9em">Active sessions grouped by workspace. Each workspace can have its own purpose, working directory, and persona.</p>
+      <div id="workspaces-list" style="display:flex;flex-direction:column;gap:0.5rem;margin-top:1rem"></div>
+    </div>
+  </div>
+
+  <!-- Files -->
+  <div class="page content" id="page-files">
+    <div class="editor-toolbar">
+      <span id="file-breadcrumb" style="flex:1;color:var(--fg2);font-size:0.85em"></span>
+      <button class="btn btn-sm btn-outline" onclick="createNewFile()" id="file-new-btn"></button>
+      <button class="btn btn-sm btn-outline" onclick="navigateFiles('..')" id="file-up-btn"></button>
+    </div>
+    <div id="file-list"></div>
+    <div id="file-editor-area" style="display:none;margin-top:16px">
+      <div class="editor-toolbar">
+        <span id="file-edit-name" style="flex:1;color:var(--accent2);font-family:monospace;font-size:0.85em"></span>
+        <button class="btn btn-sm" onclick="saveFile()" id="file-save-btn"></button>
+        <button class="btn btn-sm btn-outline" style="color:var(--red)" onclick="deleteFile(document.getElementById('file-edit-name').textContent)" id="file-delete-btn"></button>
+        <button class="btn btn-sm btn-outline" onclick="document.getElementById('file-editor-area').style.display='none'" id="file-close-editor-btn"></button>
+      </div>
+      <textarea class="editor" id="file-editor"></textarea>
+    </div>
+  </div>
+
+  <!-- Cron -->
+  <div class="page content" id="page-cron">
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px" id="cron-header"></div>
+    <div id="cron-create-form" style="display:none;margin-bottom:16px;padding:16px;background:var(--bg2);border:1px solid var(--glass-border);border-radius:var(--radius)">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">
+        <input id="cron-name" class="input">
+        <select id="cron-type" class="input"></select>
+      </div>
+      <div id="cron-create-schedule-builder"></div>
+      <div style="margin-bottom:8px">
+        <input id="cron-payload" class="input" style="width:100%">
+      </div>
+      <div style="display:flex;gap:8px" id="cron-form-buttons"></div>
+    </div>
+    <div id="cron-list"></div>
+  </div>
+
+  <!-- Tools -->
+  <div class="page content" id="page-tools">
+    <div style="margin-bottom:16px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <input type="text" id="tools-search" style="flex:1;min-width:200px;background:var(--bg3);border:1px solid var(--glass-border);border-radius:var(--radius-sm);padding:8px 12px;color:var(--fg);font:inherit;font-size:0.85em;outline:none" oninput="filterTools()">
+      <span class="badge badge-accent" id="tools-count">0 Tools</span>
+    </div>
+    <div id="tools-list"></div>
+  </div>
+
+  <!-- Plugins -->
+  <div class="page content" id="page-plugins">
+    <div id="plugins-list"></div>
+  </div>
+
+  <!-- Platforms -->
+  <div class="page content" id="page-platforms">
+    <div id="platforms-setup"></div>
+  </div>
+
+  <!-- Users -->
+  <div class="page content" id="page-users">
+    <div id="users-list"></div>
+  </div>
+
+  <!-- Terminal -->
+  <div class="page" id="page-terminal" style="flex-direction:column;height:100%">
+    <div class="content" style="flex:1;display:flex;flex-direction:column">
+      <div class="terminal-output" id="terminal-output" style="flex:1"></div>
+      <div style="display:flex;gap:8px;margin-top:12px;align-items:center">
+        <span style="color:var(--accent);font-family:monospace;font-weight:bold">$</span>
+        <textarea id="terminal-input" rows="1" style="flex:1;background:var(--bg3);border:1px solid transparent;border-radius:8px;padding:10px;color:var(--fg);font-family:'SF Mono',Monaco,monospace;font-size:0.85em;resize:none;outline:none;min-height:40px"></textarea>
+        <button class="btn" onclick="runCommand()" id="terminal-run-btn"></button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Maintenance -->
+  <div class="page content" id="page-maintenance">
+    <div id="maintenance-content"><div style="color:var(--fg2)" id="maint-loading"></div></div>
+  </div>
+
+  <!-- Settings -->
+  <div class="page content" id="page-settings">
+    <div id="settings-content"></div>
+  </div>
+</div>
+
+<!-- Setup Wizard (shown on first run) -->
+<div class="wizard-overlay" id="wizard-overlay" style="display:none">
+  <div class="wizard">
+    <div class="wizard-header" id="wizard-header"></div>
+    <div class="wizard-body" id="wizard-body"></div>
+    <div class="wizard-footer" id="wizard-footer"></div>
+  </div>
+</div>
+
+<!-- Command Palette -->
+<div class="cmd-palette-overlay" id="cmd-palette-overlay" style="display:none" onclick="if(event.target===this)closeCommandPalette()">
+  <div class="cmd-palette">
+    <input class="cmd-palette-input" id="cmd-palette-input" type="text" autocomplete="off">
+    <div class="cmd-palette-results" id="cmd-palette-results"></div>
+  </div>
+</div>
+
+<script src="/js/icons.js"></script>
+<script src="/js/i18n.js"></script>
+<script src="/js/app.js"></script>
+</body>
+</html>

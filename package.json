@@ -1,0 +1,198 @@
+{
+  "name": "alvin-bot",
+  "version": "4.16.0",
+  "description": "Alvin Bot \u2014 Your personal AI agent on Telegram, WhatsApp, Discord, Signal, and Web.",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "alvin-bot": "bin/cli.js"
+  },
+  "scripts": {
+    "dev": "tsx src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "setup": "node bin/cli.js setup",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:ui": "vitest --ui",
+    "electron:compile": "tsc -p electron/tsconfig.json",
+    "electron:dev": "npm run electron:compile && electron .",
+    "electron:build": "npm run build && npm run electron:compile && electron-builder --publish never",
+    "electron:pack": "npm run build && npm run electron:compile && electron-builder --dir --publish never",
+    "electron:build:full": "bash scripts/electron-build.sh"
+  },
+  "build": {
+    "appId": "com.alvinbot.app",
+    "productName": "Alvin Bot",
+    "directories": {
+      "output": "release"
+    },
+    "extraResources": [
+      {
+        "from": "dist",
+        "to": "app/dist"
+      },
+      {
+        "from": "web",
+        "to": "app/web"
+      },
+      {
+        "from": "docs",
+        "to": "app/docs"
+      },
+      {
+        "from": "plugins",
+        "to": "app/plugins"
+      },
+      {
+        "from": "skills",
+        "to": "app/skills"
+      },
+      {
+        "from": ".prod-node-modules",
+        "to": "app/node_modules"
+      },
+      {
+        "from": "build",
+        "to": "build"
+      },
+      {
+        "from": "package.json",
+        "to": "app/package.json"
+      }
+    ],
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64"
+          ]
+        }
+      ],
+      "icon": "build/icon.png",
+      "category": "public.app-category.utilities"
+    },
+    "win": {
+      "target": "nsis",
+      "icon": "build/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "icon": "build/icon.png",
+      "category": "Utility"
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "alvbln",
+      "repo": "alvin-bot"
+    },
+    "asar": false,
+    "files": [
+      "electron/dist/**/*",
+      "dist/**/*",
+      "web/**/*",
+      "plugins/**/*",
+      "skills/**/*",
+      "docs/*.md",
+      "docs/prompts/**/*",
+      "!docs/memory/**",
+      "!docs/MEMORY.md",
+      "!docs/users/**",
+      "!docs/whatsapp-groups.json",
+      "!docs/cron-jobs.json",
+      "bin/**/*",
+      "package.json",
+      "SOUL.md",
+      "alvin-bot.config.example.json",
+      ".env.example",
+      "CHANGELOG.md",
+      "README.md",
+      "LICENSE",
+      "!src",
+      "!data",
+      "!backups",
+      "!.wwebjs_cache",
+      "!.git",
+      "!.github",
+      "!scripts",
+      "!release",
+      "!.prod-node-modules",
+      "!.electron-prod",
+      "!CLAUDE.md",
+      "!telegram-agent-setup-prompt.md",
+      "!**/*.log",
+      "!**/*.bak"
+    ],
+    "afterPack": "./electron/afterPack.cjs"
+  },
+  "keywords": [
+    "telegram",
+    "bot",
+    "ai",
+    "claude",
+    "agent",
+    "llm",
+    "multi-model",
+    "gpt",
+    "gemini",
+    "nvidia",
+    "self-hosted",
+    "autonomous",
+    "whatsapp",
+    "discord",
+    "signal",
+    "openai",
+    "groq",
+    "chatbot",
+    "assistant",
+    "electron"
+  ],
+  "author": "alvbln",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/alvbln/Alvin-Bot.git"
+  },
+  "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "^0.2.97",
+    "@hapi/boom": "^10.0.1",
+    "@slack/bolt": "^4.6.0",
+    "@types/node": "^22.0.0",
+    "@types/ws": "^8.18.1",
+    "@whiskeysockets/baileys": "^6.7.21",
+    "dotenv": "^16.4.0",
+    "electron-updater": "^6.8.3",
+    "grammy": "^1.30.0",
+    "node-edge-tts": "^1.2.10",
+    "pino": "^10.3.1",
+    "playwright": "^1.58.2",
+    "typescript": "^5.9.3",
+    "whatsapp-web.js": "^1.34.6",
+    "ws": "^8.19.0"
+  },
+  "devDependencies": {
+    "@vitest/ui": "^4.1.4",
+    "electron": "^35.7.5",
+    "electron-builder": "^26.8.1",
+    "tsx": "^4.19.0",
+    "vitest": "^4.1.4"
+  },
+  "homepage": "https://github.com/alvbln/Alvin-Bot",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "bugs": {
+    "url": "https://github.com/alvbln/alvin-bot/issues"
+  },
+  "overrides": {
+    "axios": "^1.15.0"
+  }
+}

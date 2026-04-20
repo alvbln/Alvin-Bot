@@ -1,0 +1,45 @@
+.DS_Store
+.wwebjs_cache/
+node_modules/
+dist/
+electron/dist/
+.env
+*.js.map
+
+# User-customized config (examples are tracked instead)
+SOUL.md
+TOOLS.md
+CLAUDE.md
+
+# Internal dev docs (specs, plans — contain personal implementation details)
+docs/superpowers/
+
+# Legacy data locations (now in ~/.alvin-bot/)
+docs/memory/*.md
+docs/MEMORY.md
+!docs/memory/.gitkeep
+docs/users/
+docs/tools.json
+docs/cron-jobs.json
+docs/whatsapp-groups.json
+docs/custom-models.json
+docs/mcp.json
+data/
+backups/
+scripts/*
+!scripts/browse-server.cjs
+!scripts/smoke-test-dispatch.mjs
+!scripts/smoke-test-abort-survival.mjs
+
+# WhatsApp / Electron
+.wwebjs_cache/
+release/
+.prod-node-modules/
+.electron-prod/
+BACKLOG.md
+
+# Install guide templates — kept locally on the maintainer's machine,
+# rendered to PDFs that are attached to GitHub Releases. NOT shipped
+# via npm or git so the npm tarball stays lean and the git history
+# doesn't accumulate binary blobs. See README "Installation" section.
+docs/install/
