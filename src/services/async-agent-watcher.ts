@@ -117,6 +117,28 @@ const pending = new Map<string, PendingAsyncAgent>();
 let pollTimer: ReturnType<typeof setInterval> | null = null;
 let started = false;
 
+/**
+ * Hard cap on the pending-agents map. Without this, a bot that runs many
+ * async agents but sees some fail to write their outputFile would see
+ * entries linger up to `giveUpAt` (12h default). If the rate of
+ * registerPending() outpaces resolutions for days, memory and the disk
+ * state file grow unbounded. We evict oldest-first when over the cap.
+ */
+const MAX_PENDING_AGENTS = 500;
+
+function enforcePendingCap(): void {
+  if (pending.size < MAX_PENDING_AGENTS) return;
+  const entries = [...pending.entries()].sort((a, b) => a[1].startedAt - b[1].startedAt);
+  const target = Math.floor(MAX_PENDING_AGENTS * 0.9);
+  let toEvict = pending.size - target;
+  for (const [id] of entries) {
+    if (toEvict <= 0) break;
+    pending.delete(id);
+    toEvict--;
+  }
+  console.warn(`[async-agent-watcher] pending map hit cap ${MAX_PENDING_AGENTS}, evicted to ${pending.size}`);
+}
+
 // ── Persistence ───────────────────────────────────────────────────
 
 function loadFromDisk(): void {
@@ -170,6 +192,7 @@ export function registerPendingAgent(input: RegisterInput): void {
     sessionKey: input.sessionKey,
     platform: input.platform,
   };
+  enforcePendingCap();
   pending.set(input.agentId, entry);
   saveToDisk();
 }

@@ -8,6 +8,12 @@
  *
  * The admin/owner user uses the global docs/memory/ and docs/MEMORY.md.
  * Additional users get isolated memory spaces.
+ *
+ * Performance:
+ *   Profiles are cached in memory after first read. `touchProfile` — called
+ *   on every inbound message — writes to cache and schedules a debounced
+ *   disk flush (2s). This avoids two sync fs operations per message on the
+ *   hot path. A final flush happens on graceful shutdown so nothing is lost.
  */
 
 import fs from "fs";
@@ -53,6 +59,42 @@ export interface UserProfile {
   lastMessageAt?: number;
 }
 
+// ── In-memory cache + debounced persistence ─────────────
+
+const cache = new Map<number, UserProfile>();
+const dirty = new Set<number>();
+let flushTimer: ReturnType<typeof setTimeout> | null = null;
+const FLUSH_DELAY_MS = 2000;
+
+function schedule_flush(): void {
+  if (flushTimer) return;
+  flushTimer = setTimeout(() => {
+    flushTimer = null;
+    flushProfiles();
+  }, FLUSH_DELAY_MS);
+  flushTimer.unref?.();
+}
+
+/**
+ * Write every dirty profile to disk synchronously. Called by the debounce
+ * timer AND by the graceful-shutdown handler so no in-flight updates are
+ * lost even if the bot exits between debounce ticks.
+ */
+export function flushProfiles(): void {
+  if (dirty.size === 0) return;
+  for (const userId of dirty) {
+    const profile = cache.get(userId);
+    if (!profile) continue;
+    try {
+      fs.writeFileSync(profilePath(userId), JSON.stringify(profile, null, 2));
+    } catch (err) {
+      // Don't throw — a persistent error would block future flushes.
+      console.warn(`[users] flush ${userId} failed: ${(err as Error).message}`);
+    }
+  }
+  dirty.clear();
+}
+
 // ── Profile Management ──────────────────────────────────
 
 function profilePath(userId: number): string {
@@ -64,22 +106,31 @@ function userMemoryDir(userId: number): string {
 }
 
 /**
- * Load a user profile. Returns null if not found.
+ * Load a user profile. Returns null if not found. Reads from cache first,
+ * falls back to disk on cache miss.
  */
 export function loadProfile(userId: number): UserProfile | null {
+  const cached = cache.get(userId);
+  if (cached) return cached;
   try {
     const raw = fs.readFileSync(profilePath(userId), "utf-8");
-    return JSON.parse(raw);
+    const profile: UserProfile = JSON.parse(raw);
+    cache.set(userId, profile);
+    return profile;
   } catch {
     return null;
   }
 }
 
 /**
- * Save a user profile.
+ * Save a user profile — updates cache and schedules a debounced disk flush.
+ * For immediate durability (e.g. during shutdown), call flushProfiles()
+ * after this.
  */
 export function saveProfile(profile: UserProfile): void {
-  fs.writeFileSync(profilePath(profile.userId), JSON.stringify(profile, null, 2));
+  cache.set(profile.userId, profile);
+  dirty.add(profile.userId);
+  schedule_flush();
 }
 
 /**
@@ -119,6 +170,9 @@ export function getOrCreateProfile(userId: number, name?: string, username?: str
 
 /**
  * Update a user's activity (call on each message).
+ *
+ * Previously this did a sync read + write per message. Now it works purely
+ * in memory and lets the debounce timer batch writes to disk.
  */
 export function touchProfile(
   userId: number,
@@ -142,19 +196,30 @@ export function touchProfile(
 }
 
 /**
- * List all known user profiles.
+ * List all known user profiles. Reads from disk; populates cache for
+ * subsequent fast access.
  */
 export function listProfiles(): UserProfile[] {
   const profiles: UserProfile[] = [];
   try {
     const files = fs.readdirSync(USERS_DIR);
     for (const file of files) {
-      if (file.endsWith(".json")) {
-        try {
-          const raw = fs.readFileSync(resolve(USERS_DIR, file), "utf-8");
-          profiles.push(JSON.parse(raw));
-        } catch { /* skip corrupt */ }
+      if (!file.endsWith(".json")) continue;
+      // Parse user id from filename — skip non-numeric (e.g. stray files)
+      const userId = parseInt(file.slice(0, -5), 10);
+      if (!Number.isFinite(userId)) continue;
+      // If cached, use that; otherwise read once and cache
+      const cached = cache.get(userId);
+      if (cached) {
+        profiles.push(cached);
+        continue;
       }
+      try {
+        const raw = fs.readFileSync(resolve(USERS_DIR, file), "utf-8");
+        const p: UserProfile = JSON.parse(raw);
+        cache.set(userId, p);
+        profiles.push(p);
+      } catch { /* skip corrupt */ }
     }
   } catch { /* dir doesn't exist */ }
   return profiles.sort((a, b) => b.lastActive - a.lastActive);
@@ -192,6 +257,10 @@ export function addUserNote(userId: number, note: string): void {
 export function deleteUser(userId: number): { deleted: string[]; errors: string[] } {
   const deleted: string[] = [];
   const errors: string[] = [];
+
+  // 0. Drop from cache + dirty set so the debounce doesn't re-create the file
+  cache.delete(userId);
+  dirty.delete(userId);
 
   // 1. Delete profile JSON
   const pPath = profilePath(userId);

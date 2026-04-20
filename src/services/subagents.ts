@@ -258,6 +258,42 @@ const activeAgents = new Map<string, {
   delivered: boolean;
 }>();
 
+/**
+ * Hard cap on the activeAgents map. Without this, a long-running bot that
+ * spawns many agents (e.g. a chatty cron + manual triggers over months) would
+ * accumulate delivered entries indefinitely. The 30-min auto-cleanup inside
+ * runSubAgent only fires on graceful completion, so crashed/orphaned entries
+ * would linger until the 12h giveUpAt ceiling.
+ *
+ * Enforcement: whenever we insert a new entry and the map is at-or-over the
+ * cap, evict the oldest finished-and-delivered entries first. Running agents
+ * are never evicted.
+ */
+const MAX_ACTIVE_AGENTS = 1000;
+
+function enforceAgentCap(): void {
+  if (activeAgents.size < MAX_ACTIVE_AGENTS) return;
+  // Collect evictable entries (delivered OR terminal status), sort by startedAt
+  const evictable: Array<[string, number]> = [];
+  for (const [id, entry] of activeAgents) {
+    const status = entry.info.status;
+    const done = entry.delivered || status === "error" || status === "timeout" || status === "cancelled";
+    if (done) evictable.push([id, entry.info.startedAt]);
+  }
+  evictable.sort((a, b) => a[1] - b[1]);
+  // Evict enough to land 10% below the cap, so we don't oscillate.
+  const target = Math.floor(MAX_ACTIVE_AGENTS * 0.9);
+  let toEvict = activeAgents.size - target;
+  for (const [id] of evictable) {
+    if (toEvict <= 0) break;
+    activeAgents.delete(id);
+    toEvict--;
+  }
+  if (toEvict > 0) {
+    console.warn(`[subagents] map at ${activeAgents.size}/${MAX_ACTIVE_AGENTS} — could not evict enough finished entries (too many still running)`);
+  }
+}
+
 // ── Name resolver (B2) ──────────────────────────────────
 
 /**
@@ -766,6 +802,7 @@ export function spawnSubAgent(agentConfig: SubAgentConfig): Promise<string> {
     queuePosition: willRunImmediately ? undefined : queuedLen + 1,
   };
 
+  enforceAgentCap();
   activeAgents.set(id, { info, abort, delivered: false });
 
   const queuedSpawn: QueuedSpawn = { id, resolvedName, agentConfig, depth, timeoutId };

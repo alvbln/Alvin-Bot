@@ -175,6 +175,7 @@ import { discoverTools } from "./services/tool-discovery.js";
 import { startHeartbeat, stopHeartbeat } from "./services/heartbeat.js";
 import { stopAutoUpdateLoop } from "./services/updater.js";
 import { startCleanupLoop, stopCleanupLoop } from "./services/disk-cleanup.js";
+import { flushProfiles } from "./services/users.js";
 import { initEmbeddings } from "./services/embeddings.js";
 import { loadSkills } from "./services/skills.js";
 import { loadHooks } from "./services/hooks.js";
@@ -418,6 +419,7 @@ const shutdown = async () => {
   await flushSessions().catch((err) =>
     console.warn("[shutdown] flushSessions failed:", err),
   );
+  try { flushProfiles(); } catch (err) { console.warn("[shutdown] flushProfiles failed:", err); }
   if (queueInterval) clearInterval(queueInterval);
   if (queueCleanupInterval) clearInterval(queueCleanupInterval);
   // Await grammy's stop so the Telegram update-offset gets committed BEFORE

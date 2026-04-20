@@ -207,11 +207,26 @@ function chunkMarkdown(content: string, source: string): Array<{ id: string; tex
 
 // ── Index Management ────────────────────────────────────
 
+// In-memory cache for the embedding index. Without this, every query would
+// re-read and re-parse the on-disk index (can be 100+ MB, making searchMemory
+// the slowest step in a message turn). We keep the parsed object and invalidate
+// via mtime check — so external reindexers are still picked up.
+let indexCache: EmbeddingIndex | null = null;
+let indexCacheMtime = 0;
+
 function loadIndex(): EmbeddingIndex {
   try {
+    const st = fs.statSync(INDEX_FILE);
+    if (indexCache && st.mtimeMs === indexCacheMtime) {
+      return indexCache;
+    }
     const raw = fs.readFileSync(INDEX_FILE, "utf-8");
-    return JSON.parse(raw);
+    indexCache = JSON.parse(raw);
+    indexCacheMtime = st.mtimeMs;
+    return indexCache!;
   } catch {
+    // File missing or unparseable — return an empty index and don't cache it
+    // (next call will retry, so a freshly-written index gets picked up).
     return {
       model: EMBEDDING_MODEL,
       lastReindex: 0,
@@ -223,6 +238,14 @@ function loadIndex(): EmbeddingIndex {
 
 function saveIndex(index: EmbeddingIndex): void {
   fs.writeFileSync(INDEX_FILE, JSON.stringify(index));
+  // Refresh cache immediately so the next loadIndex() sees the new state
+  // without a disk round-trip.
+  indexCache = index;
+  try {
+    indexCacheMtime = fs.statSync(INDEX_FILE).mtimeMs;
+  } catch {
+    indexCacheMtime = Date.now();
+  }
 }
 
 /**

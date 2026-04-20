@@ -2,6 +2,24 @@
 
 All notable changes to Alvin Bot are documented here.
 
+## [4.18.0] — 2026-04-20
+
+### ⚡ Performance + Hardening: medium-priority cleanups from the stability audit
+
+Completes the audit work started in 4.17.0 by addressing the remaining medium-severity findings.
+
+**Performance (hot path):**
+- **User profiles now cached in memory** (`src/services/users.ts`). Previously `touchProfile` — called on every inbound message — did a sync `readFileSync` + `writeFileSync` on disk. Now it updates an in-memory cache and schedules a debounced flush (2s batch window). A final flush runs on graceful shutdown so nothing is lost. Drops 2 blocking fs operations per message.
+- **Embeddings index now cached** (`src/services/embeddings.ts`). Semantic search previously re-read + re-parsed the full on-disk index on every query (100+ MB for large memories). Now cached in memory with mtime-based invalidation — external reindexers still picked up without a restart.
+- **Skills no longer force-reload every 5 minutes** (`src/services/skills.ts`). `getSkills()` used to re-scan the disk after 5min even though `fs.watch` already triggers hot-reload on change. Cache is now authoritative.
+
+**Hardening (unbounded growth):**
+- **Sub-agents map capped at 1000** (`src/services/subagents.ts`). Hits the 90%-target on overflow and evicts oldest delivered/terminated entries first. Running agents are never evicted.
+- **Async-agent pending map capped at 500** (`src/services/async-agent-watcher.ts`). Same LRU strategy for orphaned `registerPending` entries.
+- **Browser gateway + MCP subprocess stderr now have error handlers** (`browser-manager.ts`, `mcp.ts`). Previously a stream error would throw unhandled and could crash the node process.
+
+**Net effect:** message path now does zero blocking fs reads/writes on the profile/skills/embeddings side. Long-running installs can't grow the in-memory state beyond the caps. No API changes.
+
 ## [4.17.0] — 2026-04-20
 
 ### 🛡️ Hardening: long-running stability audit + leak fixes

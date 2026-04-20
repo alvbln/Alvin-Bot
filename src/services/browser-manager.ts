@@ -287,6 +287,19 @@ async function ensureGateway(): Promise<boolean> {
     gatewayProcess = null;
   });
 
+  // Surface spawn failures so we don't silently think the gateway is running.
+  gatewayProcess.on("error", (err) => {
+    log(`gateway spawn error: ${err.message}`);
+    gatewayProcess = null;
+  });
+
+  // Drain stdio pipes — otherwise stdout/stderr buffer fills and the child
+  // blocks on write. We don't care about the content (just that they drain).
+  gatewayProcess.stdout?.on("error", () => {});
+  gatewayProcess.stderr?.on("error", () => {});
+  gatewayProcess.stdout?.resume();
+  gatewayProcess.stderr?.resume();
+
   // Wait for startup (max 10s)
   for (let i = 0; i < 20; i++) {
     await new Promise((r) => setTimeout(r, 500));

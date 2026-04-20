@@ -205,10 +205,12 @@ export function loadSkills(): Skill[] {
 }
 
 /**
- * Get all loaded skills.
+ * Get all loaded skills. Cached after the first loadSkills() call; hot-reload
+ * happens via fs.watch when files change on disk. We only force a scan here if
+ * the cache is empty (init-order edge case).
  */
 export function getSkills(): Skill[] {
-  if (cachedSkills.length === 0 || Date.now() - lastScanAt > 300_000) {
+  if (cachedSkills.length === 0) {
     reloadAllSkills();
   }
   return cachedSkills;

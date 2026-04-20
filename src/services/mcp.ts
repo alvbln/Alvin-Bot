@@ -161,6 +161,17 @@ async function connectStdio(name: string, config: MCPServerConfig): Promise<MCPS
     proc.stderr!.on("data", (data: Buffer) => {
       console.error(`MCP ${name} stderr:`, data.toString().trim());
     });
+    // Surface stderr stream errors so we don't silently lose the channel
+    // (EPIPE, ECONNRESET etc). Without this, unhandled 'error' on the
+    // stream would crash the whole Node process.
+    proc.stderr!.on("error", (err) => {
+      console.error(`MCP ${name} stderr stream error:`, err.message);
+      server.connected = false;
+    });
+    proc.stdout?.on("error", (err) => {
+      console.error(`MCP ${name} stdout stream error:`, err.message);
+      server.connected = false;
+    });
 
     proc.on("error", (err) => {
       console.error(`MCP ${name} process error:`, err);
