@@ -2,6 +2,25 @@
 
 All notable changes to Alvin Bot are documented here.
 
+## [4.16.1] — 2026-04-20
+
+### 🆕 Feature: /update shows release highlights
+
+After a successful `/update`, the bot now sends a second short message with a bullet-point summary of what actually changed in the newly installed version. Pulled from the CHANGELOG entry matching the version string in the update result.
+
+**Implementation:**
+- New module `src/services/release-highlights.ts` parses the CHANGELOG block for a given version and returns at most 5 bullet points, ≤500 chars total.
+- Strategy: prefer `### ` subsection headlines (feature/fix titles); fall back to first non-empty paragraph lines.
+- Telegram-friendly output: plain bullets (`• ...`), no tables, no code blocks, truncates gracefully with an ellipsis line if too long.
+
+**Result format in chat:**
+```
+✅ Installed v4.16.1 (was v4.16.0). Restarting...
+📝 What's new in v4.16.1
+
+• Feature: /update shows release highlights
+```
+
 ## [4.16.0] — 2026-04-20
 
 ### 🚀 Feature: bot-owned CDP Chromium — no more hub dependency

@@ -31,6 +31,7 @@ import { BOT_VERSION } from "../version.js";
 import { getWebPort } from "../web/server.js";
 import { getUsageSummary, getRateLimits, getAllRateLimits, formatTokens } from "../services/usage-tracker.js";
 import { runUpdate, getAutoUpdate, setAutoUpdate, startAutoUpdateLoop } from "../services/updater.js";
+import { getReleaseHighlights } from "../services/release-highlights.js";
 import { getHealthStatus, isFailedOver } from "../services/heartbeat.js";
 import { t, LOCALE_NAMES, LOCALE_FLAGS, type Locale } from "../i18n.js";
 
@@ -2228,6 +2229,17 @@ export function registerCommands(bot: Bot): void {
       const result = await runUpdate();
       if (result.ok) {
         await ctx.reply(`✅ ${result.message}`);
+        // Extract the installed version from the message (e.g. "Installed v4.16.1 ...")
+        // so we can look up its CHANGELOG block. Falls silently if no match.
+        const versionMatch = result.message.match(/v(\d+\.\d+\.\d+)/);
+        if (versionMatch) {
+          const highlights = getReleaseHighlights(versionMatch[1]);
+          if (highlights) {
+            await ctx.reply(`📝 *What's new in v${versionMatch[1]}*\n\n${highlights}`, {
+              parse_mode: "Markdown",
+            });
+          }
+        }
         if (result.requiresRestart) {
           await ctx.reply(t("bot.update.restarting", lang));
           setTimeout(() => process.exit(0), 500);
