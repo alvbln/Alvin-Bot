@@ -66,6 +66,13 @@ export interface StreamChunk {
     tokensRemaining?: number;
     tokensReset?: string;
   };
+  /** v4.18.5 — Provider-requested session reset. When true, the message
+   *  handler should clear the session's stored sessionId so the next query
+   *  starts a fresh SDK session instead of resuming a corrupt/stale one.
+   *  Signalled by claude-sdk-provider when it detects an empty-stream
+   *  termination (typically caused by resuming a session that the Claude
+   *  backend has silently dropped). */
+  sessionResetRequested?: boolean;
 }
 
 // ── Provider Configuration ──────────────────────────────

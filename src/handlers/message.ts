@@ -509,6 +509,16 @@ export async function handleMessage(ctx: Context): Promise<void> {
           // Clear any tool-use status line — real content is flowing now.
           streamer.setStatus(null);
           await streamer.update(finalText);
+          // v4.18.5 — Provider requested a session reset (empty-stream / stale
+          // sessionId recovery). Clear the session's sessionId + SDK anchor so
+          // the next query starts a fresh Claude session instead of resuming
+          // the broken one. Without this, the bot would loop empty-stream
+          // replies and burn credits until the user manually runs /new.
+          if (chunk.sessionResetRequested) {
+            console.warn(`[session] provider requested reset for ${sessionKey} — clearing sessionId + SDK anchor`);
+            session.sessionId = null;
+            session.lastSdkHistoryIndex = -1;
+          }
           // Emit the new delta for observers — accumulated text minus what
           // we already broadcast.
           if (finalText.length > lastBroadcastLen) {

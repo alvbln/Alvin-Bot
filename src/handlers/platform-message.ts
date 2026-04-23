@@ -230,6 +230,13 @@ export async function handlePlatformMessage(
       switch (chunk.type) {
         case "text":
           finalText = chunk.text || "";
+          // v4.18.5 — Provider-requested session reset on empty-stream detection.
+          // Mirror of the same handling in handlers/message.ts.
+          if (chunk.sessionResetRequested) {
+            console.warn(`[session] provider requested reset for ${sessionKey} — clearing sessionId + SDK anchor`);
+            session.sessionId = null;
+            session.lastSdkHistoryIndex = -1;
+          }
           break;
         case "done":
           if (chunk.sessionId) session.sessionId = chunk.sessionId;

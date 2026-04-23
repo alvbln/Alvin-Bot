@@ -419,13 +419,19 @@ export class ClaudeSDKProvider implements Provider {
           if (accumulatedText === "" && outputTok === 0) {
             this.invalidateAvailabilityCache();
             const hint =
-              "⚠️ Claude antwortete mit leerem Stream (meist nach /extra-usage, /login oder Token-Refresh). " +
-              "Der SDK-Token-Cache wurde geleert — bitte schick die Nachricht einfach nochmal.";
+              "⚠️ Claude antwortete mit leerem Stream. " +
+              "Meist Folge einer stale SDK-Session nach /extra-usage, /login oder Token-Refresh. " +
+              "Ich starte die Session automatisch neu — bitte schick die Nachricht einfach nochmal.";
             yield {
               type: "text",
               text: hint,
               delta: hint,
               sessionId: resultMsg.session_id || capturedSessionId,
+              // v4.18.5 — Signal to the message handler that it should clear
+              // session.sessionId now. Without this the next query resumes
+              // the same stale sessionId and produces another empty stream
+              // in a loop that burns credits until the user manually /new's.
+              sessionResetRequested: true,
             };
           }
 

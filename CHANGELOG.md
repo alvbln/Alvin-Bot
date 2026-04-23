@@ -2,6 +2,16 @@
 
 All notable changes to Alvin Bot are documented here.
 
+## [4.18.5] — 2026-04-23
+
+### 🐛 Fix: auto-reset stale SDK sessionId on empty-stream detection
+
+**Problem:** After a round of failed queries (common trigger: token rotation, quota exhaustion mid-turn, Claude backend dropping the session silently), the stored `session.sessionId` references a conversation that the Claude backend has already discarded. Every subsequent query passes `resume: session.sessionId` into the SDK, the backend can't find the session, and the stream terminates with zero text chunks. The v4.18.3 empty-stream detector only invalidated the availability cache — the sessionId stayed stale, so the next retry resumed the same dead session. A burn-credits loop that required a manual `/new` to escape.
+
+**Fix:** the provider now sets a new `sessionResetRequested: true` flag on the empty-stream text chunk. Both message handlers (`handlers/message.ts` and `handlers/platform-message.ts`) listen for it and clear `session.sessionId` + `session.lastSdkHistoryIndex` immediately, so the very next user message starts a fresh SDK session instead of resuming the dead one.
+
+**Net effect:** after a single empty-stream, the bot self-heals. One resend from the user is enough; no manual `/new`, no bot restart.
+
 ## [4.18.4] — 2026-04-23
 
 ### 🐛 Critical fix: detect Anthropic quota-exhausted responses
