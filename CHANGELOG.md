@@ -2,6 +2,21 @@
 
 All notable changes to Alvin Bot are documented here.
 
+## [4.18.2] — 2026-04-23
+
+### 🐛 Fix: silent empty-stream after OAuth-token rotation
+
+**Problem:** After running `/extra-usage`, `/login`, or any other flow that rotates the Claude OAuth token in the macOS Keychain, the Alvin-Bot silently broke for long-lived sessions. The in-memory Claude SDK client held the old token, the CLI subprocess emitted no text chunks (the 401 was swallowed upstream), the stream terminated normally with zero output tokens, and the user saw the fallback `"(Keine Antwort)"` — with no indication that a token refresh was needed.
+
+**Fix** (`src/providers/claude-sdk-provider.ts`): In the `result` branch of the SDK stream loop, detect the empty-stream signature (`accumulatedText === ""` and `outputTokens === 0`). When that fires:
+
+1. Invalidate the `isAvailable()` cache so the next heartbeat probe spawns a fresh CLI subprocess that reads the current Keychain entry.
+2. Yield an explicit `error` chunk with actionable text so the user sees *"…token rotation — please resend your message"* instead of a silent `"(Keine Antwort)"`.
+
+**Applies to:** every token-rotation flow — extra-usage activation, extra-usage expiry, weekly-reset (no rotation → unaffected), manual `claude login`.
+
+**Net effect:** Bot self-heals after token changes. A single resend on the user side is enough; no manual restart required.
+
 ## [4.18.1] — 2026-04-20
 
 ### 🔒 Privacy-Guard: pre-publish check blocks PII leaks in shipped files

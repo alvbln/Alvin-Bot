@@ -346,6 +346,33 @@ export class ClaudeSDKProvider implements Provider {
             ? (usage.input_tokens || 0) + (usage.cache_creation_input_tokens || 0) + (usage.cache_read_input_tokens || 0)
             : 0;
           const outputTok = usage?.output_tokens || 0;
+
+          // v4.18.2 — Silent-empty-stream detection.
+          //
+          // If the stream terminated cleanly but produced ZERO text chunks,
+          // something went wrong that the SDK didn't surface as an error:
+          // most commonly a stale OAuth token after /extra-usage or /login
+          // rotated the Keychain entry while our in-memory SDK client was
+          // still holding the old one. The CLI subprocess silently gets a
+          // 401, emits no text, and we complete the stream with
+          // accumulatedText === "". The user sees "(Keine Antwort)".
+          //
+          // We flip this from silent failure to explicit error. Clearing
+          // the availability cache forces the next heartbeat probe to
+          // re-check `claude auth status` with a fresh subprocess (which
+          // reads the current Keychain entry).
+          if (accumulatedText === "" && outputTok === 0) {
+            this.invalidateAvailabilityCache();
+            yield {
+              type: "error",
+              error:
+                "Claude returned an empty response. " +
+                "This can happen right after /extra-usage, /login, or a token refresh — " +
+                "the SDK held a stale auth token. I've invalidated the cache; please resend your message.",
+            };
+            return;
+          }
+
           yield {
             type: "done",
             text: accumulatedText,
