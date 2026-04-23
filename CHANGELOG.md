@@ -2,6 +2,30 @@
 
 All notable changes to Alvin Bot are documented here.
 
+## [4.18.4] — 2026-04-23
+
+### 🐛 Critical fix: detect Anthropic quota-exhausted responses
+
+**Problem:** When a Claude Max subscription runs out of weekly limit or extra-usage credits, Anthropic's gateway responds to every query with a short text chunk like *"You're out of extra usage · resets 9pm (Europe/Berlin)"* — delivered as `output_tokens=0`. The SDK surfaces it as a normal assistant text message. The bot has no way to distinguish it from a real Claude response, so one of two things happens:
+
+1. The text passes through unchanged and the user sees the raw quota message as if it were Claude's reply.
+2. The text is filtered downstream (some legacy paths) and the user sees `"(Keine Antwort)"` with zero explanation.
+
+Both outcomes hide the real cause (credits) and every retry attempt wastes more credits on nothing.
+
+**Symptoms observed on 2026-04-23:**
+- User activates `/extra-usage`, sends query → `(Keine Antwort)` or raw limit text.
+- Assumes bot / workspace / token is broken, spends hours debugging.
+- Actual cause: extra-usage quota silently exhausted mid-debug-session.
+
+**Fix** (`src/providers/claude-sdk-provider.ts`):
+
+- New `isQuotaLimitOutput(text)` detects the Anthropic-gateway quota signatures (multiple English/German variants: "out of extra usage", "weekly usage limit", "rate limit exceeded", "quota exceeded", etc.).
+- In the SDK stream loop: when the first text chunk matches this pattern, rewrite it as a clear actionable hint (*"⚠️ …Top up the plan or wait for the reset…"*) AND invalidate the availability cache so the next heartbeat re-probes — but do NOT yield an `error` chunk (that would trigger fallback-cascade to Ollama and waste more credits on retries).
+- In `isAvailable()`: the heartbeat probe now treats quota-exhausted output as "unavailable" in the same way it treats auth errors. Provider is marked unhealthy, bot stops trying until the next probe succeeds.
+
+**Net effect:** bot no longer silently wastes credits after a quota limit is hit. Users see a plain, actionable message pointing at the right fix.
+
 ## [4.18.3] — 2026-04-23
 
 ### 🐛 Hotfix: 4.18.2 triggered unwanted failover to Ollama

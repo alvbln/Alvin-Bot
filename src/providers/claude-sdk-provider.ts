@@ -29,6 +29,35 @@ export function isAuthErrorOutput(text: string): boolean {
   return /^\s*not logged in\b/i.test(text);
 }
 
+/**
+ * Detects Anthropic's rate-limit / quota-exhausted gateway responses.
+ * These are NOT model outputs — they come back as a single text chunk with
+ * output_tokens = 0 before the model even sees the prompt. Without this
+ * detection, the bot would forward the gateway message as if it were the
+ * assistant's reply ("(Keine Antwort)" or the raw quota text), masking the
+ * real cause and wasting more calls on retries.
+ *
+ * Covers the observed variants:
+ *   - "You're out of extra usage · resets 9pm (Europe/Berlin)"
+ *   - "You've reached your weekly usage limit. …"
+ *   - "Rate limit exceeded"
+ *   - Claude Max / Pro quota messages in both EN/DE
+ */
+export function isQuotaLimitOutput(text: string): boolean {
+  if (!text) return false;
+  const t = text.trim();
+  if (t.length === 0) return false;
+  return (
+    /you['’]re out of extra usage/i.test(t) ||
+    /reached (your |the )?(weekly |monthly |daily )?(usage|rate) limit/i.test(t) ||
+    /rate[- ]?limit(ed)? (exceeded|reached)/i.test(t) ||
+    /quota exceeded/i.test(t) ||
+    /usage limit reached/i.test(t) ||
+    /limit (reached|hit) for (this|your) (week|month|day)/i.test(t) ||
+    /resets? \d{1,2}(am|pm|:)/i.test(t) && /usage|limit/i.test(t)
+  );
+}
+
 const BOT_PROJECT_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 
 // Load CLAUDE.md once at startup
@@ -229,6 +258,26 @@ export class ClaudeSDKProvider implements Provider {
                   };
                   return;
                 }
+
+                // v4.18.4 — Guard against Anthropic rate-limit / quota-exhausted
+                // gateway messages that also arrive as a single text chunk (with
+                // output_tokens = 0). Pass them through as a friendly text chunk
+                // (NOT an error — would trigger fallback cascade to Ollama) and
+                // mark the provider as degraded so the next heartbeat re-checks.
+                if (!accumulatedText && isQuotaLimitOutput(block.text)) {
+                  const hint = "⚠️ " + block.text.trim() +
+                    "\n\nTop up the plan or wait for the reset. No message was sent to Claude.";
+                  this.invalidateAvailabilityCache();
+                  yield {
+                    type: "text",
+                    text: hint,
+                    delta: hint,
+                    sessionId: capturedSessionId,
+                  };
+                  accumulatedText = hint;
+                  continue;
+                }
+
                 accumulatedText += block.text;
                 yield {
                   type: "text",
@@ -460,7 +509,9 @@ export class ClaudeSDKProvider implements Provider {
             ["-p", "ping", "--output-format", "text"],
             { timeout: 15000 },
           );
-          return cache(!isAuthErrorOutput(probeOut));
+          // v4.18.4 — treat quota-exhausted as "unavailable" so heartbeat
+          // surfaces it and stops wasting extra-usage credits on retries.
+          return cache(!isAuthErrorOutput(probeOut) && !isQuotaLimitOutput(probeOut));
         } catch {
           // Both checks failed — treat as unavailable
           void authErr;
