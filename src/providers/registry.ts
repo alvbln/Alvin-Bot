@@ -129,8 +129,18 @@ export class ProviderRegistry {
    *    and asking the user to retry. The failover is only silent when
    *    the failing provider hadn't committed any visible text yet.
    */
-  async *queryWithFallback(options: QueryOptions): AsyncGenerator<StreamChunk> {
-    const chain = [this.activeKey, ...this.fallbackKeys.filter(k => k !== this.activeKey)];
+  async *queryWithFallback(options: QueryOptions, providerOverride?: string): AsyncGenerator<StreamChunk> {
+    // v4.19.0 — Per-workspace provider override. If supplied AND registered,
+    // it becomes the primary for this query; fallbacks still apply so the
+    // bot can degrade gracefully if the override provider is unavailable.
+    const primary = providerOverride && this.providers.has(providerOverride)
+      ? providerOverride
+      : this.activeKey;
+    const chain = [primary, ...this.fallbackKeys.filter(k => k !== primary)];
+    // Also include activeKey as a last-resort fallback if override was used
+    if (providerOverride && !chain.includes(this.activeKey)) {
+      chain.push(this.activeKey);
+    }
     const errors: Array<{ key: string; error: string }> = [];
 
     for (const key of chain) {

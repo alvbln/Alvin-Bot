@@ -2,6 +2,48 @@
 
 All notable changes to Alvin Bot are documented here.
 
+## [4.19.0] — 2026-04-24
+
+### 🧭 Feature: per-workspace runtime overrides (effort · provider · voice · temperature · toolset)
+
+Workspaces could already override `model` and `cwd`. v4.19.0 extends the YAML frontmatter with five more runtime fields that take effect automatically the moment a user runs `/workspace <name>`.
+
+**New workspace frontmatter fields** (`~/.alvin-bot/workspaces/<name>.md`):
+
+```yaml
+---
+purpose: my-project
+cwd: ~/path/to/workdir
+model: opus              # already existed
+effort: high             # NEW — low | medium | high
+provider: claude-sdk     # NEW — registry key; fallback chain still applies
+voice: iP95p4xoKVk53GoZ742B   # NEW — ElevenLabs voice ID, or Edge-TTS voice name (e.g. "en-US-JennyNeural")
+temperature: 0.3         # NEW — 0–2 sampling temperature
+toolset: research        # NEW — full (default) | readonly | research
+---
+Persona body continues here...
+```
+
+**Toolset presets** (map to concrete `allowedTools` lists via the new exported `toolsetToAllowedTools` helper):
+- `full` — provider default (`Read, Write, Edit, Bash, Glob, Grep, WebSearch, WebFetch, Task` + MCP)
+- `readonly` — `Read, Glob, Grep, WebSearch, WebFetch` (no Write/Edit/Bash)
+- `research` — `Read, WebSearch, WebFetch, Grep` (pure research mode)
+
+**Implementation:**
+
+- `src/services/workspaces.ts` — `Workspace` interface + `parseFrontmatter` extended; numeric parsing + enum validation so a malformed value is silently dropped and the session-default wins.
+- `src/handlers/message.ts` + `src/handlers/platform-message.ts` — at query-assembly time, every workspace-set field overrides the equivalent session/registry default exactly for this one query. Nothing sticky leaks across workspace switches.
+- `src/providers/registry.ts` — `queryWithFallback()` gains optional `providerOverride`. When supplied AND registered, it becomes primary for that query; fallback chain still applies, and the globally active provider joins the chain as a last-resort backup so availability drops still degrade gracefully.
+- `src/providers/claude-sdk-provider.ts` — passes `options.temperature` through to the Agent SDK when set.
+- `src/services/voice.ts` — `textToSpeech(text, voice?)` — optional second arg; picked up from `workspace.voice` in Telegram handler's voice-reply path. Works for both ElevenLabs (Voice ID) and Edge TTS (Voice Name like `de-DE-ConradNeural`).
+
+**Net effect:** Each workspace becomes a self-contained runtime profile. For example:
+- A `prep` workspace with `model: opus · effort: high · temperature: 0.3 · voice: en-US-JennyNeural` for polished long-form work;
+- A `research` workspace with `toolset: research · model: haiku · effort: low · temperature: 0.7` for cheap-and-fast web spelunking;
+- A `sensitive` workspace with `toolset: readonly · provider: claude-sdk` so the agent cannot accidentally `Write` or `Bash` inside the cwd.
+
+No data migration required — existing workspace files without the new fields keep working identically.
+
 ## [4.18.5] — 2026-04-23
 
 ### 🐛 Fix: auto-reset stale SDK sessionId on empty-stream detection

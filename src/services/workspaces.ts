@@ -55,6 +55,42 @@ export interface Workspace {
    * model is used — i.e. whatever the user has picked via /model.
    */
   model?: string;
+  /** Optional per-workspace thinking-effort override. "low" | "medium" | "high". */
+  effort?: "low" | "medium" | "high";
+  /**
+   * Optional per-workspace provider override. Registry key like
+   * "claude-sdk", "claude-opus", "claude-sonnet", "ollama", "groq", etc.
+   * When set, queries in this workspace route through that provider
+   * instead of the globally active one. Fallback chain still applies if
+   * the chosen provider is unavailable.
+   */
+  provider?: string;
+  /**
+   * Optional per-workspace TTS voice override. Passed to the TTS service
+   * when the session generates voice replies in this workspace.
+   */
+  voice?: string;
+  /**
+   * Optional per-workspace sampling temperature (0–2). Passed to the SDK
+   * query. When undefined, provider default is used.
+   */
+  temperature?: number;
+  /**
+   * Optional per-workspace toolset preset. Controls which tools the main
+   * agent can use in this workspace.
+   *   - "full"     → default full set (Read, Write, Edit, Bash, Glob, Grep, WebSearch, WebFetch, Task + MCP)
+   *   - "readonly" → no Write/Edit/Bash (safe browsing/analysis)
+   *   - "research" → only WebSearch, WebFetch, Read (pure research mode)
+   */
+  toolset?: "full" | "readonly" | "research";
+}
+
+/** Map a toolset preset to the concrete allowedTools list. */
+export function toolsetToAllowedTools(toolset: Workspace["toolset"]): string[] | undefined {
+  if (!toolset || toolset === "full") return undefined; // undefined = use provider default
+  if (toolset === "readonly") return ["Read", "Glob", "Grep", "WebSearch", "WebFetch"];
+  if (toolset === "research") return ["Read", "WebSearch", "WebFetch", "Grep"];
+  return undefined;
 }
 
 const registry = new Map<string, Workspace>();
@@ -122,6 +158,18 @@ function readWorkspaceFile(filePath: string, name: string): Workspace | null {
     const color = typeof fm.color === "string" ? fm.color : undefined;
     const emoji = typeof fm.emoji === "string" ? fm.emoji : undefined;
     const model = typeof fm.model === "string" && fm.model.trim() ? fm.model.trim() : undefined;
+    // v4.19.0 — per-workspace runtime overrides
+    const effortRaw = typeof fm.effort === "string" ? fm.effort.trim().toLowerCase() : "";
+    const effort = (effortRaw === "low" || effortRaw === "medium" || effortRaw === "high")
+      ? (effortRaw as Workspace["effort"]) : undefined;
+    const provider = typeof fm.provider === "string" && fm.provider.trim() ? fm.provider.trim() : undefined;
+    const voice = typeof fm.voice === "string" && fm.voice.trim() ? fm.voice.trim() : undefined;
+    const temperatureRaw = typeof fm.temperature === "string" ? parseFloat(fm.temperature) : (typeof fm.temperature === "number" ? fm.temperature : NaN);
+    const temperature = Number.isFinite(temperatureRaw) && temperatureRaw >= 0 && temperatureRaw <= 2
+      ? temperatureRaw : undefined;
+    const toolsetRaw = typeof fm.toolset === "string" ? fm.toolset.trim().toLowerCase() : "";
+    const toolset = (toolsetRaw === "full" || toolsetRaw === "readonly" || toolsetRaw === "research")
+      ? (toolsetRaw as Workspace["toolset"]) : undefined;
     const channels = Array.isArray(fm.channels)
       ? fm.channels.filter((c): c is string => typeof c === "string")
       : [];
@@ -134,6 +182,11 @@ function readWorkspaceFile(filePath: string, name: string): Workspace | null {
       emoji,
       channels,
       model,
+      effort,
+      provider,
+      voice,
+      temperature,
+      toolset,
       systemPromptOverride: body.trim(),
     };
   } catch (err) {

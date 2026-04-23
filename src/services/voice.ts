@@ -71,7 +71,16 @@ export async function transcribeAudio(audioPath: string): Promise<string> {
 
 // ── Text-to-Speech (Edge TTS via node-edge-tts) ────────
 
-export async function textToSpeech(text: string): Promise<string> {
+/**
+ * Convert text to speech and return path to the MP3 file.
+ *
+ * @param text   The text to synthesize.
+ * @param voice  Optional voice ID / name override (v4.19.0 — per-workspace).
+ *               For ElevenLabs this is the Voice ID, for Edge TTS the Voice Name
+ *               (e.g. "de-DE-ConradNeural", "en-US-JennyNeural"). When undefined,
+ *               the config default is used.
+ */
+export async function textToSpeech(text: string, voice?: string): Promise<string> {
   // Strip markdown formatting for cleaner TTS
   let cleanText = text
     .replace(/```[\s\S]*?```/g, " Code block skipped. ")
@@ -96,7 +105,9 @@ export async function textToSpeech(text: string): Promise<string> {
   if (config.ttsProvider === "elevenlabs" && config.elevenlabs.apiKey) {
     try {
       const { elevenLabsTTS } = await import("./elevenlabs.js");
-      return await elevenLabsTTS(cleanText);
+      // v4.19.0 — per-workspace voice override. When unset, elevenLabsTTS falls
+      // back to config.elevenlabs.voiceId.
+      return await elevenLabsTTS(cleanText, voice);
     } catch (err) {
       console.warn("ElevenLabs TTS failed, falling back to Edge TTS:", err instanceof Error ? err.message : err);
     }
@@ -106,8 +117,9 @@ export async function textToSpeech(text: string): Promise<string> {
   const outputPath = path.join(TEMP_DIR, `tts_${Date.now()}.mp3`);
 
   const tts = new EdgeTTS({
-    voice: "de-DE-ConradNeural",
-    lang: "de-DE",
+    // v4.19.0 — allow workspace override; default German male.
+    voice: voice || "de-DE-ConradNeural",
+    lang: voice && voice.match(/^[a-z]{2}-[A-Z]{2}/) ? voice.slice(0, 5) : "de-DE",
     outputFormat: "audio-24khz-48kbitrate-mono-mp3",
   });
 

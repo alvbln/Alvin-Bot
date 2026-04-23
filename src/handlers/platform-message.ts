@@ -198,14 +198,20 @@ export async function handlePlatformMessage(
       )
     ) + skillContext;
 
+    // v4.19.0 — Per-workspace runtime overrides (model/effort/temperature/toolset).
+    const { toolsetToAllowedTools } = await import("../services/workspaces.js");
+    const wsAllowed = toolsetToAllowedTools(workspace.toolset);
+
     const queryOpts: QueryOptions = {
       prompt: fullText,
       systemPrompt,
       workingDir: session.workingDir,
-      effort: session.effort,
+      effort: workspace.effort ?? session.effort,
       // v4.15 — Per-workspace model override (optional YAML `model:` field).
-      // When unset, falls through to the globally active provider's model.
+      // v4.19 — ditto for temperature and toolset-derived allowedTools.
       ...(workspace.model ? { model: workspace.model } : {}),
+      ...(workspace.temperature !== undefined ? { temperature: workspace.temperature } : {}),
+      ...(wsAllowed ? { allowedTools: wsAllowed } : {}),
       sessionId: isSDK ? session.sessionId : null,
       history: !isSDK ? session.history : undefined,
       // v4.14 — Expose alvin_dispatch_agent MCP tool on non-Telegram
@@ -226,7 +232,7 @@ export async function handlePlatformMessage(
       addToHistory(sessionKey, { role: "user", content: fullText });
     }
 
-    for await (const chunk of registry.queryWithFallback(queryOpts)) {
+    for await (const chunk of registry.queryWithFallback(queryOpts, workspace.provider)) {
       switch (chunk.type) {
         case "text":
           finalText = chunk.text || "";

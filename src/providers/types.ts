@@ -130,6 +130,12 @@ export interface QueryOptions {
   sessionId?: string | null;
   /** Thinking effort level */
   effort?: EffortLevel;
+  /**
+   * Per-query sampling temperature override (0–2). Primarily used by the
+   * Claude Agent SDK provider; Ollama / non-SDK providers ignore it.
+   * v4.19.0 — honored as per-workspace override from YAML frontmatter.
+   */
+  temperature?: number;
   /** Abort signal */
   abortSignal?: AbortSignal;
   /** User's preferred UI locale — used by the registry to localize

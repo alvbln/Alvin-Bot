@@ -441,14 +441,24 @@ export async function handleMessage(ctx: Context): Promise<void> {
       }
     }
 
+    // v4.19.0 — Per-workspace runtime overrides. Each is only applied when
+    // the workspace explicitly set it; otherwise the session/provider default
+    // wins. Toolset is mapped to a concrete allowedTools list via
+    // toolsetToAllowedTools(); providers that ignore allowedTools (Ollama etc.)
+    // just drop it.
+    const { toolsetToAllowedTools } = await import("../services/workspaces.js");
+    const wsAllowed = toolsetToAllowedTools(workspace.toolset);
+
     const queryOpts: QueryOptions & { _sessionState?: { messageCount: number; toolUseCount: number } } = {
       prompt: bridgedPrompt,
       systemPrompt,
       workingDir: session.workingDir,
-      effort: session.effort,
+      effort: workspace.effort ?? session.effort,
       // v4.15 — Per-workspace model override (optional YAML `model:` field).
-      // When unset, falls through to the globally active provider's model.
+      // v4.19 — ditto for temperature and toolset-derived allowedTools.
       ...(workspace.model ? { model: workspace.model } : {}),
+      ...(workspace.temperature !== undefined ? { temperature: workspace.temperature } : {}),
+      ...(wsAllowed ? { allowedTools: wsAllowed } : {}),
       abortSignal: session.abortController.signal,
       // User's UI locale — registry uses it to localize failure messages.
       locale: session.language,
@@ -481,7 +491,7 @@ export async function handleMessage(ctx: Context): Promise<void> {
     // readable description (which only appears in the tool_use input,
     // not in the tool_result text). See Fix #17 Stage 2.
     let lastAgentToolUseInput: ToolUseInput | undefined;
-    for await (const chunk of registry.queryWithFallback(queryOpts)) {
+    for await (const chunk of registry.queryWithFallback(queryOpts, workspace.provider)) {
       // v4.12.1 — Update pending-sync-task state FIRST so the timer's
       // next reset picks up the new state. This ordering is load-bearing:
       // reversing it means the timer rearms with stale state. A sync
@@ -686,7 +696,7 @@ export async function handleMessage(ctx: Context): Promise<void> {
     if (session.voiceReply && finalText.trim()) {
       try {
         await ctx.api.sendChatAction(ctx.chat!.id, "upload_voice");
-        const audioPath = await textToSpeech(finalText);
+        const audioPath = await textToSpeech(finalText, workspace.voice);
         await ctx.replyWithVoice(new InputFile(fs.readFileSync(audioPath), "response.mp3"));
         fs.unlink(audioPath, () => {});
       } catch (err) {

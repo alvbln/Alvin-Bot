@@ -220,6 +220,9 @@ export class ClaudeSDKProvider implements Provider {
           maxTurns: 50,
           betas: ["context-1m-2025-08-07"],
           ...(modelOverride ? { model: modelOverride } : {}),
+          // v4.19.0 — per-workspace temperature override. Passed through to
+          // the Agent SDK; providers that don't use it just drop it.
+          ...(typeof options.temperature === "number" ? { temperature: options.temperature } : {}),
           // Prefer Haiku as fallback on rate-limit/overload — cheap and
           // fast, keeps the bot responsive when the primary tier is
           // throttled. Omitted when the primary IS Haiku (SDK requires
