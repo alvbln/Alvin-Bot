@@ -347,35 +347,42 @@ export class ClaudeSDKProvider implements Provider {
             : 0;
           const outputTok = usage?.output_tokens || 0;
 
-          // v4.18.2 — Silent-empty-stream detection.
+          // v4.18.3 — Silent-empty-stream detection (replaces 4.18.2 approach).
           //
           // If the stream terminated cleanly but produced ZERO text chunks,
-          // something went wrong that the SDK didn't surface as an error:
-          // most commonly a stale OAuth token after /extra-usage or /login
-          // rotated the Keychain entry while our in-memory SDK client was
-          // still holding the old one. The CLI subprocess silently gets a
-          // 401, emits no text, and we complete the stream with
-          // accumulatedText === "". The user sees "(Keine Antwort)".
+          // something went wrong that the SDK didn't surface as an error.
+          // Most common cause: the OAuth token in the Keychain was rotated
+          // (e.g. right after /extra-usage or /login) while our in-memory
+          // SDK client still held the old one — the CLI subprocess silently
+          // gets a 401, emits no text, and we complete with
+          // accumulatedText === "".
           //
-          // We flip this from silent failure to explicit error. Clearing
-          // the availability cache forces the next heartbeat probe to
-          // re-check `claude auth status` with a fresh subprocess (which
-          // reads the current Keychain entry).
+          // CRITICAL: we must NOT yield an "error" chunk here — the registry's
+          // queryWithFallback() treats that as "primary failed" and kicks off
+          // a full failover to the next provider (Ollama). That's exactly
+          // wrong: the next CLI subprocess would have picked up the fresh
+          // token by itself. Instead we:
+          //   1. Invalidate the availability cache so the next heartbeat
+          //      re-probes `claude auth status` with a fresh subprocess.
+          //   2. Return a friendly "text" chunk explaining what happened,
+          //      so the user sees a clear message (not "(Keine Antwort)")
+          //      and knows to resend — without tripping the failover.
           if (accumulatedText === "" && outputTok === 0) {
             this.invalidateAvailabilityCache();
+            const hint =
+              "⚠️ Claude antwortete mit leerem Stream (meist nach /extra-usage, /login oder Token-Refresh). " +
+              "Der SDK-Token-Cache wurde geleert — bitte schick die Nachricht einfach nochmal.";
             yield {
-              type: "error",
-              error:
-                "Claude returned an empty response. " +
-                "This can happen right after /extra-usage, /login, or a token refresh — " +
-                "the SDK held a stale auth token. I've invalidated the cache; please resend your message.",
+              type: "text",
+              text: hint,
+              delta: hint,
+              sessionId: resultMsg.session_id || capturedSessionId,
             };
-            return;
           }
 
           yield {
             type: "done",
-            text: accumulatedText,
+            text: accumulatedText || "",
             sessionId: resultMsg.session_id || capturedSessionId,
             costUsd: "total_cost_usd" in resultMsg ? resultMsg.total_cost_usd : 0,
             inputTokens: inputTok,

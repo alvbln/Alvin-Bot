@@ -2,6 +2,14 @@
 
 All notable changes to Alvin Bot are documented here.
 
+## [4.18.3] — 2026-04-23
+
+### 🐛 Hotfix: 4.18.2 triggered unwanted failover to Ollama
+
+**Bug in 4.18.2:** The empty-stream detector yielded an `error` chunk, which the registry's `queryWithFallback()` interprets as "primary provider failed" and immediately switches to the fallback (Ollama/Gemma 4). User saw `⚡ Claude (Agent SDK) unavailable — switching to Gemma 4 E4B` after every token rotation — the opposite of the intended behavior.
+
+**Fix:** yield a `text` chunk instead of `error`. Same user-visible message, same cache-invalidation, but no failover cascade. The next CLI subprocess spawns with the fresh Keychain token automatically, and claude-sdk stays selected.
+
 ## [4.18.2] — 2026-04-23
 
 ### 🐛 Fix: silent empty-stream after OAuth-token rotation
