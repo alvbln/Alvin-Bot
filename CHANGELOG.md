@@ -2,6 +2,30 @@
 
 All notable changes to Alvin Bot are documented here.
 
+## [4.19.1] — 2026-04-24
+
+### 🐛 Critical fix: workspace/dir switch no longer produces empty-stream loop
+
+**Problem:** After `/workspace <name>` (or `/dir <path>`), every subsequent SDK message returned `⚠️ Claude antwortete mit leerem Stream …` — and even switching back to the previous workspace did not recover. The v4.18.5 auto-reset only masked the symptom; the underlying cause survived the recovery attempt.
+
+**Root cause — a two-part bug:**
+
+1. **Prevention layer missing.** The Claude Agent SDK's `resume: <sessionId>` is bound to the cwd the session was created in: session files live under `~/.claude/projects/<cwd-hash>/<session-id>.jsonl`. When a workspace switch changes `session.workingDir`, the stored `session.sessionId` points at a file that no longer exists in the new project folder. The CLI silently returns an empty stream.
+2. **Recovery layer broken.** v4.18.5's empty-stream detector correctly cleared `session.sessionId = null` on the `text` chunk — but the very next `done` chunk of the same stream carried `sessionId: resultMsg.session_id || capturedSessionId`, and the handler's `if (chunk.sessionId) session.sessionId = chunk.sessionId;` restored it. The "reset" was immediately undone by the trailing done chunk, so the next turn resumed the same dead session. Loop.
+
+**Fix (defense in depth, three layers):**
+
+- **Prevention** (root cause): `handlers/message.ts`, `handlers/platform-message.ts`, and `handlers/commands.ts` (`/dir`) now detect `session.workingDir !== workspace.cwd` (resp. new dir) BEFORE the query and clear `session.sessionId = null` + `session.lastSdkHistoryIndex = -1`. The next SDK turn starts fresh in the new project folder. `markSessionDirty()` is called so the clear persists across restarts.
+- **Recovery**: both handlers now track a local `sessionResetInStream` flag. When the provider signals `sessionResetRequested` on a text chunk, the flag is set, and the subsequent `done` chunk's sessionId is ignored (the original resume token or the CLI's fresh-but-wrong-project fallback — neither is safe).
+- **Hygiene**: `markSessionDirty()` is also called from the empty-stream reset path so the cleared sessionId is persisted immediately rather than waiting for the next trackProviderUsage debounce.
+
+**Net effect:** `/workspace <name>` → message → works. `/workspace default` → message → works. `/dir ~/Projects/foo` → message → works. No manual `/new` needed, no credit burn, no recovery retry.
+
+**Files:**
+- `src/handlers/message.ts` — cwd-change detection, sessionResetInStream flag, done-chunk guard, markSessionDirty import
+- `src/handlers/platform-message.ts` — same set of changes for non-Telegram platforms (Slack, Discord, WhatsApp)
+- `src/handlers/commands.ts` — `/dir` now invalidates SDK resume anchor on cwd change
+
 ## [4.19.0] — 2026-04-24
 
 ### 🧭 Feature: per-workspace runtime overrides (effort · provider · voice · temperature · toolset)

@@ -8,7 +8,7 @@
  */
 
 import fs from "fs";
-import { getSession, addToHistory, trackProviderUsage, buildSessionKey } from "../services/session.js";
+import { getSession, addToHistory, trackProviderUsage, buildSessionKey, markSessionDirty } from "../services/session.js";
 import { resolveWorkspaceOrDefault } from "../services/workspaces.js";
 import { getRegistry } from "../engine.js";
 import { buildSystemPrompt, buildSmartSystemPrompt } from "../services/personality.js";
@@ -129,11 +129,25 @@ export async function handlePlatformMessage(
     }
   }
   const workspace = resolveWorkspaceOrDefault(msg.platform, msg.chatId, channelName);
-  // If the workspace changed since last turn, update the session's cwd +
-  // workspaceName. This is debounced via session-persistence (v4.11.0).
+  // v4.19.1 — Workspace switch detection. If cwd changes as part of the
+  // switch, null out session.sessionId so the next SDK turn does not
+  // resume a session file that lives in the previous project folder
+  // (Claude Agent SDK stores sessions under ~/.claude/projects/<cwd-hash>/).
+  // Guard with workspaceName so /dir-initiated custom cwds survive turns
+  // where no workspace actually switched.
   if (session.workspaceName !== workspace.name) {
+    const cwdChanged = session.workingDir !== workspace.cwd;
     session.workspaceName = workspace.name;
     session.workingDir = workspace.cwd;
+    if (cwdChanged) {
+      console.log(
+        `[session] workspace switch changed cwd (→ ${workspace.cwd}) — ` +
+        `invalidating SDK resume anchor to prevent empty-stream loop`,
+      );
+      session.sessionId = null;
+      session.lastSdkHistoryIndex = -1;
+      markSessionDirty(sessionKey);
+    }
   }
 
   // Skip if already processing (queue up to 3)
@@ -232,6 +246,11 @@ export async function handlePlatformMessage(
       addToHistory(sessionKey, { role: "user", content: fullText });
     }
 
+    // v4.19.1 — Track whether the provider requested a session reset during
+    // this stream. If it did, the trailing `done` chunk's sessionId MUST be
+    // ignored — otherwise it restores the exact sessionId we just cleared
+    // and the next turn loops again. Mirror of message.ts.
+    let sessionResetInStream = false;
     for await (const chunk of registry.queryWithFallback(queryOpts, workspace.provider)) {
       switch (chunk.type) {
         case "text":
@@ -242,10 +261,15 @@ export async function handlePlatformMessage(
             console.warn(`[session] provider requested reset for ${sessionKey} — clearing sessionId + SDK anchor`);
             session.sessionId = null;
             session.lastSdkHistoryIndex = -1;
+            sessionResetInStream = true;
+            markSessionDirty(sessionKey);
           }
           break;
         case "done":
-          if (chunk.sessionId) session.sessionId = chunk.sessionId;
+          // v4.19.1 — Respect in-stream reset: don't let done.sessionId undo
+          // the clear from the empty-stream text chunk. See message.ts for
+          // full rationale.
+          if (chunk.sessionId && !sessionResetInStream) session.sessionId = chunk.sessionId;
           if (chunk.costUsd) session.totalCost += chunk.costUsd;
           trackProviderUsage(sessionKey, registry.getActiveKey(), chunk.costUsd || 0, chunk.inputTokens, chunk.outputTokens);
           session.lastActivity = Date.now();

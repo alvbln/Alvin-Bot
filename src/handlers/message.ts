@@ -1,7 +1,7 @@
 import type { Context } from "grammy";
 import { InputFile } from "grammy";
 import fs from "fs";
-import { getSession, addToHistory, trackProviderUsage, buildSessionKey, getTelegramWorkspace } from "../services/session.js";
+import { getSession, addToHistory, trackProviderUsage, buildSessionKey, getTelegramWorkspace, markSessionDirty } from "../services/session.js";
 import { resolveWorkspaceOrDefault, getWorkspace } from "../services/workspaces.js";
 import { TelegramStreamer } from "../services/telegram.js";
 import { getRegistry } from "../engine.js";
@@ -354,9 +354,27 @@ export async function handleMessage(ctx: Context): Promise<void> {
     const workspace = activeWsName
       ? (getWorkspace(activeWsName) ?? resolveWorkspaceOrDefault("telegram", String(userId), undefined))
       : resolveWorkspaceOrDefault("telegram", String(userId), undefined);
+    // v4.19.1 — Workspace switch detection. Claude Agent SDK's `resume` is
+    // bound to the cwd (session files live under
+    // ~/.claude/projects/<cwd-hash>/<session-id>.jsonl). If cwd changes as
+    // part of this switch, the stored sessionId points at a file the CLI
+    // cannot find in the new project folder → silent empty stream. Guard
+    // with a workspaceName change (not cwd comparison) so /dir-initiated
+    // custom cwds are preserved across turns where no workspace actually
+    // switched.
     if (session.workspaceName !== workspace.name) {
+      const cwdChanged = session.workingDir !== workspace.cwd;
       session.workspaceName = workspace.name;
       session.workingDir = workspace.cwd;
+      if (cwdChanged) {
+        console.log(
+          `[session] workspace switch changed cwd (→ ${workspace.cwd}) — ` +
+          `invalidating SDK resume anchor to prevent empty-stream loop`,
+        );
+        session.sessionId = null;
+        session.lastSdkHistoryIndex = -1;
+        markSessionDirty(userId);
+      }
     }
 
     const chatIdStr = String(ctx.chat!.id);
@@ -491,6 +509,12 @@ export async function handleMessage(ctx: Context): Promise<void> {
     // readable description (which only appears in the tool_use input,
     // not in the tool_result text). See Fix #17 Stage 2.
     let lastAgentToolUseInput: ToolUseInput | undefined;
+    // v4.19.1 — Track whether the provider requested a session reset during
+    // this stream. If it did, the trailing `done` chunk's sessionId MUST be
+    // ignored — otherwise it restores the exact sessionId we just cleared
+    // (the empty-stream capturedSessionId) and the next turn loops again.
+    // This is the second half of the empty-stream-loop fix.
+    let sessionResetInStream = false;
     for await (const chunk of registry.queryWithFallback(queryOpts, workspace.provider)) {
       // v4.12.1 — Update pending-sync-task state FIRST so the timer's
       // next reset picks up the new state. This ordering is load-bearing:
@@ -528,6 +552,8 @@ export async function handleMessage(ctx: Context): Promise<void> {
             console.warn(`[session] provider requested reset for ${sessionKey} — clearing sessionId + SDK anchor`);
             session.sessionId = null;
             session.lastSdkHistoryIndex = -1;
+            sessionResetInStream = true;
+            markSessionDirty(userId);
           }
           // Emit the new delta for observers — accumulated text minus what
           // we already broadcast.
@@ -613,7 +639,16 @@ export async function handleMessage(ctx: Context): Promise<void> {
           break;
 
         case "done":
-          if (chunk.sessionId) session.sessionId = chunk.sessionId;
+          // v4.19.1 — Respect the in-stream session reset. If the provider
+          // already signalled `sessionResetRequested` on the preceding text
+          // chunk (empty-stream detection), do NOT let the trailing done
+          // chunk restore the sessionId we just nulled — that was the
+          // silent bug behind the empty-stream loop across workspace
+          // switches. The `done` chunk's sessionId on an empty stream is
+          // either the stale resume token we tried to use or a brand-new
+          // session file the CLI created in the wrong project folder;
+          // neither is safe to resume from.
+          if (chunk.sessionId && !sessionResetInStream) session.sessionId = chunk.sessionId;
           if (chunk.costUsd) session.totalCost += chunk.costUsd;
           // Track the input tokens this turn used — this approximates the
           // current context window usage since the model receives the full

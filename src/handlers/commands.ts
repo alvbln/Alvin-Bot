@@ -255,7 +255,18 @@ export function registerCommands(bot: Bot): void {
       : path.resolve(newDir);
 
     if (fs.existsSync(resolved) && fs.statSync(resolved).isDirectory()) {
+      // v4.19.1 — Claude Agent SDK's `resume` is bound to the cwd. Changing
+      // the working dir without clearing the resume anchor would make the
+      // next SDK turn look up the session file in the wrong project folder
+      // → silent empty stream. Null out sessionId + history-anchor so the
+      // next turn starts a fresh SDK session in the new cwd.
+      const cwdChanged = session.workingDir !== resolved;
       session.workingDir = resolved;
+      if (cwdChanged) {
+        session.sessionId = null;
+        session.lastSdkHistoryIndex = -1;
+      }
+      markSessionDirty(userId);
       await ctx.reply(`Working directory: ${session.workingDir}`);
     } else {
       await ctx.reply(`Directory not found: ${resolved}`);
