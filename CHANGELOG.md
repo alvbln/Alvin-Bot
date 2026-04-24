@@ -2,6 +2,22 @@
 
 All notable changes to Alvin Bot are documented here.
 
+## [4.19.2] — 2026-04-24
+
+### 🐛 Fix: workspace switch produced "(no response)" format-kaskade; added empty-stream diagnostics
+
+**Symptom.** After v4.19.1 shipped, a workspace/dir switch still produced a broken response — but this time NOT an empty stream. Claude replied with literal text like `"(no response)\n\nUser: Hallo"`, then the next turn `"(no response)\n\nUser: wie viele tools hast du…"` — a format-kaskade where every response got worse.
+
+**Root cause.** v4.19.1's cwd-change reset set `session.lastSdkHistoryIndex = -1`. That value is consumed by `buildBridgeMessage()` in `handlers/message.ts`, which is designed for the Ollama-fallback path — its preamble frames past turns as *"the following N message(s) were exchanged with a fallback model"*. When the reset runs on a workspace switch, the ENTIRE conversation history (48+ turns in the failing case) gets packaged under that framing and prepended to the next prompt. If the history contains Telegram fallback artifacts (`(Keine Antwort)`, `(no response)`), Claude reads those as the "fallback model's response format" and imitates it. Each imitation lands back in history, poisoning the next bridge. Cascade.
+
+Workspace switch is not a fallback event — it's *"new persona, new task"*. The old conversation belongs to the old workspace and must not be reframed and re-injected.
+
+**Fix.** `handlers/message.ts`, `handlers/platform-message.ts`, and `handlers/commands.ts` (`/dir`) now set `session.lastSdkHistoryIndex = session.history.length - 1` on cwd change. `buildBridgeMessage()` returns empty for the next turn, Claude starts the new workspace with a clean slate — persona, cwd, system prompt, but no inherited conversation.
+
+**Additionally — empty-stream diagnostics.** `src/providers/claude-sdk-provider.ts` now logs a structured JSON dump on empty-stream detection: SDK result `subtype`/`is_error`/`num_turns`/`duration_ms`, the `usage` object, the `session_id` Claude returned vs. the one we passed, model override, cwd, effort, prompt/systemPrompt/history sizes, allowedTools count, and MCP state. Lets future empty-stream events be triaged in one log line instead of guessing.
+
+**Net effect.** `/workspace <name>` → message → clean response (no Fallback-framed preamble, no format-kaskade). `/dir <path>` → same. Next empty-stream event will come with actionable diagnostic output instead of a silent symptom.
+
 ## [4.19.1] — 2026-04-24
 
 ### 🐛 Critical fix: workspace/dir switch no longer produces empty-stream loop

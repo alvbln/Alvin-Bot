@@ -421,6 +421,41 @@ export class ClaudeSDKProvider implements Provider {
           //      and knows to resend — without tripping the failover.
           if (accumulatedText === "" && outputTok === 0) {
             this.invalidateAvailabilityCache();
+            // v4.19.2 — Diagnostic logging: when the Agent SDK returns an
+            // empty stream, we need enough detail to tell apart the possible
+            // causes (auth, quota, context overflow, model rejection, MCP
+            // init failure). The message handler-level reset was fine for
+            // stale-session recovery but gave us no signal on WHY it went
+            // empty in the first place.
+            try {
+              const diag = {
+                subtype: (resultMsg as { subtype?: string }).subtype,
+                is_error: (resultMsg as { is_error?: boolean }).is_error,
+                num_turns: (resultMsg as { num_turns?: number }).num_turns,
+                duration_ms: (resultMsg as { duration_ms?: number }).duration_ms,
+                duration_api_ms: (resultMsg as { duration_api_ms?: number }).duration_api_ms,
+                total_cost_usd: (resultMsg as { total_cost_usd?: number }).total_cost_usd,
+                session_id: resultMsg.session_id,
+                passed_session_id: options.sessionId ?? null,
+                usage,
+                modelOverride,
+                cwd: options.workingDir,
+                effort: options.effort,
+                systemPromptLen: systemPrompt.length,
+                promptLen: prompt.length,
+                historyLen: options.history?.length ?? 0,
+                allowedToolsCount: (options.allowedTools ?? defaultAllowed).length,
+                hasMcp: Object.keys(mcpServers).length > 0,
+              };
+              console.warn(
+                `[empty-stream] SDK returned 0 output tokens — diagnostic dump:`,
+                JSON.stringify(diag),
+              );
+            } catch (diagErr) {
+              console.warn(
+                `[empty-stream] SDK returned 0 output tokens (diagnostic serialisation failed: ${diagErr})`,
+              );
+            }
             const hint =
               "⚠️ Claude antwortete mit leerem Stream. " +
               "Meist Folge einer stale SDK-Session nach /extra-usage, /login oder Token-Refresh. " +

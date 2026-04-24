@@ -142,10 +142,12 @@ export async function handlePlatformMessage(
     if (cwdChanged) {
       console.log(
         `[session] workspace switch changed cwd (→ ${workspace.cwd}) — ` +
-        `invalidating SDK resume anchor to prevent empty-stream loop`,
+        `invalidating SDK resume anchor and skipping bridge`,
       );
       session.sessionId = null;
-      session.lastSdkHistoryIndex = -1;
+      // v4.19.2 — Anchor at current last turn so no catch-up bridge is
+      // generated for the next turn (see message.ts for full rationale).
+      session.lastSdkHistoryIndex = session.history.length - 1;
       markSessionDirty(sessionKey);
     }
   }

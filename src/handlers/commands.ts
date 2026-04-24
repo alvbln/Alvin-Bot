@@ -264,7 +264,11 @@ export function registerCommands(bot: Bot): void {
       session.workingDir = resolved;
       if (cwdChanged) {
         session.sessionId = null;
-        session.lastSdkHistoryIndex = -1;
+        // v4.19.2 — Anchor at current last turn so no catch-up bridge is
+        // generated for the next turn. /dir semantically means "switch
+        // project context" just like /workspace — starting fresh is the
+        // sane default.
+        session.lastSdkHistoryIndex = session.history.length - 1;
       }
       markSessionDirty(userId);
       await ctx.reply(`Working directory: ${session.workingDir}`);

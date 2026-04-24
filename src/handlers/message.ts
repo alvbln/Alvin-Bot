@@ -369,10 +369,17 @@ export async function handleMessage(ctx: Context): Promise<void> {
       if (cwdChanged) {
         console.log(
           `[session] workspace switch changed cwd (→ ${workspace.cwd}) — ` +
-          `invalidating SDK resume anchor to prevent empty-stream loop`,
+          `invalidating SDK resume anchor and skipping bridge`,
         );
         session.sessionId = null;
-        session.lastSdkHistoryIndex = -1;
+        // v4.19.2 — Anchor at the last turn BEFORE the new user message so
+        // buildBridgeMessage() produces no catch-up preamble. A workspace
+        // switch means "new persona, new task" — the previous conversation
+        // (often from a different workspace) should NOT be reframed as
+        // "Fallback model turns" and fed back into Claude. That framing
+        // was producing format-kaskaden where Claude imitated Telegram
+        // "(Keine Antwort)" fallback artifacts from history.
+        session.lastSdkHistoryIndex = session.history.length - 1;
         markSessionDirty(userId);
       }
     }
