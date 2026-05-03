@@ -77,8 +77,12 @@ export const PROJECTS_MEMORY_DIR = resolve(DATA_DIR, "memory", "projects");
  *  See src/services/workspaces.ts for the loader and matcher. */
 export const WORKSPACES_DIR = resolve(DATA_DIR, "workspaces");
 
-/** memory/.embeddings.json — Vector index */
+/** memory/.embeddings.json — Legacy JSON vector index. Read on first SQLite migration only;
+ *  active code path is EMBEDDINGS_DB. */
 export const EMBEDDINGS_IDX = resolve(DATA_DIR, "memory", ".embeddings.json");
+
+/** memory/.embeddings.db — SQLite vector store (replaces .embeddings.json since v4.20). */
+export const EMBEDDINGS_DB = resolve(DATA_DIR, "memory", ".embeddings.db");
 
 /** users/ — User profiles and per-user memory */
 export const USERS_DIR = resolve(DATA_DIR, "users");

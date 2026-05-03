@@ -1,52 +1,34 @@
 /**
  * Embeddings Service — Vector-based semantic memory search.
  *
- * Uses Google's text-embedding-004 model for generating embeddings.
- * Stores embeddings in a local JSON index file for fast cosine similarity search.
+ * Uses Google's gemini-embedding-001 model for generating embeddings.
+ * Stores embeddings in a SQLite database (.embeddings.db) — replaces the
+ * older .embeddings.json index since v4.20. The migration runs once
+ * automatically on startup (see src/migrate.ts).
  *
  * Architecture:
- * - Each memory entry (paragraph/section) gets an embedding vector
- * - Vectors are stored in docs/memory/.embeddings.json
- * - On query, the search text is embedded and compared via cosine similarity
- * - Top-K results returned with similarity scores
+ * - Each memory entry (paragraph/section) gets a 3072-dim Float32 vector.
+ * - Vectors are stored as raw BLOB (4 bytes × 3072 = 12 KB each) instead of
+ *   JSON-encoded Float64 arrays (~24 KB each) — halves disk footprint.
+ * - Cosine similarity runs in-memory: SQLite has no native vector ops, but
+ *   reading the BLOBs is mmap-cheap and JS does the dot product fast enough
+ *   for the current corpus (a few thousand entries).
+ * - Reindexing is per-chunk INSERT/UPDATE — no full-file rewrite.
  */
 
 import fs from "fs";
 import path from "path";
 import { resolve } from "path";
-import { config } from "../config.js";
 import os from "os";
-import { MEMORY_DIR, MEMORY_FILE, EMBEDDINGS_IDX as INDEX_FILE } from "../paths.js";
+import Database, { type Database as Db } from "better-sqlite3";
+import { config } from "../config.js";
+import { MEMORY_DIR, MEMORY_FILE, EMBEDDINGS_DB } from "../paths.js";
 import { ASSETS_DIR, ASSETS_INDEX_MD } from "../paths.js";
 
 // Hub memory directory (Claude Hub — read-only, additional context)
 const HUB_MEMORY_DIR = resolve(os.homedir(), ".claude", "hub", "MEMORY");
 
 // ── Types ───────────────────────────────────────────────
-
-interface EmbeddingEntry {
-  /** Unique ID (file:lineStart) */
-  id: string;
-  /** Source file (relative to docs/) */
-  source: string;
-  /** The text content */
-  text: string;
-  /** Embedding vector */
-  vector: number[];
-  /** Timestamp when indexed */
-  indexedAt: number;
-}
-
-interface EmbeddingIndex {
-  /** Model used for embeddings */
-  model: string;
-  /** Last full reindex timestamp */
-  lastReindex: number;
-  /** File modification times (to detect changes) */
-  fileMtimes: Record<string, number>;
-  /** All embedding entries */
-  entries: EmbeddingEntry[];
-}
 
 export interface SearchResult {
   /** The matched text */
@@ -57,15 +39,128 @@ export interface SearchResult {
   score: number;
 }
 
-// ── Google Embeddings API ───────────────────────────────
+interface ChunkRow {
+  id: string;
+  source: string;
+  text: string;
+  vector: Buffer;
+}
+
+// ── Constants ───────────────────────────────────────────
 
 const EMBEDDING_MODEL = "gemini-embedding-001";
 const EMBEDDING_DIMENSION = 3072;
+const SCHEMA_VERSION = "1";
 
-/**
- * Get embeddings for one or more texts via Google's API.
- * Batches up to 100 texts per request.
- */
+// ── Vector encoding (Float32Array ↔ Buffer) ─────────────
+
+function vectorToBlob(v: number[]): Buffer {
+  const f32 = new Float32Array(v);
+  // Buffer.from(arrayBuffer, byteOffset, length) preserves the underlying memory.
+  return Buffer.from(f32.buffer, f32.byteOffset, f32.byteLength);
+}
+
+function blobToVector(b: Buffer): Float32Array {
+  // Buffers from better-sqlite3 own their memory and may not be aligned to 4 bytes.
+  // Copying into a fresh Float32Array guarantees alignment.
+  const f32 = new Float32Array(b.byteLength / 4);
+  const dv = new DataView(b.buffer, b.byteOffset, b.byteLength);
+  for (let i = 0; i < f32.length; i++) {
+    f32[i] = dv.getFloat32(i * 4, true /* little-endian */);
+  }
+  return f32;
+}
+
+// ── DB lifecycle ────────────────────────────────────────
+
+let dbInstance: Db | null = null;
+
+function db(): Db {
+  if (dbInstance) return dbInstance;
+
+  // Ensure directory exists (handles fresh installs).
+  fs.mkdirSync(path.dirname(EMBEDDINGS_DB), { recursive: true });
+
+  dbInstance = new Database(EMBEDDINGS_DB);
+  dbInstance.pragma("journal_mode = WAL");
+  dbInstance.pragma("synchronous = NORMAL");
+  dbInstance.pragma("temp_store = MEMORY");
+  dbInstance.pragma("mmap_size = 268435456"); // 256 MB
+
+  dbInstance.exec(`
+    CREATE TABLE IF NOT EXISTS meta (
+      key   TEXT PRIMARY KEY,
+      value TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS file_mtimes (
+      source   TEXT PRIMARY KEY,
+      mtime_ms REAL NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS entries (
+      id         TEXT PRIMARY KEY,
+      source     TEXT NOT NULL,
+      text       TEXT NOT NULL,
+      vector     BLOB NOT NULL,
+      indexed_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_entries_source ON entries(source);
+  `);
+
+  // Initialise meta if absent.
+  const set = dbInstance.prepare(
+    "INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO NOTHING"
+  );
+  set.run("model", EMBEDDING_MODEL);
+  set.run("schemaVersion", SCHEMA_VERSION);
+
+  return dbInstance;
+}
+
+/** Close handle (used by tests / shutdown). */
+export function closeEmbeddingsDb(): void {
+  if (dbInstance) {
+    dbInstance.close();
+    dbInstance = null;
+  }
+}
+
+// ── Meta helpers ────────────────────────────────────────
+
+function getMeta(key: string): string | null {
+  const row = db().prepare("SELECT value FROM meta WHERE key = ?").get(key) as
+    | { value: string }
+    | undefined;
+  return row?.value ?? null;
+}
+
+function setMeta(key: string, value: string): void {
+  db()
+    .prepare(
+      "INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value"
+    )
+    .run(key, value);
+}
+
+function getFileMtimes(): Record<string, number> {
+  const rows = db().prepare("SELECT source, mtime_ms FROM file_mtimes").all() as Array<{
+    source: string;
+    mtime_ms: number;
+  }>;
+  const out: Record<string, number> = {};
+  for (const r of rows) out[r.source] = r.mtime_ms;
+  return out;
+}
+
+function setFileMtime(source: string, mtimeMs: number): void {
+  db()
+    .prepare(
+      "INSERT INTO file_mtimes (source, mtime_ms) VALUES (?, ?) ON CONFLICT(source) DO UPDATE SET mtime_ms = excluded.mtime_ms"
+    )
+    .run(source, mtimeMs);
+}
+
+// ── Google Embeddings API ───────────────────────────────
+
 async function getEmbeddings(texts: string[]): Promise<number[][]> {
   const apiKey = config.apiKeys.google;
   if (!apiKey) {
@@ -98,7 +193,7 @@ async function getEmbeddings(texts: string[]): Promise<number[][]> {
       throw new Error(`Embedding API error: ${response.status} — ${err}`);
     }
 
-    const data = await response.json() as { embeddings: Array<{ values: number[] }> };
+    const data = (await response.json()) as { embeddings: Array<{ values: number[] }> };
     for (const emb of data.embeddings) {
       results.push(emb.values);
     }
@@ -107,9 +202,6 @@ async function getEmbeddings(texts: string[]): Promise<number[][]> {
   return results;
 }
 
-/**
- * Get embedding for a single query text.
- */
 async function getQueryEmbedding(text: string): Promise<number[]> {
   const apiKey = config.apiKeys.google;
   if (!apiKey) {
@@ -134,13 +226,13 @@ async function getQueryEmbedding(text: string): Promise<number[]> {
     throw new Error(`Embedding API error: ${response.status} — ${err}`);
   }
 
-  const data = await response.json() as { embedding: { values: number[] } };
+  const data = (await response.json()) as { embedding: { values: number[] } };
   return data.embedding.values;
 }
 
 // ── Vector Math ─────────────────────────────────────────
 
-function cosineSimilarity(a: number[], b: number[]): number {
+function cosineSimilarityF32(a: Float32Array, b: Float32Array): number {
   if (a.length !== b.length) return 0;
   let dotProduct = 0;
   let normA = 0;
@@ -156,22 +248,14 @@ function cosineSimilarity(a: number[], b: number[]): number {
 
 // ── Text Chunking ───────────────────────────────────────
 
-/**
- * Split a markdown file into meaningful chunks.
- * Splits on ## headers, keeping each section as a chunk.
- * Falls back to paragraph splitting for files without headers.
- */
 function chunkMarkdown(content: string, source: string): Array<{ id: string; text: string }> {
   const chunks: Array<{ id: string; text: string }> = [];
-
-  // Split on ## headers
   const sections = content.split(/^(?=## )/gm);
 
   for (let i = 0; i < sections.length; i++) {
     const section = sections[i].trim();
-    if (!section || section.length < 20) continue; // Skip tiny sections
+    if (!section || section.length < 20) continue;
 
-    // If section is too long (>1000 chars), split into paragraphs
     if (section.length > 1000) {
       const paragraphs = section.split(/\n\n+/);
       let currentChunk = "";
@@ -205,53 +289,8 @@ function chunkMarkdown(content: string, source: string): Array<{ id: string; tex
   return chunks;
 }
 
-// ── Index Management ────────────────────────────────────
+// ── Indexable file discovery ────────────────────────────
 
-// In-memory cache for the embedding index. Without this, every query would
-// re-read and re-parse the on-disk index (can be 100+ MB, making searchMemory
-// the slowest step in a message turn). We keep the parsed object and invalidate
-// via mtime check — so external reindexers are still picked up.
-let indexCache: EmbeddingIndex | null = null;
-let indexCacheMtime = 0;
-
-function loadIndex(): EmbeddingIndex {
-  try {
-    const st = fs.statSync(INDEX_FILE);
-    if (indexCache && st.mtimeMs === indexCacheMtime) {
-      return indexCache;
-    }
-    const raw = fs.readFileSync(INDEX_FILE, "utf-8");
-    indexCache = JSON.parse(raw);
-    indexCacheMtime = st.mtimeMs;
-    return indexCache!;
-  } catch {
-    // File missing or unparseable — return an empty index and don't cache it
-    // (next call will retry, so a freshly-written index gets picked up).
-    return {
-      model: EMBEDDING_MODEL,
-      lastReindex: 0,
-      fileMtimes: {},
-      entries: [],
-    };
-  }
-}
-
-function saveIndex(index: EmbeddingIndex): void {
-  fs.writeFileSync(INDEX_FILE, JSON.stringify(index));
-  // Refresh cache immediately so the next loadIndex() sees the new state
-  // without a disk round-trip.
-  indexCache = index;
-  try {
-    indexCacheMtime = fs.statSync(INDEX_FILE).mtimeMs;
-  } catch {
-    indexCacheMtime = Date.now();
-  }
-}
-
-/**
- * Recursively walk a directory, returning file paths.
- * Skips INDEX.json and INDEX.md at the directory root.
- */
 function walkAssetDir(dir: string): Array<{ name: string; path: string }> {
   const results: Array<{ name: string; path: string }> = [];
 
@@ -279,20 +318,13 @@ function walkAssetDir(dir: string): Array<{ name: string; path: string }> {
 
 const TEXT_EXTENSIONS = new Set([".md", ".html", ".txt", ".css", ".ts"]);
 
-/**
- * Get all files that should be indexed — memories + text-based assets.
- */
 function getIndexableFiles(): Array<{ path: string; relativePath: string }> {
   const files: Array<{ path: string; relativePath: string }> = [];
 
-  // ── Memories (existing) ───────────────────────────────
-
-  // Alvin-Bot MEMORY.md
   if (fs.existsSync(MEMORY_FILE)) {
     files.push({ path: MEMORY_FILE, relativePath: "MEMORY.md" });
   }
 
-  // Alvin-Bot daily logs
   if (fs.existsSync(MEMORY_DIR)) {
     const entries = fs.readdirSync(MEMORY_DIR);
     for (const entry of entries) {
@@ -305,7 +337,6 @@ function getIndexableFiles(): Array<{ path: string; relativePath: string }> {
     }
   }
 
-  // Hub memories (~/.claude/hub/MEMORY/) — Claude Hub knowledge base
   if (fs.existsSync(HUB_MEMORY_DIR)) {
     try {
       const entries = fs.readdirSync(HUB_MEMORY_DIR);
@@ -317,17 +348,15 @@ function getIndexableFiles(): Array<{ path: string; relativePath: string }> {
           });
         }
       }
-    } catch { /* Hub not available — skip */ }
+    } catch {
+      /* Hub not available — skip */
+    }
   }
 
-  // ── Assets (new) ──────────────────────────────────────
-
-  // Asset INDEX.md — compact summary of all assets
   if (fs.existsSync(ASSETS_INDEX_MD)) {
     files.push({ path: ASSETS_INDEX_MD, relativePath: "assets/INDEX.md" });
   }
 
-  // Text-based asset files (HTML, MD, TXT, CSS, TS)
   if (fs.existsSync(ASSETS_DIR)) {
     for (const entry of walkAssetDir(ASSETS_DIR)) {
       if (TEXT_EXTENSIONS.has(path.extname(entry.name))) {
@@ -342,156 +371,175 @@ function getIndexableFiles(): Array<{ path: string; relativePath: string }> {
   return files;
 }
 
-/**
- * Check which files need reindexing (new or modified).
- */
-function getStaleFiles(index: EmbeddingIndex): Array<{ path: string; relativePath: string }> {
+function getStaleFiles(): Array<{ path: string; relativePath: string }> {
   const allFiles = getIndexableFiles();
+  const known = getFileMtimes();
   const stale: typeof allFiles = [];
 
   for (const file of allFiles) {
     try {
-      const stat = fs.statSync(file.path);
-      const mtime = stat.mtimeMs;
-      if (!index.fileMtimes[file.relativePath] || index.fileMtimes[file.relativePath] < mtime) {
+      const mtime = fs.statSync(file.path).mtimeMs;
+      if (!known[file.relativePath] || known[file.relativePath] < mtime) {
         stale.push(file);
       }
     } catch {
-      // File disappeared — skip
+      /* file disappeared */
     }
   }
-
   return stale;
 }
 
 // ── Public API ──────────────────────────────────────────
 
-/**
- * Reindex all memory files (or just stale ones).
- * Returns number of chunks indexed.
- */
 export async function reindexMemory(force = false): Promise<{ indexed: number; total: number }> {
-  const index = loadIndex();
-  const filesToIndex = force ? getIndexableFiles() : getStaleFiles(index);
+  const filesToIndex = force ? getIndexableFiles() : getStaleFiles();
 
   if (filesToIndex.length === 0) {
-    return { indexed: 0, total: index.entries.length };
+    const total = (db().prepare("SELECT COUNT(*) AS c FROM entries").get() as { c: number }).c;
+    return { indexed: 0, total };
   }
 
-  // Remove old entries for files being reindexed
-  const reindexSources = new Set(filesToIndex.map(f => f.relativePath));
-  index.entries = index.entries.filter(e => !reindexSources.has(e.source));
+  // Drop existing entries for files being reindexed (per-source DELETE is O(log n) thanks to idx).
+  const delStmt = db().prepare("DELETE FROM entries WHERE source = ?");
+  const dropOld = db().transaction((sources: string[]) => {
+    for (const s of sources) delStmt.run(s);
+  });
+  dropOld(filesToIndex.map(f => f.relativePath));
 
-  // Chunk all files
-  const allChunks: Array<{ id: string; text: string; source: string }> = [];
+  // Chunk all files.
+  const allChunks: Array<{ id: string; text: string; source: string; mtime: number }> = [];
   for (const file of filesToIndex) {
     try {
       const content = fs.readFileSync(file.path, "utf-8");
       const chunks = chunkMarkdown(content, file.relativePath);
+      const mtime = fs.statSync(file.path).mtimeMs;
       for (const chunk of chunks) {
-        allChunks.push({ ...chunk, source: file.relativePath });
+        allChunks.push({ ...chunk, source: file.relativePath, mtime });
       }
-      // Update mtime
-      const stat = fs.statSync(file.path);
-      index.fileMtimes[file.relativePath] = stat.mtimeMs;
     } catch (err) {
       console.error(`Failed to chunk ${file.relativePath}:`, err);
     }
   }
 
   if (allChunks.length === 0) {
-    saveIndex(index);
-    return { indexed: 0, total: index.entries.length };
+    // Even with zero chunks, keep mtimes in sync so we don't re-walk on next run.
+    const updMtime = db().transaction((files: Array<{ relativePath: string; path: string }>) => {
+      for (const f of files) {
+        try {
+          setFileMtime(f.relativePath, fs.statSync(f.path).mtimeMs);
+        } catch {
+          /* file disappeared */
+        }
+      }
+    });
+    updMtime(filesToIndex);
+    const total = (db().prepare("SELECT COUNT(*) AS c FROM entries").get() as { c: number }).c;
+    return { indexed: 0, total };
   }
 
-  // Get embeddings for all chunks
+  // Get embeddings for all chunks (network).
   const texts = allChunks.map(c => c.text);
   const vectors = await getEmbeddings(texts);
 
-  // Add to index
-  for (let i = 0; i < allChunks.length; i++) {
-    index.entries.push({
-      id: allChunks[i].id,
-      source: allChunks[i].source,
-      text: allChunks[i].text,
-      vector: vectors[i],
-      indexedAt: Date.now(),
-    });
-  }
+  // Single transaction for all writes.
+  const insertStmt = db().prepare(
+    "INSERT INTO entries (id, source, text, vector, indexed_at) VALUES (?, ?, ?, ?, ?) " +
+      "ON CONFLICT(id) DO UPDATE SET source=excluded.source, text=excluded.text, vector=excluded.vector, indexed_at=excluded.indexed_at"
+  );
+  const writeAll = db().transaction((rows: Array<{ id: string; source: string; text: string; vector: Buffer; indexedAt: number }>) => {
+    for (const r of rows) {
+      insertStmt.run(r.id, r.source, r.text, r.vector, r.indexedAt);
+    }
+  });
+  const now = Date.now();
+  writeAll(
+    allChunks.map((c, i) => ({
+      id: c.id,
+      source: c.source,
+      text: c.text,
+      vector: vectorToBlob(vectors[i]),
+      indexedAt: now,
+    }))
+  );
 
-  index.lastReindex = Date.now();
-  saveIndex(index);
+  // Update mtimes for the files we just (re-)indexed.
+  const updMtime = db().transaction((files: typeof filesToIndex) => {
+    for (const f of files) {
+      try {
+        setFileMtime(f.relativePath, fs.statSync(f.path).mtimeMs);
+      } catch {
+        /* file disappeared */
+      }
+    }
+  });
+  updMtime(filesToIndex);
 
-  return { indexed: allChunks.length, total: index.entries.length };
+  setMeta("lastReindex", String(now));
+
+  const total = (db().prepare("SELECT COUNT(*) AS c FROM entries").get() as { c: number }).c;
+  return { indexed: allChunks.length, total };
 }
 
-/**
- * Semantic search across all indexed memory.
- * Returns top-K results sorted by similarity.
- */
 export async function searchMemory(query: string, topK = 5, minScore = 0.3): Promise<SearchResult[]> {
-  const index = loadIndex();
-
-  if (index.entries.length === 0) {
-    // Auto-index if empty
+  // Auto-index if empty.
+  const total = (db().prepare("SELECT COUNT(*) AS c FROM entries").get() as { c: number }).c;
+  if (total === 0) {
     await reindexMemory();
-    // Reload
-    const reloaded = loadIndex();
-    if (reloaded.entries.length === 0) return [];
+    const after = (db().prepare("SELECT COUNT(*) AS c FROM entries").get() as { c: number }).c;
+    if (after === 0) return [];
   }
 
-  // Get query embedding
-  const queryVector = await getQueryEmbedding(query);
+  const queryVector = Float32Array.from(await getQueryEmbedding(query));
 
-  // Calculate similarities
-  const scored = index.entries.map(entry => ({
-    text: entry.text,
-    source: entry.source,
-    score: cosineSimilarity(queryVector, entry.vector),
-  }));
+  const rows = db().prepare("SELECT id, source, text, vector FROM entries").all() as ChunkRow[];
 
-  // Sort by score descending, filter by minScore, take topK
-  return scored
-    .filter(r => r.score >= minScore)
-    .sort((a, b) => b.score - a.score)
-    .slice(0, topK);
+  const scored: SearchResult[] = [];
+  for (const row of rows) {
+    const v = blobToVector(row.vector);
+    const score = cosineSimilarityF32(queryVector, v);
+    if (score >= minScore) {
+      scored.push({ text: row.text, source: row.source, score });
+    }
+  }
+
+  scored.sort((a, b) => b.score - a.score);
+  return scored.slice(0, topK);
 }
 
-/**
- * Get index stats for /status.
- */
-/**
- * Auto-reindex on startup. Indexes only stale/new files (incremental).
- * Runs in background — does not block bot startup.
- */
 export async function initEmbeddings(): Promise<void> {
   try {
-    const stale = getStaleFiles(loadIndex());
+    db(); // Open & migrate schema.
+    const stale = getStaleFiles();
     if (stale.length === 0) {
-      const idx = loadIndex();
-      if (idx.entries.length > 0) return; // Already indexed, nothing stale
+      const total = (db().prepare("SELECT COUNT(*) AS c FROM entries").get() as { c: number }).c;
+      if (total > 0) return;
     }
     const result = await reindexMemory();
     if (result.indexed > 0) {
       console.log(`🔍 Embeddings: indexed ${result.indexed} chunks (${result.total} total)`);
     }
   } catch (err) {
-    // Non-fatal — bot works without embeddings
     console.warn("⚠️ Embeddings init failed:", err instanceof Error ? err.message : err);
   }
 }
 
 export function getIndexStats(): { entries: number; files: number; lastReindex: number; sizeBytes: number } {
-  const index = loadIndex();
+  let entries = 0;
+  let files = 0;
+  let lastReindex = 0;
   let sizeBytes = 0;
   try {
-    sizeBytes = fs.statSync(INDEX_FILE).size;
-  } catch { /* empty */ }
-
-  return {
-    entries: index.entries.length,
-    files: Object.keys(index.fileMtimes).length,
-    lastReindex: index.lastReindex,
-    sizeBytes,
-  };
+    entries = (db().prepare("SELECT COUNT(*) AS c FROM entries").get() as { c: number }).c;
+    files = (db().prepare("SELECT COUNT(*) AS c FROM file_mtimes").get() as { c: number }).c;
+    const meta = getMeta("lastReindex");
+    if (meta) lastReindex = Number(meta);
+    sizeBytes = fs.statSync(EMBEDDINGS_DB).size;
+  } catch {
+    /* DB not yet initialised */
+  }
+  return { entries, files, lastReindex, sizeBytes };
 }
+
+// ── Re-export embedding dim for tests / debugging ──────
+
+export { EMBEDDING_DIMENSION, EMBEDDING_MODEL };
