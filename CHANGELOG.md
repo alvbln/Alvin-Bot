@@ -2,6 +2,21 @@
 
 All notable changes to Alvin Bot are documented here.
 
+## [4.20.1] — 2026-05-03
+
+### 🛡️ Hardening for the v4.20.0 SQLite migration
+
+The v4.20 migration is fully automatic on first start, but a few things could go wrong on user installations that the maintainer instance never hits. v4.20.1 plugs each of them.
+
+- **Lazy native binary load.** `better-sqlite3` is now `require()`-d inside `embeddings.ts`, not at module import time. If the prebuilt isn't available for the user's platform and a build-from-source fails (exotic Node version, missing toolchain, glibc mismatch), the bot logs a single clear warning with the exact rebuild command, and **keeps running** — only semantic memory search is disabled until the user fixes their install. Previously this would have crashed bot startup.
+- **Pre-flight disk-space check.** Migration refuses to start unless the volume holding `~/.alvin-bot/memory/` has at least 2× the source JSON's size free (covers source + target + WAL during the transaction). Skipped migration leaves the JSON intact for retry on the next boot once space is free.
+- **Progress logging.** On indexes larger than ~5 000 entries, the migration logs `…migrated N / M entries (P %)` every 5 000 rows so the user can see it isn't stuck.
+- **Corrupt JSON recovery.** If `JSON.parse` of `.embeddings.json` throws, the file is moved aside to `.embeddings.json.broken.<timestamp>` and the next bot start treats this as a fresh install (rebuild-from-source on first search). No more boot-loop on a damaged index.
+- **`alvin-bot doctor` shows memory health.** New "Memory:" section reports: native binary loadable, vector-store entry count + size, or — for not-yet-migrated installs — the legacy JSON's size and a hint that the next start will migrate.
+- **Cleanup on failed migration.** WAL/SHM sidecars are removed alongside the half-written `.embeddings.db` so the next attempt starts from a clean slate.
+
+No schema or API changes — drop-in over v4.20.0.
+
 ## [4.20.0] — 2026-05-03
 
 ### 🚀 Embeddings: JSON → SQLite

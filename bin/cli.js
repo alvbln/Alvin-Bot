@@ -17,7 +17,7 @@
  */
 
 import { createInterface } from "readline";
-import { existsSync, writeFileSync, readFileSync, mkdirSync, copyFileSync, readdirSync } from "fs";
+import { existsSync, writeFileSync, readFileSync, mkdirSync, copyFileSync, readdirSync, statSync } from "fs";
 import { resolve, join } from "path";
 import { homedir } from "os";
 import { execSync } from "child_process";
@@ -1359,6 +1359,52 @@ async function doctor() {
     }
   } else if (botToken) {
     console.log(`  ❌ ALLOWED_USERS not set (nobody can message the bot)`);
+  }
+
+  // ── Memory (semantic search backend) ──
+  console.log("\n  Memory:");
+  const embJson = resolve(DATA_DIR, "memory", ".embeddings.json");
+  const embDb = resolve(DATA_DIR, "memory", ".embeddings.db");
+  const embBakSqlite = resolve(DATA_DIR, "memory", ".embeddings.json.bak-pre-sqlite");
+
+  // better-sqlite3 native binary loadable?
+  let sqliteOk = false;
+  let sqliteErr = "";
+  try {
+    const req = (await import("module")).createRequire(import.meta.url);
+    req("better-sqlite3");
+    sqliteOk = true;
+  } catch (err) {
+    sqliteErr = err instanceof Error ? err.message : String(err);
+  }
+  if (sqliteOk) {
+    console.log(`  ✅ better-sqlite3 native binary loadable`);
+  } else {
+    console.log(`  ❌ better-sqlite3 native binary not loadable — semantic search disabled`);
+    console.log(`     Fix: cd $(npm root -g)/alvin-bot && npm rebuild better-sqlite3`);
+    console.log(`     Detail: ${sqliteErr.split("\n")[0]}`);
+  }
+
+  if (sqliteOk && existsSync(embDb)) {
+    try {
+      const req = (await import("module")).createRequire(import.meta.url);
+      const Database = req("better-sqlite3");
+      const db = new Database(embDb, { readonly: true });
+      const entries = db.prepare("SELECT COUNT(*) AS c FROM entries").get().c;
+      const files = db.prepare("SELECT COUNT(*) AS c FROM file_mtimes").get().c;
+      const sizeMb = (statSync(embDb).size / 1024 / 1024).toFixed(0);
+      db.close();
+      console.log(`  ✅ Vector store: ${entries} entries across ${files} sources (${sizeMb} MB SQLite)`);
+    } catch (err) {
+      console.log(`  ⚠️  Vector store exists but unreadable: ${err.message}`);
+    }
+  } else if (existsSync(embJson)) {
+    const sizeMb = (statSync(embJson).size / 1024 / 1024).toFixed(0);
+    console.log(`  ⚠️  Legacy JSON index found (${sizeMb} MB) — will auto-migrate to SQLite on next bot start`);
+  } else if (existsSync(embBakSqlite)) {
+    console.log(`  ✅ Migration to SQLite already done (legacy JSON kept as .bak-pre-sqlite)`);
+  } else {
+    console.log(`  ℹ️  No vector store yet — will be built on first message`);
   }
 
   // ── Extras ──

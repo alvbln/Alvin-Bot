@@ -20,10 +20,47 @@ import fs from "fs";
 import path from "path";
 import { resolve } from "path";
 import os from "os";
-import Database, { type Database as Db } from "better-sqlite3";
+import { createRequire } from "module";
 import { config } from "../config.js";
 import { MEMORY_DIR, MEMORY_FILE, EMBEDDINGS_DB } from "../paths.js";
 import { ASSETS_DIR, ASSETS_INDEX_MD } from "../paths.js";
+
+// ── better-sqlite3: lazy require so a missing/broken native binary degrades
+//    embeddings-search to a no-op instead of crashing bot startup. Anyone with
+//    a broken better-sqlite3 install (exotic Node, incompatible libc, missing
+//    build tools and no prebuilt) sees a clear warning and the bot keeps
+//    running — only semantic search is unavailable until they fix it.
+type SqliteCtor = typeof import("better-sqlite3");
+type SqliteDb = import("better-sqlite3").Database;
+
+let SqliteClass: SqliteCtor | null = null;
+let sqliteLoadAttempted = false;
+let sqliteLoadError: Error | null = null;
+const cjsRequire = createRequire(import.meta.url);
+
+function loadSqlite(): SqliteCtor | null {
+  if (sqliteLoadAttempted) return SqliteClass;
+  sqliteLoadAttempted = true;
+  try {
+    SqliteClass = cjsRequire("better-sqlite3") as SqliteCtor;
+    return SqliteClass;
+  } catch (err) {
+    sqliteLoadError = err instanceof Error ? err : new Error(String(err));
+    console.warn(
+      "⚠️ better-sqlite3 native binary unavailable — embeddings disabled. " +
+        "Bot continues without semantic memory search. Fix: rebuild deps with " +
+        "`cd $(npm root -g)/alvin-bot && npm rebuild better-sqlite3` or reinstall " +
+        "alvin-bot. Underlying error: " +
+        sqliteLoadError.message
+    );
+    return null;
+  }
+}
+
+export function getEmbeddingsBackendStatus(): { available: boolean; error: string | null } {
+  loadSqlite();
+  return { available: SqliteClass !== null, error: sqliteLoadError?.message ?? null };
+}
 
 // Hub memory directory (Claude Hub — read-only, additional context)
 const HUB_MEMORY_DIR = resolve(os.homedir(), ".claude", "hub", "MEMORY");
@@ -73,10 +110,16 @@ function blobToVector(b: Buffer): Float32Array {
 
 // ── DB lifecycle ────────────────────────────────────────
 
-let dbInstance: Db | null = null;
+let dbInstance: SqliteDb | null = null;
 
-function db(): Db {
+/**
+ * Returns the live DB handle, or null when better-sqlite3 isn't loadable.
+ * Callers must handle the null case (treat as "search unavailable").
+ */
+function db(): SqliteDb | null {
   if (dbInstance) return dbInstance;
+  const Database = loadSqlite();
+  if (!Database) return null;
 
   // Ensure directory exists (handles fresh installs).
   fs.mkdirSync(path.dirname(EMBEDDINGS_DB), { recursive: true });
@@ -124,17 +167,26 @@ export function closeEmbeddingsDb(): void {
   }
 }
 
+/** Sharper assertion for use inside helpers that require an open DB. */
+function dbOrThrow(): SqliteDb {
+  const d = db();
+  if (!d) {
+    throw new Error("Embeddings DB unavailable — better-sqlite3 native module not loaded");
+  }
+  return d;
+}
+
 // ── Meta helpers ────────────────────────────────────────
 
 function getMeta(key: string): string | null {
-  const row = db().prepare("SELECT value FROM meta WHERE key = ?").get(key) as
+  const row = dbOrThrow().prepare("SELECT value FROM meta WHERE key = ?").get(key) as
     | { value: string }
     | undefined;
   return row?.value ?? null;
 }
 
 function setMeta(key: string, value: string): void {
-  db()
+  dbOrThrow()
     .prepare(
       "INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value"
     )
@@ -142,17 +194,16 @@ function setMeta(key: string, value: string): void {
 }
 
 function getFileMtimes(): Record<string, number> {
-  const rows = db().prepare("SELECT source, mtime_ms FROM file_mtimes").all() as Array<{
-    source: string;
-    mtime_ms: number;
-  }>;
+  const rows = dbOrThrow()
+    .prepare("SELECT source, mtime_ms FROM file_mtimes")
+    .all() as Array<{ source: string; mtime_ms: number }>;
   const out: Record<string, number> = {};
   for (const r of rows) out[r.source] = r.mtime_ms;
   return out;
 }
 
 function setFileMtime(source: string, mtimeMs: number): void {
-  db()
+  dbOrThrow()
     .prepare(
       "INSERT INTO file_mtimes (source, mtime_ms) VALUES (?, ?) ON CONFLICT(source) DO UPDATE SET mtime_ms = excluded.mtime_ms"
     )
@@ -392,16 +443,19 @@ function getStaleFiles(): Array<{ path: string; relativePath: string }> {
 // ── Public API ──────────────────────────────────────────
 
 export async function reindexMemory(force = false): Promise<{ indexed: number; total: number }> {
+  if (!loadSqlite()) {
+    return { indexed: 0, total: 0 };
+  }
   const filesToIndex = force ? getIndexableFiles() : getStaleFiles();
 
   if (filesToIndex.length === 0) {
-    const total = (db().prepare("SELECT COUNT(*) AS c FROM entries").get() as { c: number }).c;
+    const total = (dbOrThrow().prepare("SELECT COUNT(*) AS c FROM entries").get() as { c: number }).c;
     return { indexed: 0, total };
   }
 
   // Drop existing entries for files being reindexed (per-source DELETE is O(log n) thanks to idx).
-  const delStmt = db().prepare("DELETE FROM entries WHERE source = ?");
-  const dropOld = db().transaction((sources: string[]) => {
+  const delStmt = dbOrThrow().prepare("DELETE FROM entries WHERE source = ?");
+  const dropOld = dbOrThrow().transaction((sources: string[]) => {
     for (const s of sources) delStmt.run(s);
   });
   dropOld(filesToIndex.map(f => f.relativePath));
@@ -423,7 +477,7 @@ export async function reindexMemory(force = false): Promise<{ indexed: number; t
 
   if (allChunks.length === 0) {
     // Even with zero chunks, keep mtimes in sync so we don't re-walk on next run.
-    const updMtime = db().transaction((files: Array<{ relativePath: string; path: string }>) => {
+    const updMtime = dbOrThrow().transaction((files: Array<{ relativePath: string; path: string }>) => {
       for (const f of files) {
         try {
           setFileMtime(f.relativePath, fs.statSync(f.path).mtimeMs);
@@ -433,7 +487,7 @@ export async function reindexMemory(force = false): Promise<{ indexed: number; t
       }
     });
     updMtime(filesToIndex);
-    const total = (db().prepare("SELECT COUNT(*) AS c FROM entries").get() as { c: number }).c;
+    const total = (dbOrThrow().prepare("SELECT COUNT(*) AS c FROM entries").get() as { c: number }).c;
     return { indexed: 0, total };
   }
 
@@ -442,11 +496,11 @@ export async function reindexMemory(force = false): Promise<{ indexed: number; t
   const vectors = await getEmbeddings(texts);
 
   // Single transaction for all writes.
-  const insertStmt = db().prepare(
+  const insertStmt = dbOrThrow().prepare(
     "INSERT INTO entries (id, source, text, vector, indexed_at) VALUES (?, ?, ?, ?, ?) " +
       "ON CONFLICT(id) DO UPDATE SET source=excluded.source, text=excluded.text, vector=excluded.vector, indexed_at=excluded.indexed_at"
   );
-  const writeAll = db().transaction((rows: Array<{ id: string; source: string; text: string; vector: Buffer; indexedAt: number }>) => {
+  const writeAll = dbOrThrow().transaction((rows: Array<{ id: string; source: string; text: string; vector: Buffer; indexedAt: number }>) => {
     for (const r of rows) {
       insertStmt.run(r.id, r.source, r.text, r.vector, r.indexedAt);
     }
@@ -463,7 +517,7 @@ export async function reindexMemory(force = false): Promise<{ indexed: number; t
   );
 
   // Update mtimes for the files we just (re-)indexed.
-  const updMtime = db().transaction((files: typeof filesToIndex) => {
+  const updMtime = dbOrThrow().transaction((files: typeof filesToIndex) => {
     for (const f of files) {
       try {
         setFileMtime(f.relativePath, fs.statSync(f.path).mtimeMs);
@@ -476,22 +530,25 @@ export async function reindexMemory(force = false): Promise<{ indexed: number; t
 
   setMeta("lastReindex", String(now));
 
-  const total = (db().prepare("SELECT COUNT(*) AS c FROM entries").get() as { c: number }).c;
+  const total = (dbOrThrow().prepare("SELECT COUNT(*) AS c FROM entries").get() as { c: number }).c;
   return { indexed: allChunks.length, total };
 }
 
 export async function searchMemory(query: string, topK = 5, minScore = 0.3): Promise<SearchResult[]> {
+  if (!loadSqlite()) {
+    return [];
+  }
   // Auto-index if empty.
-  const total = (db().prepare("SELECT COUNT(*) AS c FROM entries").get() as { c: number }).c;
+  const total = (dbOrThrow().prepare("SELECT COUNT(*) AS c FROM entries").get() as { c: number }).c;
   if (total === 0) {
     await reindexMemory();
-    const after = (db().prepare("SELECT COUNT(*) AS c FROM entries").get() as { c: number }).c;
+    const after = (dbOrThrow().prepare("SELECT COUNT(*) AS c FROM entries").get() as { c: number }).c;
     if (after === 0) return [];
   }
 
   const queryVector = Float32Array.from(await getQueryEmbedding(query));
 
-  const rows = db().prepare("SELECT id, source, text, vector FROM entries").all() as ChunkRow[];
+  const rows = dbOrThrow().prepare("SELECT id, source, text, vector FROM entries").all() as ChunkRow[];
 
   const scored: SearchResult[] = [];
   for (const row of rows) {
@@ -507,11 +564,14 @@ export async function searchMemory(query: string, topK = 5, minScore = 0.3): Pro
 }
 
 export async function initEmbeddings(): Promise<void> {
+  if (!loadSqlite()) {
+    return; // already warned via loadSqlite
+  }
   try {
     db(); // Open & migrate schema.
     const stale = getStaleFiles();
     if (stale.length === 0) {
-      const total = (db().prepare("SELECT COUNT(*) AS c FROM entries").get() as { c: number }).c;
+      const total = (dbOrThrow().prepare("SELECT COUNT(*) AS c FROM entries").get() as { c: number }).c;
       if (total > 0) return;
     }
     const result = await reindexMemory();
@@ -528,9 +588,12 @@ export function getIndexStats(): { entries: number; files: number; lastReindex: 
   let files = 0;
   let lastReindex = 0;
   let sizeBytes = 0;
+  if (!loadSqlite()) {
+    return { entries, files, lastReindex, sizeBytes };
+  }
   try {
-    entries = (db().prepare("SELECT COUNT(*) AS c FROM entries").get() as { c: number }).c;
-    files = (db().prepare("SELECT COUNT(*) AS c FROM file_mtimes").get() as { c: number }).c;
+    entries = (dbOrThrow().prepare("SELECT COUNT(*) AS c FROM entries").get() as { c: number }).c;
+    files = (dbOrThrow().prepare("SELECT COUNT(*) AS c FROM file_mtimes").get() as { c: number }).c;
     const meta = getMeta("lastReindex");
     if (meta) lastReindex = Number(meta);
     sizeBytes = fs.statSync(EMBEDDINGS_DB).size;
