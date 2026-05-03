@@ -1,7 +1,7 @@
 {
   "name": "alvin-bot",
-  "version": "4.19.2",
-  "description": "Alvin Bot \u2014 Your personal AI agent on Telegram, WhatsApp, Discord, Signal, and Web.",
+  "version": "4.20.0",
+  "description": "Alvin Bot — Your personal AI agent on Telegram, WhatsApp, Discord, Signal, and Web.",
   "type": "module",
   "main": "dist/index.js",
   "bin": {
@@ -170,6 +170,7 @@
     "@types/node": "^22.0.0",
     "@types/ws": "^8.18.1",
     "@whiskeysockets/baileys": "^6.7.21",
+    "better-sqlite3": "^12.9.0",
     "dotenv": "^16.4.0",
     "electron-updater": "^6.8.3",
     "grammy": "^1.30.0",
@@ -181,6 +182,7 @@
     "ws": "^8.19.0"
   },
   "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
     "@vitest/ui": "^4.1.4",
     "electron": "^35.7.5",
     "electron-builder": "^26.8.1",

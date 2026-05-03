@@ -2,13 +2,27 @@
 
 All notable changes to Alvin Bot are documented here.
 
+## [4.20.0] — 2026-05-03
+
+### 🚀 Embeddings: JSON → SQLite
+
+**Why.** The vector index `~/.alvin-bot/memory/.embeddings.json` had grown to **146 MB**. Every bot start parsed the whole file (slow boot, large heap), and every reindex iteration rewrote the entire 146 MB blob to disk. With ~3 800 entries the corpus is still small enough that linear-scan cosine similarity is fine, but the JSON serialisation overhead and per-write full-file rewrite were the real cost.
+
+**Change.** New SQLite-backed store at `~/.alvin-bot/memory/.embeddings.db` (table `entries(id, source, text, vector BLOB, indexed_at)` + index on `source`). Vectors live as raw `Float32Array` BLOBs (4 B × 3072 dims = 12 KB each) instead of JSON-encoded Float64 arrays (≈ 24 KB each). Reindexing is per-chunk INSERT/UPDATE inside a single transaction — no full-file rewrite. WAL mode + 256 MB mmap, `synchronous = NORMAL`.
+
+**Migration.** `src/services/embeddings-migration.ts` runs once on boot if `.embeddings.json` exists but `.embeddings.db` does not. Source JSON is renamed to `.embeddings.json.bak-pre-sqlite` after a successful entry-count match (idempotent, safe to re-run). On the maintainer's instance: 146 MB → 49 MB, 3 799 entries copied in 660 ms.
+
+**Files touched.** `src/paths.ts` (new `EMBEDDINGS_DB`), `src/services/embeddings.ts` (full rewrite, drop-in same public surface), `src/services/embeddings-migration.ts` (new), `src/index.ts` (boot hook), `package.json` (deps `better-sqlite3@^12`, `@types/better-sqlite3` dev). Public API unchanged: `searchMemory`, `reindexMemory`, `initEmbeddings`, `getIndexStats` keep their signatures so callers in `engine.ts`, `web-server.ts` etc. don't change.
+
+**Wins.** ~66 % smaller on disk. Bot boot no longer parses a 146 MB JSON. Reindex of a single file is O(log n) DELETE-by-source + transactional INSERTs instead of `JSON.stringify` + `writeFileSync` of the whole index.
+
 ## [4.19.2] — 2026-04-24
 
 ### 🐛 Fix: workspace switch produced "(no response)" format-kaskade; added empty-stream diagnostics
 
 **Symptom.** After v4.19.1 shipped, a workspace/dir switch still produced a broken response — but this time NOT an empty stream. Claude replied with literal text like `"(no response)\n\nUser: Hallo"`, then the next turn `"(no response)\n\nUser: wie viele tools hast du…"` — a format-kaskade where every response got worse.
 
-**Root cause.** v4.19.1's cwd-change reset set `session.lastSdkHistoryIndex = -1`. That value is consumed by `buildBridgeMessage()` in `handlers/message.ts`, which is designed for the Ollama-fallback path — its preamble frames past turns as *"the following N message(s) were exchanged with a fallback model"*. When the reset runs on a workspace switch, the ENTIRE conversation history (48+ turns in the failing case) gets packaged under that framing and prepended to the next prompt. If the history contains Telegram fallback artifacts (`(Keine Antwort)`, `(no response)`), Claude reads those as the "fallback model's response format" and imitates it. Each imitation lands back in history, poisoning the next bridge. Cascade.
+**Root cause.** v4.19.1's cwd-change reset set `session.lastSdkHistoryIndex = -1`. That value is consumed by `buildBridgeMessage()` in `handlers/message.ts`, which is designed for the Ollama-fallback path — its preamble frames past turns as *"the following N message(s) were exchanged with a fallback model"*. When the reset runs on a workspace switch, the ENTIRE conversation history (dozens of turns in a long-running session) gets packaged under that framing and prepended to the next prompt. If the history contains Telegram fallback artifacts (`(Keine Antwort)`, `(no response)`), Claude reads those as the "fallback model's response format" and imitates it. Each imitation lands back in history, poisoning the next bridge. Cascade.
 
 Workspace switch is not a fallback event — it's *"new persona, new task"*. The old conversation belongs to the old workspace and must not be reframed and re-injected.
 

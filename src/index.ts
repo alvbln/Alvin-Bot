@@ -25,6 +25,17 @@ if (hasLegacyData()) {
 // 3. Seed defaults for any files that don't exist yet (fresh install)
 seedDefaults();
 
+// 3b. v4.20 — One-shot migration of legacy .embeddings.json → SQLite (.embeddings.db).
+//     Idempotent and safe: source JSON is renamed to .bak-pre-sqlite after success.
+import { shouldMigrateEmbeddingsToSqlite, migrateEmbeddingsToSqlite } from "./services/embeddings-migration.js";
+if (shouldMigrateEmbeddingsToSqlite()) {
+  try {
+    migrateEmbeddingsToSqlite();
+  } catch (err) {
+    console.error("❌ Embeddings migration failed — bot will continue with empty SQLite store, JSON kept:", err);
+  }
+}
+
 // 3a. v4.12.2 — Audit + repair permissions on sensitive files. On multi-user
 //     systems, files written pre-v4.12.2 may have 0o644 / 0o666 mode — i.e.
 //     readable by other users on the same machine. This routine chmod-repairs
