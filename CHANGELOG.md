@@ -2,6 +2,20 @@
 
 All notable changes to Alvin Bot are documented here.
 
+## [4.20.2] — 2026-05-04
+
+### 🛡️ Security: Web UI loopback by default + Slack caller allowlist
+
+Two real attack surfaces closed.
+
+**Web UI binds to 127.0.0.1 by default.** Previous versions called `server.listen(port)` with no host argument, which Node interprets as "listen on all interfaces". Combined with an empty `WEB_PASSWORD` (which the login route silently treats as "anyone can log in"), this meant any device on the same LAN could log into the bot's Web UI and reach every authenticated endpoint — user list, memory contents, model switch, the WebSocket chat, etc. New default: bind to `127.0.0.1`. To restore LAN access, set `WEB_HOST=0.0.0.0` explicitly in `.env`. If both `WEB_HOST=0.0.0.0` and an empty `WEB_PASSWORD` are present, the bot logs a loud warning on startup.
+
+**Slack caller allowlist.** New `SLACK_ALLOWED_USERS` env var: comma-separated list of Slack user IDs allowed to talk to the bot (DMs, @mentions, slash commands). Empty list keeps the legacy behaviour — any workspace member can interact, which is safe iff the workspace is private to the operator. To find your Slack user ID: open your profile in Slack → "..." → "Copy member ID", or just message the bot once and read the line `[slack] caller discovered: user=U… — to lock the bot to specific users, add to .env: SLACK_ALLOWED_USERS=U…` from the logs (we log each unique caller once when the allowlist is empty).
+
+**`alvin-bot doctor` now reports both.** New `Web UI:` and `Slack:` sections flag insecure combos and show whether an allowlist is active.
+
+No schema or behaviour changes for users who already have `WEB_PASSWORD` set or only use the bot via Telegram. Telegram allowlist (`ALLOWED_USERS`) is unchanged.
+
 ## [4.20.1] — 2026-05-03
 
 ### 🛡️ Hardening for the v4.20.0 SQLite migration

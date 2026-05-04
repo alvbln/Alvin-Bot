@@ -1361,6 +1361,37 @@ async function doctor() {
     console.log(`  ❌ ALLOWED_USERS not set (nobody can message the bot)`);
   }
 
+  // ── Web UI security ──
+  console.log("\n  Web UI:");
+  const webHost = getEnv("WEB_HOST") || "127.0.0.1";
+  const webPw = getEnv("WEB_PASSWORD");
+  if (webHost === "127.0.0.1" || webHost === "::1") {
+    console.log(`  ✅ WEB_HOST=${webHost} — loopback only (LAN unreachable)`);
+  } else if (webHost === "0.0.0.0" || webHost === "*") {
+    if (webPw) {
+      console.log(`  ✅ WEB_HOST=${webHost} (LAN-reachable) + WEB_PASSWORD set`);
+    } else {
+      console.log(`  ❌ WEB_HOST=${webHost} (LAN-reachable) WITHOUT WEB_PASSWORD — anyone on LAN can log in`);
+      console.log(`     Fix: set WEB_PASSWORD in .env, or set WEB_HOST=127.0.0.1`);
+    }
+  } else {
+    console.log(`  ℹ️  WEB_HOST=${webHost}${webPw ? " + WEB_PASSWORD set" : " — WEB_PASSWORD empty"}`);
+  }
+
+  // ── Slack caller allowlist ──
+  if (getEnv("SLACK_BOT_TOKEN")) {
+    console.log("\n  Slack:");
+    const slackAllow = getEnv("SLACK_ALLOWED_USERS");
+    if (slackAllow) {
+      const ids = slackAllow.split(",").map(s => s.trim()).filter(Boolean);
+      console.log(`  ✅ SLACK_ALLOWED_USERS: ${ids.length} user${ids.length === 1 ? "" : "s"} (caller allowlist active)`);
+    } else {
+      console.log(`  ⚠️  SLACK_ALLOWED_USERS not set — any workspace member can talk to the bot`);
+      console.log(`     Safe iff the Slack workspace is private to you. Otherwise add e.g.:`);
+      console.log(`     SLACK_ALLOWED_USERS=U0ABC123,U0DEF456`);
+    }
+  }
+
   // ── Memory (semantic search backend) ──
   console.log("\n  Memory:");
   const embJson = resolve(DATA_DIR, "memory", ".embeddings.json");

@@ -1574,7 +1574,11 @@ function scheduleBindAttempt(port: number, attempt: number): void {
   // invalid backlog, kernel hiccup) can throw synchronously. Catch here
   // so the main routine never crashes during web-UI bind.
   try {
-    server.listen(port, () => {
+    // v4.20.2 — bind to config.webHost (default 127.0.0.1) so the Web UI
+    // is loopback-only unless the operator opts in by setting WEB_HOST=0.0.0.0.
+    // Empty/"*" maps to all interfaces.
+    const bindHost = (config.webHost === "*" || config.webHost === "") ? undefined : config.webHost;
+    server.listen(port, bindHost as string | undefined, () => {
       if (handled) return; // Should be impossible; paranoia.
       handled = true;
 
@@ -1597,9 +1601,18 @@ function scheduleBindAttempt(port: number, attempt: number): void {
       server.on("error", (err) => {
         console.warn(`[web] post-bind server error (ignored): ${err.message}`);
       });
-      console.log(`🌐 Web UI: http://localhost:${actualWebPort}`);
+      const bindLabel = bindHost && bindHost !== "127.0.0.1" && bindHost !== "::1"
+        ? `http://${bindHost}:${actualWebPort}` + (bindHost === "0.0.0.0" ? " (LAN-reachable)" : "")
+        : `http://localhost:${actualWebPort}`;
+      console.log(`🌐 Web UI: ${bindLabel}`);
       if (actualWebPort !== originalPort) {
         console.log(`   (Port ${originalPort} was busy, using ${actualWebPort} instead)`);
+      }
+      if (bindHost === "0.0.0.0" && !process.env.WEB_PASSWORD) {
+        console.warn(
+          "⚠️ Web UI is bound to 0.0.0.0 but WEB_PASSWORD is empty — anyone on the LAN can log in. " +
+            "Set WEB_PASSWORD in ~/.alvin-bot/.env or set WEB_HOST=127.0.0.1."
+        );
       }
     });
   } catch (err) {
