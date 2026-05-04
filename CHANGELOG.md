@@ -2,6 +2,26 @@
 
 All notable changes to Alvin Bot are documented here.
 
+## [4.21.0] — 2026-05-04
+
+### 🌐 New skill: Agent Browser (Tier-1.5)
+
+Adds a new bundled skill, `skills/agent-browser/SKILL.md`, that teaches the bot to use the `agent-browser` CLI when it's available. Agent Browser is a [Vercel Labs](https://github.com/vercel-labs/agent-browser) tool that exposes pages as accessibility-tree snapshots with `@e1`, `@e2`, … refs — interactions cost ~200–400 tokens per turn instead of parsing rendered HTML, which is roughly 90 % cheaper than a Playwright/Puppeteer-driven flow.
+
+The skill is **opt-in by install, not by config**: it only activates when `command -v agent-browser` succeeds. No new dependency in `package.json`, no postinstall hook, no extra disk on a fresh install. Existing browser strategies (Tier 1 Stealth, Tier 2 CDP, Tier 3 Extension) keep working untouched and remain the right tool for stealth scraping, logged-in personal accounts, and watch-along flows.
+
+The bundled `Browser Automation` skill (`skills/browse/SKILL.md`) was updated to route the bot to the Agent Browser skill first when the binary is on the PATH and the task is interactive (click/fill/extract on cooperative pages).
+
+`alvin-bot doctor` shows a new `Browser tools:` section reporting whether agent-browser is installed, and gives the one-liner install command if not:
+
+```
+npm i -g agent-browser && agent-browser install
+```
+
+The first command pulls the Node CLI; the second downloads a private Chrome-for-Testing build into `~/.agent-browser/`. Together about 240 MB — that's why we don't bundle it.
+
+No code changes in the bot's core pipeline. Existing users notice nothing unless they install the CLI.
+
 ## [4.20.2] — 2026-05-04
 
 ### 🛡️ Security: Web UI loopback by default + Slack caller allowlist
