@@ -72,6 +72,22 @@ export const config = {
   webhookEnabled: process.env.WEBHOOK_ENABLED === "true",
   webhookToken: process.env.WEBHOOK_TOKEN || "",
 
+  // Web UI bind host. Default is 127.0.0.1 (loopback only) — set to "0.0.0.0"
+  // explicitly if you want LAN/external access. Combined with WEB_PASSWORD
+  // this is the safe default since v4.20.2; previous versions defaulted to
+  // listening on all interfaces with no auth required when WEB_PASSWORD was
+  // empty.
+  webHost: process.env.WEB_HOST || "127.0.0.1",
+
+  // Slack caller allowlist. Comma-separated Slack user IDs (e.g. "U0ABC123,U0DEF456").
+  // When non-empty, only these users can talk to the bot in Slack DMs and via @mention.
+  // When empty, the bot accepts any Slack workspace member (legacy behavior; safe iff
+  // the workspace is private to you).
+  slackAllowedUsers: (process.env.SLACK_ALLOWED_USERS || "")
+    .split(",")
+    .map(s => s.trim())
+    .filter(Boolean),
+
   // Browser
   cdpUrl: process.env.CDP_URL || "",
   browseServerPort: Number(process.env.BROWSE_SERVER_PORT) || 3800,

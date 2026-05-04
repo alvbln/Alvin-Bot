@@ -20,6 +20,36 @@
 import type { PlatformAdapter, IncomingMessage, MessageHandler, SendOptions } from "./types.js";
 import fs from "fs";
 import { parseSlackSlashCommand } from "./slack-slash-parser.js";
+import { config } from "../config.js";
+
+/**
+ * v4.20.2 — Slack caller allowlist. When SLACK_ALLOWED_USERS is set in the
+ * environment (comma-separated Slack user IDs), only those users get past
+ * this gate. When the list is empty, fall back to legacy behaviour: any
+ * member of the workspace can talk to the bot. The empty-list case is safe
+ * iff the workspace is private to the operator.
+ *
+ * Slack user IDs are workspace-scoped (e.g. "U0ABC123"); rotate the list if
+ * you migrate workspaces.
+ */
+function isSlackUserAllowed(userId: string): boolean {
+  if (config.slackAllowedUsers.length === 0) {
+    // No allowlist set — log each unique caller once so the operator can
+    // copy a known ID into SLACK_ALLOWED_USERS and lock the bot down.
+    if (userId && !discoveredCallers.has(userId)) {
+      discoveredCallers.add(userId);
+      console.warn(
+        `[slack] caller discovered: user=${userId} — to lock the bot to specific users, ` +
+          `add to .env: SLACK_ALLOWED_USERS=${userId}` +
+          (discoveredCallers.size > 1 ? ` (or comma-separate multiple)` : "")
+      );
+    }
+    return true;
+  }
+  return config.slackAllowedUsers.includes(userId);
+}
+
+const discoveredCallers = new Set<string>();
 
 // ── Global Slack State ─────────────────────────────────────────────────────
 
@@ -176,6 +206,14 @@ export class SlackAdapter implements PlatformAdapter {
     const channelId = message.channel || "";
     const messageId = message.ts || "";
 
+    // v4.20.2 — caller allowlist. If SLACK_ALLOWED_USERS is set, silently
+    // ignore anyone not on the list. Empty list = legacy behaviour
+    // (any workspace member can talk to the bot — safe iff the workspace
+    // is private to the operator).
+    if (!isSlackUserAllowed(userId)) {
+      return;
+    }
+
     // Determine channel type
     // DMs (im) have channel_type "im", group DMs are "mpim", channels are "channel"/"group"
     const channelType = message.channel_type || "";
@@ -255,6 +293,11 @@ export class SlackAdapter implements PlatformAdapter {
     const userId = command.user_id || "";
     const userName = command.user_name || userId;
 
+    // v4.20.2 — caller allowlist for slash commands.
+    if (!isSlackUserAllowed(userId)) {
+      return;
+    }
+
     const incoming: IncomingMessage = {
       platform: "slack",
       messageId: `cmd-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
@@ -281,6 +324,11 @@ export class SlackAdapter implements PlatformAdapter {
     const userId = event.user || "";
     const channelId = event.channel || "";
     const messageId = event.ts || "";
+
+    // v4.20.2 — same caller allowlist as DMs.
+    if (!isSlackUserAllowed(userId)) {
+      return;
+    }
 
     // Strip the @mention from text
     text = text.replace(new RegExp(`<@${this.botUserId}>`, "g"), "").trim();
