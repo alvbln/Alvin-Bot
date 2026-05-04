@@ -15,11 +15,19 @@ Du hast drei Browser-Strategien plus WebFetch. **Wähle die billigste passende S
 | Task | Tool | Warum |
 |------|------|-------|
 | Einzelne öffentliche Seite, nur Text | `curl` oder WebFetch | Am schnellsten, keine Browser-Engine |
+| Interaktiv (klicken/füllen/extrahieren) auf kooperativer Seite | **Tier 1.5 agent-browser** *(falls installiert)* | Snapshot+Ref-Workflow ist ~90 % token-günstiger als rohes Playwright. Siehe Skill „Agent Browser". |
 | Öffentliche Seite mit JS / Cloudflare | **Tier 1 Stealth** | Headless + Fingerprint-Masking |
 | Login-pflichtige Seite (LinkedIn, Gmail, …) | **Tier 2 CDP** | Echtes Chromium, persistente Cookies |
 | Komplexer Multi-Step-Flow, User soll zusehen | **Tier 3 Extension** | Nur in interaktiven CLI-Sessions |
 
 **NIEMALS** nacktes `node -e "const {chromium}…"` für externe Seiten — wird sofort geblockt.
+
+**Vorab prüfen ob agent-browser verfügbar ist:**
+```bash
+command -v agent-browser >/dev/null 2>&1 && echo "Tier 1.5 verfügbar"
+```
+Falls ja und der Task ist „klick X, lies Y, fülle Z aus" → den `agent-browser`-Skill nehmen.
+Falls nein → mit Tier 1/2/3 weitermachen wie unten. Installation auf Wunsch des Users: `npm i -g agent-browser && agent-browser install`.
 
 ---
 

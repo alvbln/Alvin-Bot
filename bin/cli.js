@@ -1392,6 +1392,22 @@ async function doctor() {
     }
   }
 
+  // ── Browser tools (optional Tier-1.5 agent-browser) ──
+  console.log("\n  Browser tools:");
+  let agentBrowserVersion = "";
+  try {
+    agentBrowserVersion = execSync("agent-browser --version 2>/dev/null", { encoding: "utf-8", timeout: 3000 }).trim();
+  } catch {}
+  if (agentBrowserVersion) {
+    // `agent-browser --version` prints "agent-browser X.Y.Z" — strip the prefix.
+    const v = agentBrowserVersion.replace(/^agent-browser\s+/i, "");
+    console.log(`  ✅ agent-browser ${v} — Tier-1.5 (token-efficient snapshot+ref) available`);
+  } else {
+    console.log(`  ℹ️  agent-browser not installed (optional Tier-1.5)`);
+    console.log(`     Install for ~90% cheaper interactive automation:`);
+    console.log(`       npm i -g agent-browser && agent-browser install`);
+  }
+
   // ── Memory (semantic search backend) ──
   console.log("\n  Memory:");
   const embJson = resolve(DATA_DIR, "memory", ".embeddings.json");
