@@ -1408,13 +1408,12 @@ async function doctor() {
     console.log(`       npm i -g agent-browser && agent-browser install`);
   }
 
-  // ── Memory (semantic search backend) ──
+  // ── Memory (provider + index health) ──
   console.log("\n  Memory:");
   const embJson = resolve(DATA_DIR, "memory", ".embeddings.json");
   const embDb = resolve(DATA_DIR, "memory", ".embeddings.db");
   const embBakSqlite = resolve(DATA_DIR, "memory", ".embeddings.json.bak-pre-sqlite");
 
-  // better-sqlite3 native binary loadable?
   let sqliteOk = false;
   let sqliteErr = "";
   try {
@@ -1424,26 +1423,54 @@ async function doctor() {
   } catch (err) {
     sqliteErr = err instanceof Error ? err.message : String(err);
   }
-  if (sqliteOk) {
-    console.log(`  ✅ better-sqlite3 native binary loadable`);
-  } else {
-    console.log(`  ❌ better-sqlite3 native binary not loadable — semantic search disabled`);
+  if (!sqliteOk) {
+    console.log(`  ❌ better-sqlite3 native binary not loadable — memory store disabled`);
     console.log(`     Fix: cd $(npm root -g)/alvin-bot && npm rebuild better-sqlite3`);
     console.log(`     Detail: ${sqliteErr.split("\n")[0]}`);
-  }
-
-  if (sqliteOk && existsSync(embDb)) {
+  } else if (existsSync(embDb)) {
     try {
       const req = (await import("module")).createRequire(import.meta.url);
       const Database = req("better-sqlite3");
       const db = new Database(embDb, { readonly: true });
-      const entries = db.prepare("SELECT COUNT(*) AS c FROM entries").get().c;
-      const files = db.prepare("SELECT COUNT(*) AS c FROM file_mtimes").get().c;
-      const sizeMb = (statSync(embDb).size / 1024 / 1024).toFixed(0);
+      // Read provider + meta
+      let model = "unknown", tier = "unknown", dim = 0, lastReindex = 0;
+      try {
+        const meta = db.prepare("SELECT key, value FROM meta").all();
+        const m = Object.fromEntries(meta.map(r => [r.key, r.value]));
+        // v4.22 keys preferred; fall back to v4.20 legacy "model" key.
+        // Legacy v4.20 DBs only have meta.model (always Gemini-format). v4.22+
+        // sets meta.embedding_model with a tier-prefixed name.
+        model = m.embedding_model || m.model || "unknown";
+        tier = m.embedding_tier || (m.model ? "vector-cloud" : "unknown");
+        dim = Number(m.embedding_dim || 0);
+        lastReindex = Number(m.lastReindex || 0);
+      } catch { /* meta table missing */ }
+
+      // Count rows in whichever provider table exists.
+      let entries = 0;
+      for (const tbl of ["entries", "entries_fts"]) {
+        try {
+          entries = db.prepare(`SELECT COUNT(*) AS c FROM ${tbl}`).get().c;
+          if (entries > 0) break;
+        } catch { /* table missing */ }
+      }
+      const files = (() => {
+        try { return db.prepare("SELECT COUNT(*) AS c FROM file_mtimes").get().c; } catch { return 0; }
+      })();
+      const sizeMb = (statSync(embDb).size / 1024 / 1024).toFixed(1);
       db.close();
-      console.log(`  ✅ Vector store: ${entries} entries across ${files} sources (${sizeMb} MB SQLite)`);
+
+      console.log(`  ✅ Provider: ${model}${dim ? ` (${tier}, ${dim}-dim)` : ` (${tier})`}`);
+      console.log(`     ${entries} entries / ${files} files indexed, ${sizeMb} MB on disk`);
+      if (lastReindex) {
+        const ago = Math.round((Date.now() - lastReindex) / 1000 / 60);
+        console.log(`     Last reindex: ${ago < 60 ? `${ago} min ago` : `${Math.round(ago / 60)} h ago`}`);
+      }
+      const injectMode = (getEnv("MEMORY_INJECT_MODE") || "auto").toLowerCase();
+      const effective = injectMode === "auto" ? (entries > 0 ? "sqlite" : "legacy") : injectMode;
+      console.log(`     Inject mode: ${effective}${injectMode === "auto" ? " (auto)" : ""}`);
     } catch (err) {
-      console.log(`  ⚠️  Vector store exists but unreadable: ${err.message}`);
+      console.log(`  ⚠️  Memory store exists but unreadable: ${err.message}`);
     }
   } else if (existsSync(embJson)) {
     const sizeMb = (statSync(embJson).size / 1024 / 1024).toFixed(0);
@@ -1451,7 +1478,13 @@ async function doctor() {
   } else if (existsSync(embBakSqlite)) {
     console.log(`  ✅ Migration to SQLite already done (legacy JSON kept as .bak-pre-sqlite)`);
   } else {
-    console.log(`  ℹ️  No vector store yet — will be built on first message`);
+    // Predict which provider will be picked on first start.
+    const hasGoogle = !!getEnv("GOOGLE_API_KEY");
+    const hasOpenAI = !!getEnv("OPENAI_API_KEY");
+    console.log(`  ℹ️  Memory store not initialised yet (will be on first bot start)`);
+    if (hasGoogle) console.log(`     Will use: Gemini (3072-dim, semantic)`);
+    else if (hasOpenAI) console.log(`     Will use: OpenAI text-embedding-3-small (1536-dim, semantic)`);
+    else console.log(`     Will use: FTS5 keyword (zero-config). Set GOOGLE_API_KEY or OPENAI_API_KEY for semantic vectors.`);
   }
 
   // ── Extras ──

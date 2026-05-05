@@ -14,6 +14,7 @@ import { resolve } from "path";
 import { MEMORY_DIR, MEMORY_FILE } from "../paths.js";
 import { reindexMemory } from "./embeddings.js";
 import { buildLayeredContext } from "./memory-layers.js";
+import { getEffectiveInjectMode } from "./memory-inject-mode.js";
 
 // Ensure dirs exist
 if (!fs.existsSync(MEMORY_DIR)) fs.mkdirSync(MEMORY_DIR, { recursive: true });
@@ -86,26 +87,31 @@ export function appendDailyLog(entry: string): void {
  */
 export function buildMemoryContext(query?: string): string {
   const parts: string[] = [];
+  const mode = getEffectiveInjectMode();
 
-  // L0+L1 (+ matched L2 if query) via layered loader
+  // L0+L1 (+ matched L2 if query) via layered loader. The loader itself
+  // respects MEMORY_INJECT_MODE for the monolithic MEMORY.md slice.
   const layered = buildLayeredContext(query);
   if (layered) {
     parts.push(layered);
   }
 
-  // Today's log
-  const todayLog = loadDailyLog();
-  if (todayLog) {
-    const truncated = todayLog.length > 1500 ? todayLog.slice(-1500) : todayLog;
-    parts.push(`## Today's Log\n${truncated}`);
-  }
+  // Daily logs are bulk-injected only in legacy mode. In sqlite mode they're
+  // discoverable via searchMemory() — every log file is indexed individually
+  // and surfaced when relevant to the user's query.
+  if (mode === "legacy") {
+    const todayLog = loadDailyLog();
+    if (todayLog) {
+      const truncated = todayLog.length > 1500 ? todayLog.slice(-1500) : todayLog;
+      parts.push(`## Today's Log\n${truncated}`);
+    }
 
-  // Yesterday's log (for continuity)
-  const yesterday = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
-  const yesterdayLog = loadDailyLog(yesterday);
-  if (yesterdayLog) {
-    const truncated = yesterdayLog.length > 500 ? yesterdayLog.slice(-500) : yesterdayLog;
-    parts.push(`## Yesterday's Log (summary)\n${truncated}`);
+    const yesterday = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
+    const yesterdayLog = loadDailyLog(yesterday);
+    if (yesterdayLog) {
+      const truncated = yesterdayLog.length > 500 ? yesterdayLog.slice(-500) : yesterdayLog;
+      parts.push(`## Yesterday's Log (summary)\n${truncated}`);
+    }
   }
 
   if (parts.length === 0) return "";

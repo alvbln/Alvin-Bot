@@ -417,7 +417,12 @@ export function registerCommands(bot: Bot): void {
     // Memory stats
     const memStats = getMemoryStats();
     const idxStats = getIndexStats();
-    const memLine = `${memStats.dailyLogs} days, ${memStats.todayEntries} entries today, ${formatBytes(memStats.longTermSize)} LTM | 🔍 ${idxStats.entries} vectors`;
+    const { getEffectiveInjectMode, getInjectModeRaw } = await import("../services/memory-inject-mode.js");
+    const injectMode = getEffectiveInjectMode();
+    const injectRaw = getInjectModeRaw();
+    const indexLabel = idxStats.tier === "keyword-local" ? "FTS5" : "vec";
+    const modeLabel = injectRaw === "auto" ? `${injectMode}(auto)` : injectMode;
+    const memLine = `${memStats.dailyLogs} days, ${memStats.todayEntries} entries today, ${formatBytes(memStats.longTermSize)} LTM | 🔍 ${idxStats.entries} ${indexLabel} (${idxStats.provider}) | inject:${modeLabel}`;
 
     // Provider health + failover state
     const healthRows = getHealthStatus();

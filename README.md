@@ -433,6 +433,13 @@ OPENROUTER_API_KEY=<key>        # OpenRouter (100+ models)
 PRIMARY_PROVIDER=claude-sdk     # Primary AI provider
 FALLBACK_PROVIDERS=nvidia-kimi-k2.5,nvidia-llama-3.3-70b
 
+# Memory backend (v4.22+) — auto-detects based on what keys you have.
+# Set to override the default priority: gemini → openai → ollama → fts5.
+# fts5 is the zero-config keyword fallback — no key needed, works for everyone.
+EMBEDDINGS_PROVIDER=auto                  # auto | gemini | openai | ollama | fts5
+OLLAMA_EMBEDDING_MODEL=nomic-embed-text   # only used for ollama provider
+MEMORY_INJECT_MODE=auto                   # auto | legacy | sqlite (see CHANGELOG v4.22)
+
 # Optional Platforms
 WHATSAPP_ENABLED=true           # Enable WhatsApp (needs Chrome)
 DISCORD_TOKEN=<token>           # Enable Discord
