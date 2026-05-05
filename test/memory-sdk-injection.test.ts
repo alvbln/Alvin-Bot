@@ -59,6 +59,7 @@ describe("SDK smart prompt (semantic recall) on first turn (v4.11.0)", () => {
         return [];
       },
       reindexMemory: async () => ({ indexed: 0, total: 0 }),
+      isSqliteMemoryReady: () => false,
       initEmbeddings: async () => {},
       getIndexStats: () => ({ entries: 0, files: 0, lastReindex: 0, sizeBytes: 0 }),
     }));
@@ -79,6 +80,7 @@ describe("SDK smart prompt (semantic recall) on first turn (v4.11.0)", () => {
         ];
       },
       reindexMemory: async () => ({ indexed: 0, total: 0 }),
+      isSqliteMemoryReady: () => false,
       initEmbeddings: async () => {},
       getIndexStats: () => ({ entries: 0, files: 0, lastReindex: 0, sizeBytes: 0 }),
     }));
@@ -99,6 +101,7 @@ describe("SDK smart prompt (semantic recall) on first turn (v4.11.0)", () => {
         return [];
       },
       reindexMemory: async () => ({ indexed: 0, total: 0 }),
+      isSqliteMemoryReady: () => false,
       initEmbeddings: async () => {},
       getIndexStats: () => ({ entries: 0, files: 0, lastReindex: 0, sizeBytes: 0 }),
     }));
@@ -117,6 +120,7 @@ describe("SDK smart prompt (semantic recall) on first turn (v4.11.0)", () => {
         return [];
       },
       reindexMemory: async () => ({ indexed: 0, total: 0 }),
+      isSqliteMemoryReady: () => false,
       initEmbeddings: async () => {},
       getIndexStats: () => ({ entries: 0, files: 0, lastReindex: 0, sizeBytes: 0 }),
     }));
@@ -133,6 +137,7 @@ describe("SDK smart prompt (semantic recall) on first turn (v4.11.0)", () => {
         throw new Error("Embedding API down");
       },
       reindexMemory: async () => ({ indexed: 0, total: 0 }),
+      isSqliteMemoryReady: () => false,
       initEmbeddings: async () => {},
       getIndexStats: () => ({ entries: 0, files: 0, lastReindex: 0, sizeBytes: 0 }),
     }));

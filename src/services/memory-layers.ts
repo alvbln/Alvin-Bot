@@ -22,6 +22,7 @@ import {
   PROJECTS_MEMORY_DIR,
   MEMORY_FILE,
 } from "../paths.js";
+import { getEffectiveInjectMode } from "./memory-inject-mode.js";
 
 const MAX_L0_L1_CHARS = 5000;
 const MAX_L2_PROJECT_CHARS = 1500;
@@ -117,6 +118,9 @@ export function buildLayeredContext(query?: string): string {
   const parts: string[] = [];
   let l0l1Chars = 0;
 
+  // identity.md (L0) and preferences.md (L1) are ALWAYS plain-text injected,
+  // regardless of inject mode. They're tiny, manually curated, and contain
+  // always-on rules that semantic search may miss for short / generic queries.
   if (layers.identity) {
     const truncated = layers.identity.length > MAX_L0_L1_CHARS
       ? layers.identity.slice(0, MAX_L0_L1_CHARS) + "\n[...truncated]"
@@ -134,20 +138,25 @@ export function buildLayeredContext(query?: string): string {
     l0l1Chars += truncated.length;
   }
 
-  // Backwards-compat: if no identity AND no preferences, use the monolithic
-  // MEMORY.md as L1 fully (existing user setups). If split files exist,
-  // include MEMORY.md as a secondary L1 with tighter truncation.
-  if (!layers.identity && !layers.preferences && layers.longTerm) {
-    const truncated = layers.longTerm.length > MAX_L0_L1_CHARS
-      ? layers.longTerm.slice(0, MAX_L0_L1_CHARS) + "\n[...truncated]"
-      : layers.longTerm;
-    parts.push("## Long-term Memory (L1, monolithic)\n" + truncated);
-  } else if (layers.longTerm) {
-    const SECONDARY_CAP = 1500;
-    const truncated = layers.longTerm.length > SECONDARY_CAP
-      ? layers.longTerm.slice(0, SECONDARY_CAP) + "\n[...truncated]"
-      : layers.longTerm;
-    parts.push("## Long-term Memory (L1, legacy MEMORY.md)\n" + truncated);
+  // The monolithic MEMORY.md plain-text inject is gated by the effective
+  // inject mode (v4.22):
+  //   legacy → inject as before (full or secondary, depending on split-file presence)
+  //   sqlite → skip; the same content lives in the SQLite store and is
+  //            surfaced on-demand via searchMemory() in personality.ts
+  const mode = getEffectiveInjectMode();
+  if (mode === "legacy" && layers.longTerm) {
+    if (!layers.identity && !layers.preferences) {
+      const truncated = layers.longTerm.length > MAX_L0_L1_CHARS
+        ? layers.longTerm.slice(0, MAX_L0_L1_CHARS) + "\n[...truncated]"
+        : layers.longTerm;
+      parts.push("## Long-term Memory (L1, monolithic)\n" + truncated);
+    } else {
+      const SECONDARY_CAP = 1500;
+      const truncated = layers.longTerm.length > SECONDARY_CAP
+        ? layers.longTerm.slice(0, SECONDARY_CAP) + "\n[...truncated]"
+        : layers.longTerm;
+      parts.push("## Long-term Memory (L1, legacy MEMORY.md)\n" + truncated);
+    }
   }
 
   // L2: project-specific, only when a query is provided

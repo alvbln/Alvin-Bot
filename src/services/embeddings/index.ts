@@ -544,6 +544,32 @@ export function getEmbeddingsBackendStatus(): { available: boolean; error: strin
   return { available: SqliteClass !== null, error: sqliteLoadError?.message ?? null };
 }
 
+/**
+ * Synchronous probe: does the SQLite memory store have at least one indexed
+ * entry, regardless of which provider wrote it? Used by the inject-mode
+ * resolver to decide between legacy plain-text and SQLite-backed search at
+ * system-prompt build time (which is sync).
+ *
+ * Cheap: opens the DB if needed (idempotent), runs a single COUNT on whichever
+ * provider table exists. Does NOT call out to embedding APIs.
+ */
+export function isSqliteMemoryReady(): boolean {
+  if (!loadSqlite()) return false;
+  const db = openDb();
+  if (!db) return false;
+  for (const tbl of ["entries", "entries_fts"]) {
+    try {
+      const r = db.prepare(`SELECT COUNT(*) AS c FROM ${tbl}`).get() as
+        | { c: number }
+        | undefined;
+      if (r && r.c > 0) return true;
+    } catch {
+      /* table missing — try next */
+    }
+  }
+  return false;
+}
+
 // ── Re-exports for callers ──────────────────────────────
 
 export type { SearchResult } from "./provider.js";

@@ -14,5 +14,6 @@ export {
   getIndexStats,
   getEmbeddingsBackendStatus,
   closeEmbeddingsDb,
+  isSqliteMemoryReady,
 } from "./embeddings/index.js";
 export type { SearchResult, IndexStats } from "./embeddings/index.js";
