@@ -280,9 +280,16 @@ function chunkMarkdown(content: string, source: string): Chunk[] {
  * so the next reindex repopulates from disk against the new schema. Idempotent.
  */
 function syncProviderSchema(db: SqliteDb, provider: MemoryProvider): { switched: boolean; previous: string | null } {
-  const storedModel = getMeta(db, "embedding_model");
-  const storedSchema = getMeta(db, "schemaVersion");
-  const switched = (storedModel !== null && storedModel !== provider.name) || storedSchema === "1";
+  // Legacy v4.20 DBs only have meta.model (set by embeddings-migration.ts).
+  // Treat that as the previous embedding_model so we don't accidentally
+  // wipe a 49 MB vector store just because the meta key was renamed.
+  const storedModel = getMeta(db, "embedding_model") ?? getMeta(db, "model");
+
+  // Schema mismatch is detected by provider-name change ONLY. Bumping
+  // SCHEMA_VERSION alone must NOT trigger a drop — vector providers (Gemini,
+  // OpenAI, Ollama) all share the same `entries` table layout, so a refactor
+  // version bump shouldn't cost users a full re-embed against the API.
+  const switched = storedModel !== null && storedModel !== provider.name;
 
   if (switched) {
     clearAllProviderSchemas(db);
