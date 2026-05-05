@@ -44,6 +44,9 @@ export class Fts5Provider implements MemoryProvider {
   }
 
   initSchema(db: Database): void {
+    // FTS5 doesn't allow secondary indexes on the virtual table itself;
+    // source filtering happens via WHERE clauses on the UNINDEXED column,
+    // which is fast enough at our corpus size (<100k chunks).
     db.exec(`
       CREATE VIRTUAL TABLE IF NOT EXISTS ${TABLE} USING fts5(
         id UNINDEXED,
@@ -51,7 +54,6 @@ export class Fts5Provider implements MemoryProvider {
         text,
         tokenize = 'unicode61 remove_diacritics 2'
       );
-      CREATE INDEX IF NOT EXISTS idx_fts_source ON ${TABLE}(source);
     `);
   }
 

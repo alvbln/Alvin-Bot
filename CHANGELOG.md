@@ -2,6 +2,67 @@
 
 All notable changes to Alvin Bot are documented here.
 
+## [4.22.0] — 2026-05-05
+
+### 🧠 Memory architecture overhaul: pluggable providers + smart inject
+
+Public users without `GOOGLE_API_KEY` (the v4.20–v4.21 default for embeddings) now get a working indexed memory store out of the box. The embeddings layer is refactored behind a provider interface with four backends auto-detected at startup:
+
+| Tier | Provider | Setup | Cost | Dim |
+|---|---|---|---|---|
+| 1 | Gemini (`gemini-embedding-001`) | `GOOGLE_API_KEY` | free tier | 3072 |
+| 2 | OpenAI (`text-embedding-3-small`) | `OPENAI_API_KEY` | ~$0.02 / 1M tokens | 1536 |
+| 3 | Ollama (default `nomic-embed-text`) | `ollama pull nomic-embed-text` | free, local, private | 768 |
+| 4 | **FTS5 (BM25 keyword)** | nothing | free | n/a |
+
+The FTS5 fallback is the headline: SQLite's built-in full-text-search virtual table with BM25 ranking. No API key, no network, no setup. Indexes the same chunks as the vector providers (`MEMORY.md`, daily logs, project files, hub memory, asset index) and ranks matches by relevance. Excellent for proper-noun and exact-term lookups (project names, commands, error messages); weaker than vector search for synonyms and conceptual paraphrase queries — but available everywhere.
+
+**Upgrade path.** A user starts on FTS5 (no keys needed). Later they set `GOOGLE_API_KEY` in their `.env` → next bot start detects the schema mismatch via `meta.embedding_model`, drops the FTS5 table, initialises the vector schema, and reindexes. Same in reverse. All seamless, no manual steps.
+
+Override the auto-detection with `EMBEDDINGS_PROVIDER=gemini|openai|ollama|fts5|auto` (default `auto`).
+
+### ✂️ MEMORY.md no longer bulk-injected into every system prompt (when SQLite is populated)
+
+Pre-v4.22, `MEMORY.md` (typically tens of KB of curated long-term knowledge) and the last two daily logs were plain-text-injected into the system prompt on **every turn**. With a populated SQLite store, the same content is available via the smaller, query-targeted `searchMemory()` retrieval — much smaller prompts, much more relevant context.
+
+New `MEMORY_INJECT_MODE` env var:
+
+- `auto` (default) — sqlite when the store has indexed entries, else legacy
+- `legacy` — pre-v4.22 behaviour, full plain-text inject every turn
+- `sqlite` — never plain-text-inject `MEMORY.md` or daily logs (force smart mode regardless of store state)
+
+Always plain-text injected regardless of mode: `identity.md` (L0) and `preferences.md` (L1) — these are tiny by design and contain always-on facts that semantic search may miss for short or generic queries. Recommended pattern: keep critical "never X" / "always Y" rules in `preferences.md`, let the bulk knowledge live in `MEMORY.md` and be retrieved on demand.
+
+For users still on the legacy monolithic `MEMORY.md` setup (no `identity.md`, no `preferences.md`), auto mode kicks in only after the SQLite store is populated — until then, plain-text injection of `MEMORY.md` continues to work as before. Zero-touch upgrade.
+
+### 🔇 Quieter logs for missing keys
+
+The `⚠️ Embeddings init failed: Google API key not configured` warning is gone — that startup line is now `ℹ️ Memory provider: fts5-bm25 (keyword-local). Initial index will run on first use.` Public users without Gemini no longer see a scary warning that suggested the bot was broken when in fact it was working correctly.
+
+### 🩺 `alvin-bot doctor` Memory section expanded
+
+Reports the active provider, dimension, indexed entry/file counts, last-reindex timestamp, and effective inject mode. For not-yet-initialised stores it predicts which provider will run on first start so users can confirm the auto-detection picked what they expected.
+
+```
+  Memory:
+  ✅ Provider: gemini-embedding-001 (vector-cloud, 3072-dim)
+     3827 entries / 316 files indexed, 48.8 MB on disk
+     Last reindex: 25 h ago
+     Inject mode: sqlite (auto)
+```
+
+### Architecture
+
+- New: `src/services/embeddings/` directory — `provider.ts` (interface), `vector-base.ts` (shared vector logic), `gemini.ts`, `openai.ts`, `ollama.ts`, `fts5.ts`, `auto-detect.ts`, `index.ts` (facade)
+- New: `src/services/memory-inject-mode.ts` — env resolver
+- Updated: `src/services/memory-layers.ts`, `src/services/memory.ts` — gate plain-text injection on inject mode
+- `src/services/embeddings.ts` is now a thin re-export shim — all existing imports keep working
+
+### Tests
+
+- 24 new tests across FTS5 provider, auto-detection, and inject-mode resolver
+- All 535 existing tests still pass (one pre-existing port-binding flake in `web-server-integration.test.ts` is unrelated)
+
 ## [4.21.0] — 2026-05-04
 
 ### 🌐 New skill: Agent Browser (Tier-1.5)
