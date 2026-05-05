@@ -13,7 +13,7 @@ const DIM = 1536;
 const BATCH_SIZE = 100;
 
 export class OpenAIProvider extends VectorProviderBase {
-  readonly name = `openai-${MODEL}`;
+  readonly name = MODEL;
   readonly dim = DIM;
   readonly tier = "vector-cloud" as const;
 

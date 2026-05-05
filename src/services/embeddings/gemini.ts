@@ -13,7 +13,7 @@ const MODEL = "gemini-embedding-001";
 const BATCH_SIZE = 100;
 
 export class GeminiProvider extends VectorProviderBase {
-  readonly name = `gemini-${MODEL}`;
+  readonly name = MODEL;
   readonly dim = 3072;
   readonly tier = "vector-cloud" as const;
 

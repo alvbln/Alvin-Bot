@@ -41,9 +41,9 @@ export class OllamaProvider extends VectorProviderBase {
   constructor() {
     super();
     const model = ollamaModel();
-    this.name = `ollama-${model}`;
     // Strip any tag like `:latest` for the dim lookup.
     const baseModel = model.split(":")[0];
+    this.name = `ollama:${model}`;
     this.dim = KNOWN_DIMS[baseModel] ?? 0; // 0 means "discover dynamically on first embed"
   }
 
