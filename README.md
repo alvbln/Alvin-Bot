@@ -586,96 +586,40 @@ alvin-bot version   # Show version
 
 ## 🗺️ Roadmap
 
-- [x] **Phase 1** — Multi-Model Engine (provider abstraction, fallback chains)
-- [x] **Phase 2** — Memory System (vector search, user profiles, smart context)
-- [x] **Phase 3** — Rich Interactions (video messages, browser automation, email)
-- [x] **Phase 4** — Plugins & Tools (plugin ecosystem, MCP client, custom tools)
-- [x] **Phase 5** — CLI Installer (setup wizard, Docker, health check)
-- [x] **Phase 6** — Web Dashboard (chat, settings, file manager, terminal)
-- [x] **Phase 7** — Multi-Platform (Telegram, Discord, WhatsApp, Signal adapters)
-- [x] **Phase 8** — Universal Tool Use *(NEW)* — All providers get agent powers:
-  - ✅ Shell execution, file read/write/edit, directory listing
-  - ✅ Python execution (Excel, PDF, charts, data processing)
-  - ✅ Web fetch & search
-  - ✅ Auto-detect function calling support per provider
-  - ✅ Graceful fallback to text-only for providers without tool support
-- [x] **Phase 9** — Skill System + Self-Awareness + Language Adaptation:
-  - ✅ SKILL.md files for specialized domain knowledge (email, data analysis, code, docs, research, sysadmin)
-  - ✅ Auto-matching: skill triggers activate contextual expertise on demand
-  - ✅ Self-Awareness Core: agent knows it IS the AI (no external LLM calls for text tasks)
-  - ✅ Automatic language detection and adaptation (EN default, learns user preference)
-  - ✅ Human-readable cron schedules + visual schedule builder in WebUI
-  - ✅ Platform Manager refactor: all adapters via unified registration system
-  - ✅ Cron notifications for all platforms (Telegram, WhatsApp, Discord, Signal)
-  - ✅ PM2 auto-refresh on Maintenance page
-  - ✅ WhatsApp group whitelist with per-contact access control
-  - ✅ Owner approval gate (Telegram → WhatsApp DM → Discord → Signal fallback)
-  - ✅ Full media processing: photos, documents, audio/voice, video across all platforms
-  - ✅ File Browser: create, edit, delete files with safety guards
-  - ✅ Git history sanitized (personal data removed via git-filter-repo)
-- [x] **Phase 10** — Anthropic API Provider + WebUI Provider Management
-  - [x] Anthropic API key test case in WebUI (validation endpoint)
-  - [x] "Add Provider" flow in WebUI — add new providers post-setup without editing `.env`
-  - [x] Claude SDK guided setup from WebUI (install check, login status, step-by-step)
-  - [x] `.env.example` update with `ANTHROPIC_API_KEY`
-- [x] **Phase 11** — WebUI Professional Redesign
-  - [x] Replace emoji icons with Lucide SVG icons (60+ icons, sidebar, pages, buttons)
-  - [x] i18n framework (`i18n.js`) — bilingual DE/EN with browser-locale detection (~400 keys)
-  - [x] Language toggle in sidebar footer (DE | EN)
-  - [x] Typography upgrade (Inter webfont via Google Fonts)
-  - [x] Gradient accents + subtle glassmorphism on cards
-  - [x] Smooth page transitions (fade animation on page switch)
-  - [x] Skeleton loading states + status pulse animations
-  - [x] Command Palette (Cmd+K / Ctrl+K) with fuzzy search
-- [x] **Phase 12** — Native Installers (Non-Techie Friendly)
-  - [x] Electron wrapper (embedded Node.js + WebUI + tray icon)
-  - [x] macOS `.dmg` build via electron-builder (arm64)
-  - [ ] Windows `.exe` (NSIS) via electron-builder
-  - [ ] Linux `.AppImage` + `.deb` via electron-builder
-  - [x] Auto-update mechanism (electron-updater)
-  - [x] GUI Setup Wizard (provider selection, Telegram token, first-run experience)
-  - [ ] Homebrew formula (`brew install alvin-bot`)
-  - [ ] Scoop manifest for Windows
-  - [ ] One-line install script
-  - [x] Docker Compose polish (production-ready `docker-compose.yml`)
-- [x] **Phase 13** — npm publish (security audit)
-- [x] **Phase 14** — Async Sub-Agents (v4.10.0)
-  - [x] `run_in_background: true` system prompt hint for Claude SDK
-  - [x] Async-agent watcher polling `outputFile` JSONL, delivering results as separate messages
-  - [x] Session-bound sub-agents (each session spawns its own background workers)
-- [x] **Phase 15** — Memory Persistence + Smart Loading (v4.11.0)
-  - [x] Session persistence across bot restarts (debounced atomic flush, v2 envelope)
-  - [x] SDK memory injection (MEMORY.md in every system prompt, not just tool-call dependent)
-  - [x] Semantic recall on SDK first-turn via embeddings
-  - [x] Layered memory stack (L0 identity / L1 preferences / L2 projects / L3 vector search)
-  - [x] Auto-fact extraction during compaction (Mem0-style)
-- [x] **Phase 16** — Multi-Session + Slack Interface (v4.12.0)
-  - [x] Session-key fix: platform-message.ts routes through `buildSessionKey()`
-  - [x] Workspace registry with hot-reload (`~/.alvin-bot/workspaces/*.md`)
-  - [x] Workspace resolver in platform handlers (per-channel persona + cwd)
-  - [x] Slack adapter polish: progress ticker (`chat.update`), typing status (`assistant.threads.setStatus`), channel name cache
-  - [x] Telegram `/workspace` + `/workspaces` commands (feature parity)
-  - [x] Per-workspace cost aggregation + Web UI workspace cards
-  - [x] Slack setup guide + copy-paste app manifest (in GitHub Release assets)
-- [x] **Phase 17** — Truly detached sub-agents + multi-platform dispatch (v4.13.0 – v4.14.2, 2026-04-16)
-  - [x] `alvin_dispatch_agent` MCP tool — spawns independent `claude -p` subprocesses that survive parent aborts (v4.13.0)
-  - [x] Slack `/alvin` slash command (namespaced parent with subcommands: status / new / effort / help + LLM fallthrough) (v4.13.2)
-  - [x] Sub-agent dispatch on Slack, Discord, WhatsApp via platform-aware delivery registry (v4.14.0)
-  - [x] `/subagents list` merged view — v4.0.0 bot-level agents + v4.13+ detached dispatches in one list (v4.14.1)
-  - [x] Watcher zombie guard — missing outputFile > 10 min delivers as failed instead of 12h timeout (v4.14.2)
-  - [x] Staleness-based partial output recovery for interrupted sub-agents (v4.12.4)
-  - [ ] SQLite migration of the embeddings index (currently 128 MB JSON)
-  - [ ] Per-workspace memory layer (additive over global) — facts learned in one workspace stay there unless explicitly promoted to global
-  - [ ] Per-workspace provider override (`provider:` in frontmatter) — e.g. one workspace uses Claude Opus, another uses a cheaper model
-  - [ ] Per-workspace skill allowlist — scope Apple Notes to personal workspace, sysadmin only to devops workspace, etc.
-  - [ ] Multi-User Slack (real `per-channel-peer` mode) — different users in the same Slack channel get their own sub-sessions
-  - [ ] Workspace cloning / templates — `/workspace clone my-project as my-fork` spins up a new workspace from an existing one
-  - [ ] Daily log decay / archive — older daily logs move to cold storage after N days
-- [ ] **Phase 18** — Security + Platform hardening (from v4.12.1 audit, prioritized)
-  - [ ] **P1 — Electron major upgrade** (35 → 41+) — fixes 1 HIGH + 5 MODERATE Electron CVEs in the Desktop-Build path. Major version jump, requires full rebuild + test of `.dmg` flow. Separate release (likely bundled with Windows `.exe` work).
-  - [ ] **P1 — Prompt injection defense strategy** — not a single fix but a design debate: heuristic filters vs allow-list vs no-sandbox-accept-the-risk. Currently handled as a documented design-constraint (README security section), not as a code filter. When we decide the policy, implement it across all message entry points.
-  - [ ] **P2 — TypeScript 5 → 6 upgrade** — major release, likely breaking changes in strict mode. Needs a dedicated release + test sweep. Low priority since 5.x is still supported.
-  - [ ] **P0 for v5.0 — MCP plugin sandboxing** — currently MCP servers run with full Node privileges. Plan: run each MCP in a child process with restricted FS + network policy (similar to deno-permission model). Architectural change, v5.0 territory.
+> Per-version details: see [`CHANGELOG.md`](CHANGELOG.md). The roadmap is a forward-looking summary, not a changelog.
+
+### ✅ Recently shipped
+
+| Version | Theme | Highlights |
+|---|---|---|
+| **v4.22** *(May 2026)* | Memory architecture overhaul | Pluggable embedding providers — **Gemini · OpenAI · Ollama · FTS5 (zero-config keyword fallback)**. Auto-detection picks the best available, so users with no API key still get a working indexed memory store. Smart inject mode stops bulk-injecting `MEMORY.md` once SQLite is populated. |
+| **v4.21** | Agent Browser skill | Tier-1.5 token-efficient web automation via the [agent-browser](https://github.com/vercel-labs/agent-browser) CLI — opt-in by install. ~90 % token reduction vs Playwright on cooperative pages. |
+| **v4.20** | SQLite-backed vector memory | Replaces the legacy 128 MB JSON index. Automatic migration on first start, per-chunk INSERT/UPDATE, lazy native binary load with graceful fallback. |
+| **v4.18 – v4.19** | Reliability + per-workspace overrides | SDK auto-recovery on token rotation / quota exhaustion / empty streams. Per-workspace `effort` / `provider` / `voice` / `temperature` / `toolset`. |
+| **v4.17** | Hardening audit | Disk cleanup service, hardening fixes from internal audit. |
+| **v4.13 – v4.14** | Detached sub-agents | `alvin_dispatch_agent` MCP tool spawns independent `claude -p` subprocesses that survive parent aborts. Multi-platform dispatch (Slack / Discord / WhatsApp). Watcher zombie guard. |
+| **v4.10 – v4.12** | Multi-session + Slack | Workspace registry with hot-reload, per-channel personas + cwd, Slack adapter with progress ticker + typing status, owner approval gate, async sub-agents. |
+
+### 🏛️ Foundations (built before v4.10)
+
+Multi-model provider abstraction with fallback chains · plugin & skill ecosystems with hot-reload · multi-platform adapters (Telegram, WhatsApp, Discord, Signal, Slack) · Web UI with i18n + command palette · native macOS `.dmg` via Electron · Docker Compose · npm distribution · MCP client + custom tools · universal tool use across providers · full media pipeline (audio · video · photo · voice).
+
+### 🎯 On the radar
+
+| Priority | Item | Why |
+|---|---|---|
+| **P0 → v5.0** | MCP plugin sandboxing | MCP servers currently run with full Node privileges. Plan: child process with restricted FS + network policy (deno-permission style). Architectural change. |
+| **P1** | Electron major upgrade (35 → 41+) + Windows `.exe` | Closes desktop-build CVEs, unblocks the only platform still missing a native installer. |
+| **P1** | Prompt injection defense policy | Needs a design decision (heuristic filter / allow-list / accept-the-risk with clearer warnings) and consistent enforcement at every message entry point. |
+| **P2** | Per-workspace memory layer | Facts learned in one workspace stay scoped unless explicitly promoted. Builds on the v4.22 SQLite store. |
+| **P2** | Per-workspace skill allowlist | Scope Apple Notes to personal workspace, sysadmin tools to devops only, etc. |
+| **P2** | Multi-user Slack (`per-channel-peer`) | Different users in the same Slack channel get their own sub-sessions. |
+| **P3** | Linux `.AppImage` / `.deb`, Homebrew formula, Scoop manifest, one-line install script | Platform reach for non-npm users. |
+| **P3** | Daily-log decay / archive | Older daily logs move to cold storage after N days. |
+| **P3** | Workspace cloning / templates | `/workspace clone my-project as my-fork` spins up a new workspace from an existing one. |
+| **P3** | TypeScript 5 → 6 | 5.x still supported; strict-mode break-fix work, not urgent. |
+
+Pull requests welcome — see [`CONTRIBUTING.md`](CONTRIBUTING.md).
 
 ---
 
