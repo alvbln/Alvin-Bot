@@ -1,104 +1,49 @@
 # 🤖 Alvin Bot — Autonomous AI Agent
 
-> Your personal AI assistant — on Telegram, WhatsApp, Discord, Signal, Terminal, and Web.
+> Your personal AI agent — on Telegram, WhatsApp, Discord, Slack, Signal, Terminal, and Web.
 
-Alvin Bot is an open-source, self-hosted AI agent that lives where you chat. Built on a multi-model engine with full system access, memory, plugins, and a rich web dashboard. Not just a chatbot — an autonomous agent that remembers, acts, and learns.
+Open-source, self-hosted, multi-model. Lives where you chat, has full shell + filesystem access, remembers across sessions, and dispatches detached sub-agents for long-running work. Built on the Claude Agent SDK with a provider-agnostic engine that also drives OpenAI, Groq, Gemini, NVIDIA NIM, OpenRouter, and Ollama.
 
-
----
-
-## 📸 Preview
-
-<table>
-<tr>
-<td align="center"><b>💬 Chat (Dark Mode)</b><br><img src="docs/screenshots/01-Chat-Dark-Conversation.png" width="400"></td>
-<td align="center"><b>📊 Dashboard</b><br><img src="docs/screenshots/03-Dashboard-Overview.png" width="400"></td>
-</tr>
-<tr>
-<td align="center"><b>🤖 AI Models & Providers</b><br><img src="docs/screenshots/04-AI-Models-and-Providers.png" width="400"></td>
-<td align="center"><b>🎭 Personality Editor</b><br><img src="docs/screenshots/05-Personality-Editor.png" width="400"></td>
-</tr>
-<tr>
-<td align="center"><b>💬 Telegram</b><br><img src="docs/screenshots/TG.png" width="400"></td>
-<td align="center"><b>📱 Messaging Platforms</b><br><img src="docs/screenshots/12-Messaging-Platforms.png" width="400"></td>
-</tr>
-<tr>
-<td align="center"><b>🔧 Custom Tools</b><br><img src="docs/screenshots/10-Custom-Tools.png" width="400"></td>
-<td align="center"><b>🩺 Health & Maintenance</b><br><img src="docs/screenshots/15-Maintenance-and-Health.png" width="400"></td>
-</tr>
-</table>
-
-<details>
-<summary><b>🖼️ More Screenshots</b> (click to expand)</summary>
-<br>
-
-| Feature | Screenshot |
-|---------|-----------|
-| Login | <img src="docs/screenshots/00-Login.png" width="500"> |
-| Chat (Light) | <img src="docs/screenshots/02-Chat.png" width="500"> |
-| Memory Manager | <img src="docs/screenshots/06-Memory-Manager.png" width="500"> |
-| Active Sessions | <img src="docs/screenshots/07-Active-Sessions.png" width="500"> |
-| File Browser | <img src="docs/screenshots/08-File-Browser.png" width="500"> |
-| Scheduled Jobs | <img src="docs/screenshots/09-Scheduled-Jobs.png" width="500"> |
-| Plugins & MCP | <img src="docs/screenshots/11-Plugins-and-MCP.png" width="500"> |
-| WhatsApp Groups | <img src="docs/screenshots/12.1-Messaging-Platforms-WhatsApp-Groups-List.png" width="500"> |
-| WA Group Details | <img src="docs/screenshots/12.2-Messaging-Platforms-WA-Group-Details.png" width="500"> |
-| User Management | <img src="docs/screenshots/13-User-Management.png" width="500"> |
-| Web Terminal | <img src="docs/screenshots/14-Web-Terminal.png" width="500"> |
-| Settings & Env | <img src="docs/screenshots/16-Settings-and-Env.png" width="500"> |
-| Telegram Commands | <img src="docs/screenshots/TG-commands.png" width="500"> |
-| macOS Installer | <img src="docs/screenshots/_Mac-Installer.png" width="500"> |
-
-</details>
+> **What's new — v4.22 (May 2026):** Pluggable memory backends — Gemini · OpenAI · Ollama · **FTS5 keyword fallback (zero-config)**. Users without an embedding API key now get a working indexed memory store out of the box. Smart inject mode trims ~25 k tokens per turn off long system prompts. [Full changelog →](CHANGELOG.md)
 
 ---
-
 
 ## ✨ Features
 
 ### 🧠 Intelligence
-- **Multi-Model Engine** — Claude (Agent SDK with full tool use), OpenAI, Groq, NVIDIA NIM, Google Gemini, OpenRouter, or any OpenAI-compatible API
-- **Automatic Fallback** — If one provider fails, seamlessly tries the next
-- **Heartbeat Monitor** — Pings providers every 5 minutes, auto-failover after 2 failures, auto-recovery
-- **User-Configurable Fallback Order** — Rearrange provider priority via Telegram (`/fallback`), Web UI, or API
-- **Adjustable Thinking** — From quick answers (`/effort low`) to deep analysis (`/effort max`)
-- **Persistent Memory** — Remembers across sessions via vector-indexed knowledge base; session state (Claude SDK resume tokens, conversation history, language, effort) survives bot restarts (v4.11.0)
-- **Multi-Session Workspaces** — Run multiple parallel, context-isolated sessions on the same bot — one per Slack channel or per Telegram `/workspace` — each with its own working directory, purpose, and persona. Memory, skills, and sub-agents stay globally shared (v4.12.0). [How-to ↓](#-multi-session-workspaces-v4120)
-- **Truly Detached Sub-Agents** — Claude dispatches long-running research/audit tasks via the `alvin_dispatch_agent` MCP tool, which spawns independent `claude -p` subprocesses with their own PID + process group. Main session stays fully responsive, user can interrupt freely without killing sub-agents. Results deliver as separate messages. Works identically on Telegram, Slack, Discord, and WhatsApp (v4.13.0+ dispatch, v4.14.0 multi-platform)
-- **Smart Tool Discovery** — Scans your system at startup, knows exactly what CLI tools, plugins, and APIs are available
-- **Skill System** — 12 built-in SKILL.md files (code, data analysis, email, docs, research, sysadmin, browse, etc.) auto-activate based on message context
-- **Self-Awareness** — Knows it IS the AI model — won't call external APIs for tasks it can do itself
-- **Automatic Language Detection** — Detects user language (EN/DE/ES/FR) and adapts; learns preference over time
+- **Multi-model engine** — Claude Agent SDK · OpenAI · Groq · NVIDIA NIM · Gemini · OpenRouter · Ollama · Codex CLI · any OpenAI-compatible API
+- **Automatic fallback + heartbeat monitor** — pings providers every 5 min, auto-failover after 2 failures, auto-recovery; reorder priority via Telegram `/fallback`, Web UI, or API
+- **Adjustable thinking depth** — `/effort low` to `/effort max`
+- **Pluggable memory backends (v4.22)** — Gemini · OpenAI · Ollama · FTS5 keyword fallback. Auto-detection picks the best available. Indexed search across `MEMORY.md`, daily logs, project files, hub memory, asset index. Override via `EMBEDDINGS_PROVIDER`.
+- **Smart system-prompt injection (v4.22)** — once SQLite is populated, stops bulk-injecting `MEMORY.md` and surfaces only the chunks relevant to the user's current message. Cuts ~25 k tokens per turn for typical setups. `MEMORY_INJECT_MODE=auto|legacy|sqlite` to override.
+- **Layered memory (L0–L3)** — `identity.md` + `preferences.md` always plain-text · project memories on topic match · daily logs / curated knowledge via semantic or keyword search
+- **Persistent sessions** — Claude SDK resume tokens, conversation history, language, effort survive bot restarts
+- **Multi-session workspaces** — parallel context-isolated sessions per Slack channel or `/workspace` switch, each with its own cwd, purpose, persona. Memory + skills stay globally shared. [How-to ↓](#-multi-session-workspaces-v4120)
+- **Detached sub-agents** — `alvin_dispatch_agent` MCP tool spawns independent `claude -p` subprocesses that survive parent aborts. Results deliver as separate messages. Works identically on Telegram / Slack / Discord / WhatsApp.
+- **Smart tool discovery** — scans your system at startup; typical install surfaces 30–70 tools depending on what's locally available
+- **Skill system** — 14 SKILL.md files (see [Skills ↓](#-skills)) auto-activate based on message context
+- **Self-awareness + auto-language** — knows it IS the AI · detects EN/DE/ES/FR and adapts; learns preference over time
 
 ### 💬 Multi-Platform
-- **Telegram** — Full-featured with streaming, inline keyboards, voice, photos, documents
-- **Slack** — Socket Mode bot via `@slack/bolt`, DMs + @mentions, file attachments, reactions, `assistant.threads.setStatus` typing indicator. **One channel = one isolated workspace.** See [Multi-Session Workspaces](#-multi-session-workspaces-v4120) below.
-- **WhatsApp** — Via WhatsApp Web: self-chat as AI notepad, group whitelist with per-contact access control, full media support (photos, docs, audio, video)
-- **WhatsApp Group Approval** — Owner gets approval requests via Telegram (or WhatsApp DM fallback) before the bot responds to group messages. Silent — group members see nothing.
-- **Discord** — Server bot with mention/reply detection, slash commands
-- **Signal** — Via signal-cli REST API with voice transcription
-- **Terminal** — Rich TUI with ANSI colors and streaming (`alvin-bot tui`)
-- **Web UI** — Full dashboard with chat, settings, file manager, terminal, workspace overview
+- **Telegram** — streaming, inline keyboards, voice, photos, documents
+- **Slack** — Socket Mode via `@slack/bolt`, DMs + @mentions, file attachments, `assistant.threads.setStatus` typing. **One channel = one isolated workspace.**
+- **WhatsApp** — via WhatsApp Web; self-chat as AI notepad, group whitelist with per-contact access, full media. Owner approval gate routes to Telegram (DM / Discord / Signal fallback) before the bot replies.
+- **Discord** — server bot with mention/reply detection and slash commands
+- **Signal** — via signal-cli REST API, voice transcription
+- **Terminal** — rich TUI with ANSI colors + streaming (`alvin-bot tui`)
+- **Web UI** — full dashboard, chat, settings, file manager, terminal, workspace overview
 
 ### 🔧 Capabilities
-- **52+ Built-in Tools** — Shell, files, email, screenshots, PDF, media, git, system control
-- **Plugin System** — 6 built-in plugins (weather, finance, notes, calendar, email, smarthome)
-- **MCP Client** — Connect any Model Context Protocol server
-- **Cron Jobs** — Scheduled tasks with AI-driven creation ("check my email every morning")
-- **Voice** — Speech-to-text (Groq Whisper) + text-to-speech (Edge TTS)
-- **Vision** — Photo analysis, document scanning, screenshot understanding
-- **Image Generation** — Via Google Gemini / DALL·E (with API key)
-- **Web Browsing** — Fetch and summarize web pages
+- **Tool layer** — Shell · files · Python · git · email · PDF · media · vision · screenshots · system control. Universal tool use across any provider that supports function calling; text-only fallback for those that don't.
+- **6 built-in plugins** — weather · finance · notes · calendar · email · smarthome
+- **MCP client** — connect any Model Context Protocol server
+- **Cron** — AI-driven scheduled tasks (`"check my email every morning"`)
+- **Voice** — STT via Groq Whisper, TTS via Edge TTS or ElevenLabs
+- **Vision + image generation** — photo / document analysis · Gemini / DALL·E generation with API key
+- **Browser** — 4-tier strategy: WebFetch · stealth Playwright · CDP with persistent profile · agent-browser CLI (Tier-1.5, opt-in)
 
 ### 🖥️ Web Dashboard
-- **Live Chat** — WebSocket streaming, same experience as Telegram
-- **Model Switcher** — Change AI models on the fly
-- **Platform Setup** — Configure all messengers and providers via UI, WhatsApp group management inline
-- **File Manager** — Browse, edit, create files in the working directory
-- **Memory Editor** — View and edit the agent's knowledge base
-- **Session Browser** — Inspect conversation history
-- **Terminal** — Run commands directly from the browser
-- **Maintenance** — Health checks, backups, bot controls
+- WebSocket streaming chat · model switcher · platform & provider setup · file manager · memory editor · session browser · in-browser terminal · maintenance + health · workspace cards with cost aggregation
 
 ---
 
@@ -121,7 +66,7 @@ Free AI providers available — no credit card needed. **Privacy-first?** Pick t
 
 ### 📘 First-time setup walkthroughs
 
-Step-by-step guides with screenshots and screen-for-screen instructions:
+Step-by-step printable PDF guides:
 
 | Platform | PDF (printable) |
 |---|---|
@@ -262,69 +207,72 @@ If your AI provider isn't working, run `doctor` — it tests the actual API conn
 
 ## 🏗️ Architecture
 
+```mermaid
+flowchart TB
+    classDef ent fill:#1e293b,color:#e2e8f0,stroke:#475569
+    classDef core fill:#0f172a,color:#f1f5f9,stroke:#3b82f6,stroke-width:2px
+    classDef prov fill:#1e293b,color:#cbd5e1,stroke:#64748b
+    classDef mem fill:#1e293b,color:#cbd5e1,stroke:#10b981
+
+    TG[Telegram]:::ent
+    SL[Slack]:::ent
+    WA[WhatsApp]:::ent
+    DC[Discord]:::ent
+    SG[Signal]:::ent
+    WEB[Web UI · TUI · CLI]:::ent
+
+    TG & SL & WA & DC & SG & WEB --> WR
+
+    WR[Workspace Resolver<br/>per-channel cwd + persona]:::core
+    WR --> ENG[Engine<br/>routing · fallback · heartbeat]:::core
+
+    ENG --> CL[Claude SDK]:::prov
+    ENG --> OAI[OpenAI · Groq · Gemini ·<br/>NVIDIA · OpenRouter]:::prov
+    ENG --> OL[Ollama · Codex CLI ·<br/>OpenAI-compatible]:::prov
+
+    ENG -.reads.-> MEM
+    MEM[Memory Layer]:::mem
+    MEM --> L0[L0 / L1<br/>identity.md · preferences.md<br/>always plain-text]:::mem
+    MEM --> SQL[SQLite store · provider auto-detect<br/>Gemini · OpenAI · Ollama · FTS5]:::mem
+
+    ENG -.dispatches.-> SUB[Detached sub-agents<br/>independent claude -p]:::prov
 ```
-                            ┌──────────────┐
-                            │   Web UI     │ (Dashboard, Workspaces, Chat, Settings)
-                            └──────┬───────┘
-                                   │ HTTP/WS
-┌──────────┐  ┌───────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐
-│ Telegram │  │ Slack │  │ WhatsApp │  │ Discord  │  │  Signal  │
-└────┬─────┘  └───┬───┘  └────┬─────┘  └────┬─────┘  └────┬─────┘
-     │            │           │             │              │
-     └────────────┴───────────┴─────────────┴──────────────┘
-                           │
-                 ┌─────────┴──────────┐
-                 │ Workspace Resolver │ (per-channel context: cwd + persona)
-                 └─────────┬──────────┘
-                           │
-                    ┌──────┴───────┐
-                    │   Engine     │ (Query routing, fallback)
-                    └──────┬───────┘
-                           │
-          ┌────────────────┼────────────────┐
-          │                │                │
-   ┌──────┴──────┐  ┌─────┴──────┐  ┌──────┴──────┐
-   │ Claude SDK  │  │  OpenAI    │  │  Custom     │
-   │ (full agent)│  │ Compatible │  │  Models     │
-   └─────────────┘  └────────────┘  └─────────────┘
-```
 
-### Provider Types
+### Provider matrix
 
-| Provider | Tool Use | Streaming | Vision | Auth |
-|----------|----------|-----------|--------|------|
-| Claude SDK | ✅ Full (native Bash, Read, Write, Web) | ✅ | ✅ | Claude CLI (OAuth) |
-| OpenAI, Groq, Gemini | ✅ Full (Shell, Files, Python, Web) | ✅ | Varies | API Key |
-| NVIDIA NIM | ✅ Full (Shell, Files, Python, Web) | ✅ | Varies | API Key (free) |
-| OpenRouter | ✅ Full (Shell, Files, Python, Web) | ✅ | ✅ | API Key |
-| Other OpenAI-compatible | ⚡ Auto-detect | ✅ | Varies | API Key |
+| Provider | Tool use | Streaming | Vision | Auth |
+|---|---|---|---|---|
+| Claude SDK (Agent) | ✅ native (Bash, Read, Write, Web, MCP) | ✅ | ✅ | Claude CLI OAuth |
+| OpenAI · Groq · Gemini · NVIDIA NIM · OpenRouter | ✅ universal tool use | ✅ | varies | API key |
+| Ollama (local) | ✅ via tool-bridge | ✅ | varies | none |
+| Codex CLI | ✅ subprocess | ✅ | — | Codex CLI auth |
+| Any OpenAI-compatible | ⚡ auto-detect | ✅ | varies | API key |
 
-> **Universal Tool Use:** Alvin Bot gives full agent capabilities to *any* provider that supports function calling — not just Claude. Shell commands, file operations, Python execution, web search, and more work across all major providers. If a provider doesn't support tool calls, Alvin Bot automatically falls back to text-only chat mode.
+> **Universal tool use** — Alvin gives full agent powers to any provider that supports function calling. Shell · files · Python · web work everywhere; providers without tool calls degrade cleanly to text-only chat.
 
-### Project Structure
+### Project layout
 
 ```
-alvin-bot/
-├── src/
-│   ├── index.ts                 # Entry point
-│   ├── engine.ts                # Multi-model query engine
-│   ├── config.ts                # Configuration
-│   ├── handlers/                # Message & command handlers
-│   ├── middleware/              # Auth & access control
-│   ├── platforms/               # Telegram, Slack, WhatsApp, Discord, Signal adapters
-│   ├── providers/               # AI provider implementations
-│   ├── services/                # Memory, voice, cron, plugins, workspaces, tool discovery
-│   ├── tui/                     # Terminal UI
-│   └── web/                     # Web server, APIs, setup wizard
-├── web/public/                  # Web UI (HTML/CSS/JS, zero build step)
-├── plugins/                     # Plugin directory (6 built-in)
-├── docs/
-│   ├── install/                 # Setup guides (macOS, Windows, Slack)
-│   └── custom-models.json       # Custom model configurations
-├── TOOLS.md                     # Custom tool definitions (Markdown)
-├── SOUL.md                      # Agent personality
-├── bin/cli.js                   # CLI entry point
-└── ecosystem.config.cjs         # PM2 configuration
+src/
+├── index.ts                 entry point
+├── engine.ts                multi-model query engine
+├── handlers/                message + command handlers
+├── platforms/               Telegram · Slack · WhatsApp · Discord · Signal
+├── providers/               Claude SDK · OpenAI-compat · Ollama · Codex CLI
+├── services/
+│   ├── embeddings/          v4.22 pluggable provider facade (Gemini/OpenAI/Ollama/FTS5)
+│   ├── memory*.ts           layered memory (L0-L3) + inject-mode resolver
+│   ├── workspaces.ts        per-channel cwd + persona registry
+│   ├── alvin-dispatch.ts    detached sub-agent orchestration
+│   ├── browser-manager.ts   4-tier browser strategy
+│   └── …                    cron · voice · skills · MCP · hooks · …
+├── tui/                     terminal chat UI
+└── web/                     dashboard server + APIs
+web/public/                  zero-build HTML/CSS/JS UI
+plugins/                     6 built-in plugins (hot-reload)
+skills/                      14 SKILL.md files (hot-reload)
+bin/cli.js                   CLI entry point
+electron/                    Electron wrapper for the .dmg build
 ```
 
 ---
@@ -368,7 +316,7 @@ The `cwd` auto-loads the project-specific `CLAUDE.md` via Claude SDK's `settingS
 ### Slack setup (5 minutes)
 
 1. Download the setup guide + manifest from the [latest release](https://github.com/alvbln/Alvin-Bot/releases/latest):
-   - `slack-setup.md` — step-by-step instructions with screenshots
+   - `slack-setup.md` — step-by-step instructions
    - `slack-manifest.json` — copy-paste ready Slack App manifest
 2. Create a Slack App from the manifest at https://api.slack.com/apps → **Create New App** → **From an app manifest**
 3. Enable Socket Mode, generate an **App-Level Token** (starts with `xapp-`)
@@ -548,18 +496,26 @@ Plugins are auto-loaded at startup. Create your own by adding a directory with a
 
 ## 🎯 Skills
 
-Built-in skills in `skills/`:
+Skills are markdown files in `skills/` that auto-activate when the user's message matches their trigger keywords. The skill body gets injected into the system prompt, giving the agent specialized expertise on demand. 14 ship built-in:
 
-| Skill | Triggers | Description |
-|-------|----------|-------------|
-| code-project | code, build, implement, debug, refactor | Software development workflows, architecture patterns |
-| data-analysis | analyze, chart, csv, excel, statistics | Data processing, visualization, statistical analysis |
-| document-creation | document, report, letter, pdf, write | Professional document creation and formatting |
-| email-summary | email, inbox, unread, newsletter | Email triage, summarization, priority sorting |
-| system-admin | server, deploy, docker, nginx, ssl | DevOps, deployment, system administration |
-| web-research | research, compare, find, review | Deep web research with source verification |
+| Skill | Description |
+|---|---|
+| **agent-browser** | Token-efficient web automation via the agent-browser CLI (accessibility-tree snapshots) — Tier 1.5 of the browser stack |
+| **apple-notes** | Read, create, search Apple Notes via AppleScript (macOS) |
+| **browse** | 3-tier browser control: WebFetch · stealth Playwright · CDP with persistent profile |
+| **code-project** | Software development workflows: build, debug, refactor, architecture patterns |
+| **data-analysis** | CSV / JSON / Excel processing, charts, statistics via Python |
+| **document-creation** | Professional PDFs, reports, letters with formatting |
+| **email-summary** | Inbox triage, newsletter digests, priority sorting |
+| **github** | Issues, PRs, releases, workflows via the `gh` CLI |
+| **social-fetch** | Analyse Instagram / TikTok / YouTube / X URLs the user shares |
+| **summarize** | Condense URLs, PDFs, long documents |
+| **system-admin** | Server management, deploys, Docker, nginx, SSL |
+| **weather** | Forecasts and conditions |
+| **web-research** | Deep multi-source research with citation aggregation |
+| **webcheck** | Security / SEO audit of a website |
 
-Skills activate automatically when your message matches their trigger keywords. The skill's SKILL.md content is injected into the system prompt, giving the agent specialized expertise for that task.
+Drop your own `<name>/SKILL.md` into `~/.alvin-bot/skills/` for hot-reload. List active skills via `/skills` or `alvin-bot skills`.
 
 ---
 
